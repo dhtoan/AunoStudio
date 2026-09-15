@@ -1,0 +1,71 @@
+name: Add Auto Video Cloud Mode
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/auno-autovideo-cloud-mode.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add cloud project creation path
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = path.read_text()
+          replacements = [
+              (
+                  "\timport { createProject } from '$lib/video-editor/workspace-fs/projects';\n",
+                  "\timport { createProject } from '$lib/video-editor/workspace-fs/projects';\n\timport { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';\n\timport type { Project } from '$lib/video-editor/project/types';\n",
+              ),
+              (
+                  "\timport { saveAutoVideoSidecar } from '$lib/auno/auto-video/sidecar';\n",
+                  "\timport { saveAutoVideoSidecar, saveAutoVideoSidecarRemote } from '$lib/auno/auto-video/sidecar';\n",
+              ),
+              (
+                  "\tlet canvas = $state<AutoVideoCanvasPreset>('vertical');\n",
+                  "\tlet canvas = $state<AutoVideoCanvasPreset>('vertical');\n\tlet storageMode = $state<'cloud' | 'local'>('cloud');\n",
+              ),
+              (
+                  "\t\tif (gate.state !== 'ready') {\n\t\t\terror = 'Choose or reconnect a Video Editor workspace folder before creating the project.';\n\t\t\treturn;\n\t\t}\n\n\t\tcreating = true;\n\t\ttry {\n\t\t\tconst project = compileStoryboardToProject(storyboard, canvas);\n\t\t\tawait createProject(project);\n\t\t\tconst now = Date.now();\n\t\t\tsaveAutoVideoSidecar({\n\t\t\t\tversion: 1,\n\t\t\t\tprojectId: project.id,\n\t\t\t\tgenerationVersion: 1,\n\t\t\t\tcreatedAt: now,\n\t\t\t\tupdatedAt: now,\n\t\t\t\tsource: activeSource,\n\t\t\t\tstoryboard,\n\t\t\t\tproviderManifest: { planner: plannerModel }\n\t\t\t});\n\t\t\tawait goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));\n",
+                  "\t\tconst workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';\n\t\tif (storageMode === 'local' && gate.state !== 'ready') {\n\t\t\terror = 'Choose or reconnect a Video Editor workspace folder before creating the local project.';\n\t\t\treturn;\n\t\t}\n\t\tif (storageMode === 'cloud' && !workspaceId) {\n\t\t\terror = 'Select an Auno Studio workspace before creating a cloud project.';\n\t\t\treturn;\n\t\t}\n\n\t\tcreating = true;\n\t\ttry {\n\t\t\tconst project = compileStoryboardToProject(storyboard, canvas);\n\t\t\tconst now = Date.now();\n\t\t\tconst sidecar = {\n\t\t\t\tversion: 1 as const,\n\t\t\t\tprojectId: project.id,\n\t\t\t\tgenerationVersion: 1,\n\t\t\t\ttemplateId: storyboard.format,\n\t\t\t\tcreatedAt: now,\n\t\t\t\tupdatedAt: now,\n\t\t\t\tsource: activeSource,\n\t\t\t\tstoryboard,\n\t\t\t\tproviderManifest: { planner: plannerModel },\n\t\t\t\tgenerationGraph: {\n\t\t\t\t\tversion: 1 as const,\n\t\t\t\t\tblocks: storyboard.scenes.map((scene) => ({\n\t\t\t\t\t\tsceneId: scene.id,\n\t\t\t\t\t\townedItemIds: [`${scene.id}-background`, `${scene.id}-text`],\n\t\t\t\t\t\tuserModifiedItemIds: []\n\t\t\t\t\t}))\n\t\t\t\t}\n\t\t\t};\n\n\t\t\tif (storageMode === 'cloud') {\n\t\t\t\tconst repository = new CloudVideoProjectRepository<Project>(workspaceId);\n\t\t\t\tconst cloudProject = await repository.createWithId(project.id, project.name, project);\n\t\t\t\tawait saveAutoVideoSidecarRemote(workspaceId, sidecar);\n\t\t\t\tawait goto(resolveAppPath(`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video`));\n\t\t\t} else {\n\t\t\t\tawait createProject(project);\n\t\t\t\tsaveAutoVideoSidecar(sidecar);\n\t\t\t\tawait goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));\n\t\t\t}\n",
+              ),
+              (
+                  "\t\t\t<div class=\"grid gap-4 sm:grid-cols-2 lg:grid-cols-4\">\n",
+                  "\t\t\t<div class=\"grid gap-4 sm:grid-cols-2 lg:grid-cols-5\">\n",
+              ),
+              (
+                  "\t\t\t\t<label class=\"space-y-2 text-sm font-medium\">\n\t\t\t\t\t<span>Language</span>\n",
+                  "\t\t\t\t<label class=\"space-y-2 text-sm font-medium\">\n\t\t\t\t\t<span>Storage</span>\n\t\t\t\t\t<select bind:value={storageMode} class=\"h-10 w-full rounded-md border bg-background px-3 text-sm\">\n\t\t\t\t\t\t<option value=\"cloud\">Cloud Workspace</option>\n\t\t\t\t\t\t<option value=\"local\">Local-only</option>\n\t\t\t\t\t</select>\n\t\t\t\t</label>\n\t\t\t\t<label class=\"space-y-2 text-sm font-medium\">\n\t\t\t\t\t<span>Language</span>\n",
+              ),
+              (
+                  "\t\t<section class=\"space-y-4 rounded-xl border bg-card p-5\">\n\t\t\t<div>\n\t\t\t\t<h2 class=\"font-semibold\">Video Editor workspace</h2>\n\t\t\t\t<p class=\"mt-1 text-sm text-muted-foreground\">The generated project is saved as a normal editable Video Editor project.</p>\n\t\t\t</div>\n\t\t\t{#if gate.state !== 'ready'}\n\t\t\t\t<WorkspaceGatePanel {gate} />\n\t\t\t{:else}\n\t\t\t\t<InlineNotice tone=\"success\">Workspace ready. Native project creation is available.</InlineNotice>\n\t\t\t{/if}\n\t\t</section>\n",
+                  "\t\t<section class=\"space-y-4 rounded-xl border bg-card p-5\">\n\t\t\t<div>\n\t\t\t\t<h2 class=\"font-semibold\">Project storage</h2>\n\t\t\t\t<p class=\"mt-1 text-sm text-muted-foreground\">Cloud Workspace syncs native project revisions and AI metadata. Local-only keeps the project in your selected browser folder.</p>\n\t\t\t</div>\n\t\t\t{#if storageMode === 'cloud'}\n\t\t\t\t{#if workspaceCtx.currentWorkspace?.id}\n\t\t\t\t\t<InlineNotice tone=\"success\">Cloud Workspace ready. The native project and Auto Video metadata will sync to this workspace.</InlineNotice>\n\t\t\t\t{:else}\n\t\t\t\t\t<InlineNotice tone=\"warning\">Select a workspace to use Cloud Workspace storage.</InlineNotice>\n\t\t\t\t{/if}\n\t\t\t{:else if gate.state !== 'ready'}\n\t\t\t\t<WorkspaceGatePanel {gate} />\n\t\t\t{:else}\n\t\t\t\t<InlineNotice tone=\"success\">Local Video Editor workspace ready.</InlineNotice>\n\t\t\t{/if}\n\t\t</section>\n",
+              ),
+              (
+                  "\t\t\t\t<Button onclick={createAndOpenProject} disabled={creating || gate.state !== 'ready'}>\n",
+                  "\t\t\t\t<Button\n\t\t\t\t\tonclick={createAndOpenProject}\n\t\t\t\t\tdisabled={creating || (storageMode === 'local' ? gate.state !== 'ready' : !workspaceCtx.currentWorkspace?.id)}\n\t\t\t\t>\n",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'missing cloud mode anchor: {old[:200]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/routes/auto-video/+page.svelte
+          git commit -m "feat: add Cloud Workspace mode to Auto Video"
+          git push origin HEAD:main
