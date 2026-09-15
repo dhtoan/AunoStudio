@@ -55,7 +55,9 @@ function sourceBody(source: AutoVideoSource) {
 		kind: source.kind,
 		label: source.label,
 		value: source.value,
-		url: source.url ?? ''
+		url: source.url ?? '',
+		mime_type: source.mimeType ?? '',
+		media_id: source.mediaId ?? ''
 	};
 }
 
