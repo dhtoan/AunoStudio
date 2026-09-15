@@ -1,0 +1,55 @@
+name: Wire Auto Video URL Resolution
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/auno-autovideo-ui-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch Auto Video UI source flow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = path.read_text()
+          replacements = [
+              (
+                  "\timport { requestAIStoryboard } from '$lib/auno/auto-video/api';\n",
+                  "\timport { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';\n",
+              ),
+              (
+                  "\tlet plannerModel = $state('starter-fallback');\n",
+                  "\tlet plannerModel = $state('starter-fallback');\n\tlet sourceTruncated = $state(false);\n",
+              ),
+              (
+                  "\t\tconst source = createSource();\n\t\tactiveSource = source;\n\t\tconst duration = Number(targetDurationSeconds);\n\t\ttry {\n\t\t\tconst workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';\n\t\t\tif (workspaceId) {\n\t\t\t\tconst generated = await requestAIStoryboard({\n",
+                  "\t\tlet source = createSource();\n\t\tconst duration = Number(targetDurationSeconds);\n\t\tsourceTruncated = false;\n\t\ttry {\n\t\t\tconst workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';\n\t\t\tif (source.kind === 'url') {\n\t\t\t\tif (!workspaceId) {\n\t\t\t\t\terror = 'Select a workspace before loading a URL source.';\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tconst resolved = await resolveAutoVideoSource(workspaceId, source);\n\t\t\t\tsource = resolved.source;\n\t\t\t\tsourceTruncated = resolved.truncated;\n\t\t\t}\n\t\t\tactiveSource = source;\n\t\t\tif (workspaceId) {\n\t\t\t\tconst generated = await requestAIStoryboard({\n",
+              ),
+              (
+                  "\t\t\t\t\t<p class=\"text-sm font-medium text-muted-foreground\">Storyboard · {plannerModel}</p>\n",
+                  "\t\t\t\t\t<p class=\"text-sm font-medium text-muted-foreground\">Storyboard · {plannerModel}{sourceTruncated ? ' · source shortened to safe extraction limit' : ''}</p>\n",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'missing page anchor: {old[:160]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/routes/auto-video/+page.svelte
+          git commit -m "feat: resolve Auto Video URL sources before planning"
+          git push origin HEAD:main
