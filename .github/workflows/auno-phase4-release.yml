@@ -48,7 +48,7 @@ jobs:
       - name: Test Auno Motion package
         run: bun test packages/auno-motion/src
       - name: Test browser motion adapters
-        run: cd apps/web && bunx vitest run src/lib/auno/motion
+        run: cd apps/web && bunx vitest run --project server src/lib/auno/motion
 
   backend-documentary:
     name: backend-documentary
@@ -87,8 +87,20 @@ jobs:
           go-version: '1.26.6'
           cache-dependency-path: apps/server/go.sum
       - run: bun install --frozen-lockfile
-      - name: Check frontend
-        run: bun run check -- frontend
+      - name: Check generated contracts
+        run: bun scripts/check-contracts.mjs
+      - name: Generate frontend translations
+        run: bun run --filter @openpost/web generate:i18n
+      - name: Check frontend i18n
+        run: cd apps/web && bun run check:i18n
+      - name: Check frontend theme icons
+        run: cd apps/web && bun run check:theme-icons
+      - name: Check frontend generated types
+        run: cd apps/web && TMPDIR="$RUNNER_TEMP" bun run check:types
+      - name: Sync frontend
+        run: cd apps/web && TMPDIR="$RUNNER_TEMP" bun run sync
+      - name: Typecheck frontend
+        run: cd apps/web && TMPDIR="$RUNNER_TEMP" OPENPOST_CHECK_PREPARED=1 bunx svelte-check --tsconfig ./tsconfig.json
       - name: Test Auno frontend modules
         run: cd apps/web && bunx vitest run src/lib/auno src/lib/video-editor/auno
       - name: Build production web embed
