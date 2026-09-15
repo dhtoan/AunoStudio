@@ -16,6 +16,7 @@
 		generateDocumentaryScript,
 		generateDocumentaryThumbnails,
 		generateDocumentaryVisuals,
+		regenerateDocumentaryVisual,
 		getDocumentaryRun,
 		updateDocumentaryRun
 	} from '$lib/auno/documentary/api';
@@ -28,6 +29,7 @@
 	} from '$lib/auno/documentary/types';
 	import DocumentaryStepNav from './documentary-step-nav.svelte';
 	import DocumentaryIdeas from './documentary-ideas.svelte';
+	import DocumentaryBeatEditor from './documentary-beat-editor.svelte';
 	import DocumentaryScript from './documentary-script.svelte';
 	import DocumentaryPromptPack from './documentary-prompt-pack.svelte';
 	import DocumentaryThumbnails from './documentary-thumbnails.svelte';
@@ -276,6 +278,33 @@
 		try {
 			run = await generateDocumentaryBeats(workspaceId(), run);
 			activeStep = 'beats';
+		} catch (cause) {
+			setFailure(cause);
+		} finally {
+			busyAction = '';
+		}
+	}
+
+	async function saveBeats(beats: DocumentaryRun['beats']): Promise<void> {
+		await saveRun('beat-edit', (next) => {
+			next.beats = beats;
+			next.currentStep = 'beats';
+		});
+	}
+
+	async function saveVisualPlans(plans: DocumentaryRun['visualPlans']): Promise<void> {
+		await saveRun('visual-edit', (next) => {
+			next.visualPlans = plans;
+			next.currentStep = 'visuals';
+		});
+	}
+
+	async function regenerateBeatVisual(beatId: string): Promise<void> {
+		if (!run) return;
+		error = '';
+		busyAction = `visual:${beatId}`;
+		try {
+			run = await regenerateDocumentaryVisual(workspaceId(), run, beatId);
 		} catch (cause) {
 			setFailure(cause);
 		} finally {
@@ -587,15 +616,14 @@
 						<Button type="button" size="sm" variant="outline" disabled={busyAction !== '' || !run.script} onclick={generateBeats}>{busyAction === 'beats' ? 'Segmenting…' : run.beats.length ? 'Regenerate beats' : 'Generate beats'}</Button>
 					</div>
 					{#if run.beats.length > 0}
-						<div class="max-h-[36rem] space-y-2 overflow-y-auto pr-1">
-							{#each run.beats as beat (beat.id)}
-								<div class="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[5rem_1fr_9rem]">
-									<span class="text-xs text-muted-foreground">{beat.startSeconds.toFixed(1)}–{(beat.startSeconds + beat.durationSeconds).toFixed(1)}s</span>
-									<span class="text-sm">{beat.narration}</span>
-									<span class="text-xs text-muted-foreground sm:text-right">{beat.visualIntent}</span>
-								</div>
-							{/each}
-						</div>
+						<DocumentaryBeatEditor
+							beats={run.beats}
+							visualPlans={run.visualPlans}
+							disabled={busyAction !== ''}
+							onchange={saveBeats}
+							onvisualchange={saveVisualPlans}
+							onregeneratevisual={run.visualPlans.length > 0 ? regenerateBeatVisual : undefined}
+						/>
 					{/if}
 				</div>
 			{:else if activeStep === 'visuals'}

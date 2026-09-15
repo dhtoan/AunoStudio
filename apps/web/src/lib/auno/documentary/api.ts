@@ -441,5 +441,21 @@ export const generateDocumentaryBeats = (workspaceId: string, run: DocumentaryRu
 	generateStep(workspaceId, run, 'beats');
 export const generateDocumentaryVisuals = (workspaceId: string, run: DocumentaryRun) =>
 	generateStep(workspaceId, run, 'visuals');
+export async function regenerateDocumentaryVisual(
+	workspaceId: string,
+	run: DocumentaryRun,
+	beatId: string
+): Promise<DocumentaryRun> {
+	const response = await fetch(
+		`/api/v1/auno/auto-video/documentary/runs/${encodeURIComponent(run.id)}/visuals/${encodeURIComponent(beatId)}`,
+		{
+			method: 'POST',
+			credentials: 'include',
+			headers: requestHeaders(),
+			body: JSON.stringify({ workspace_id: workspaceId, generation_version: run.generationVersion })
+		}
+	);
+	return readRun(response, 'Regenerating documentary beat visual');
+}
 export const generateDocumentaryThumbnails = (workspaceId: string, run: DocumentaryRun) =>
 	generateStep(workspaceId, run, 'thumbnails');

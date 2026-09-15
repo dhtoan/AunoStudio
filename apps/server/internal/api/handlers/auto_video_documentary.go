@@ -86,6 +86,15 @@ type GenerateDocumentaryStepInput struct {
 	}
 }
 
+type GenerateDocumentaryVisualStepInput struct {
+	PathID     string `path:"run_id" doc:"Documentary run ID"`
+	PathBeatID string `path:"beat_id" doc:"Documentary beat ID"`
+	Body       struct {
+		WorkspaceID       string `json:"workspace_id" required:"true" minLength:"1"`
+		GenerationVersion int64  `json:"generation_version" required:"true" minimum:"1"`
+	}
+}
+
 type DocumentaryRunOutput struct {
 	Body documentary.Run
 }
@@ -119,6 +128,7 @@ func (h *DocumentaryHandler) RegisterRoutes(api huma.API) {
 	huma.Register(api, documentaryOperation("generate-auno-documentary-script", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/script", "Generate documentary narration", auth), h.generateScript)
 	huma.Register(api, documentaryOperation("generate-auno-documentary-beats", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/beats", "Generate documentary beat timing", auth), h.generateBeats)
 	huma.Register(api, documentaryOperation("generate-auno-documentary-visuals", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/visuals", "Generate documentary visual plans", auth), h.generateVisuals)
+	huma.Register(api, documentaryOperation("regenerate-auno-documentary-beat-visual", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/visuals/{beat_id}", "Regenerate one documentary beat visual", auth), h.regenerateVisual)
 	huma.Register(api, documentaryOperation("generate-auno-documentary-thumbnails", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/thumbnails", "Generate documentary thumbnail plans", auth), h.generateThumbnails)
 }
 

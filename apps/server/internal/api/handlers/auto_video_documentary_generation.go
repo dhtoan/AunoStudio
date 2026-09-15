@@ -130,6 +130,56 @@ func (h *DocumentaryHandler) generateVisuals(ctx context.Context, input *Generat
 	return h.persistGeneration(ctx, input, run)
 }
 
+func (h *DocumentaryHandler) regenerateVisual(ctx context.Context, input *GenerateDocumentaryVisualStepInput) (*DocumentaryRunOutput, error) {
+	stepInput := &GenerateDocumentaryStepInput{PathID: input.PathID}
+	stepInput.Body.WorkspaceID = input.Body.WorkspaceID
+	stepInput.Body.GenerationVersion = input.Body.GenerationVersion
+	run, err := h.generationRun(ctx, stepInput, true)
+	if err != nil {
+		return nil, err
+	}
+	beatIndex := -1
+	for index := range run.Beats {
+		if run.Beats[index].ID == input.PathBeatID {
+			beatIndex = index
+			break
+		}
+	}
+	if beatIndex < 0 {
+		return nil, huma.Error404NotFound("documentary beat was not found")
+	}
+	source, parts, err := h.sourceForPlanning(ctx, input.Body.WorkspaceID, run.Source)
+	if err != nil {
+		return nil, err
+	}
+	result, err := h.planner.GenerateVisuals(ctx, documentary.VisualsInput{
+		RunID: run.ID, Language: run.Language, Beats: []documentary.Beat{run.Beats[beatIndex]}, Source: source, Parts: parts,
+	})
+	if err != nil {
+		return nil, documentaryPlannerHTTPError(err)
+	}
+	if len(result.Plans) != 1 {
+		return nil, documentaryPlannerHTTPError(documentary.ErrInvalidResponse)
+	}
+	plan := result.Plans[0]
+	replaced := false
+	for index := range run.VisualPlans {
+		if run.VisualPlans[index].BeatID == plan.BeatID {
+			run.VisualPlans[index] = plan
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		run.VisualPlans = append(run.VisualPlans, plan)
+	}
+	run.Beats[beatIndex].VisualIntent = plan.VisualIntent
+	run.Beats[beatIndex].RequiredSubjectIDs = append([]string(nil), plan.RequiredSubjectIDs...)
+	run.CurrentStep = documentary.StepVisuals
+	setDocumentaryProvider(run, "visuals", result.Model)
+	return h.persistGeneration(ctx, stepInput, run)
+}
+
 func (h *DocumentaryHandler) generateThumbnails(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
 	run, err := h.generationRun(ctx, input, true)
 	if err != nil {
