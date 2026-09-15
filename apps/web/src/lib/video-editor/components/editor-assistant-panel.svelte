@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { m } from '$lib/paraglide/messages';
 	import { onMount } from 'svelte';
 	import type { TextVoiceRequest } from '$lib/video-editor/local-ai/types';
 	import AgentChatPanel from './agent-chat-panel.svelte';
 	import LocalAiPanel from './local-ai-panel.svelte';
+	import AunoAutoVideoPanel from './auno-auto-video-panel.svelte';
 	import { agentStore } from '$lib/video-editor/agent/store.svelte';
 	import { setClipRefSelectionProvider } from '$lib/video-editor/agent/clip-refs';
 	import {
@@ -15,6 +17,8 @@
 		inspectAgentStorage,
 		type AgentStorageStatus
 	} from '$lib/video-editor/agent/storage';
+
+	type AssistantMode = 'assistant' | 'generate' | 'auno';
 
 	let {
 		projectId,
@@ -36,15 +40,17 @@
 		textVoiceRequest?: TextVoiceRequest | null;
 	} = $props();
 
-	let mode = $state<'assistant' | 'generate'>('assistant');
+	let mode = $state<AssistantMode>(page.url.searchParams.get('auno') === 'auto-video' ? 'auno' : 'assistant');
 	let assistantTab: HTMLButtonElement | undefined = $state(undefined);
 	let generateTab: HTMLButtonElement | undefined = $state(undefined);
+	let aunoTab: HTMLButtonElement | undefined = $state(undefined);
 	let storage = $state<AgentStorageStatus | null>(null);
 	let checkingStorage = $state(false);
 	let storageCheckFailed = $state(false);
 	let handledTextVoiceRequestId = $state<string | null>(null);
 
 	const agentSupported = $derived(agentStore.supported);
+	const modes: readonly AssistantMode[] = ['assistant', 'generate', 'auno'];
 
 	function formatBytes(bytes: number): string {
 		if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
@@ -65,12 +71,23 @@
 		}
 	}
 
+	function tabFor(next: AssistantMode): HTMLButtonElement | undefined {
+		if (next === 'assistant') return assistantTab;
+		if (next === 'generate') return generateTab;
+		return aunoTab;
+	}
+
 	function handleSwitcherKeydown(event: KeyboardEvent): void {
 		if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
 		event.preventDefault();
-		const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'assistant' : 'generate';
+		const current = modes.indexOf(mode);
+		let next: AssistantMode;
+		if (event.key === 'Home') next = modes[0];
+		else if (event.key === 'End') next = modes[modes.length - 1];
+		else if (event.key === 'ArrowLeft') next = modes[(current - 1 + modes.length) % modes.length];
+		else next = modes[(current + 1) % modes.length];
 		mode = next;
-		queueMicrotask(() => (next === 'assistant' ? assistantTab : generateTab)?.focus());
+		queueMicrotask(() => tabFor(next)?.focus());
 	}
 
 	$effect(() => {
@@ -126,7 +143,7 @@
 		<div
 			role="tablist"
 			aria-label={m.video_editor_agent_mode_label()}
-			class="grid grid-cols-2 gap-1 rounded-md bg-[var(--video-editor-control)] p-1"
+			class="grid grid-cols-3 gap-1 rounded-md bg-[var(--video-editor-control)] p-1"
 			onkeydown={handleSwitcherKeydown}
 		>
 			<button
@@ -161,12 +178,30 @@
 			>
 				{m.video_editor_agent_generate()}
 			</button>
+			<button
+				bind:this={aunoTab}
+				role="tab"
+				id="auno-tab"
+				aria-selected={mode === 'auno'}
+				aria-controls="auno-panel"
+				tabindex={mode === 'auno' ? 0 : -1}
+				type="button"
+				class="min-h-11 rounded px-2 py-1.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--video-editor-focus)] md:min-h-9 {mode ===
+				'auno'
+					? 'bg-[var(--video-editor-selection)] text-[var(--video-editor-selection-text)]'
+					: 'text-[var(--video-editor-muted)] hover:text-[var(--video-editor-text)]'}"
+				onclick={() => (mode = 'auno')}
+			>
+				Auno AI
+			</button>
 		</div>
 		<p class="mt-1.5 text-[11px] leading-relaxed text-[var(--video-editor-muted)]">
 			{#if mode === 'assistant'}
 				{m.video_editor_agent_assistant_hint()}
-			{:else}
+			{:else if mode === 'generate'}
 				{m.video_editor_agent_generate_hint()}
+			{:else}
+				Regenerate Auto Video scenes while preserving native timeline edits.
 			{/if}
 		</p>
 		{#if mode === 'assistant'}
@@ -231,7 +266,7 @@
 					storageUnknown={storage ? storage.sizeStatus === 'unknown' : false}
 				/>
 			</div>
-		{:else}
+		{:else if mode === 'generate'}
 			<div
 				role="tabpanel"
 				id="generate-panel"
@@ -239,6 +274,15 @@
 				class="h-full min-h-0 overflow-y-auto"
 			>
 				<LocalAiPanel {projectId} {oninserted} {textVoiceRequest} />
+			</div>
+		{:else}
+			<div
+				role="tabpanel"
+				id="auno-panel"
+				aria-labelledby="auno-tab"
+				class="h-full min-h-0"
+			>
+				<AunoAutoVideoPanel {projectId} {onautosave} />
 			</div>
 		{/if}
 	</div>
