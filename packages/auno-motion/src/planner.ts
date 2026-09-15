@@ -1,4 +1,5 @@
 import { deterministicChoice, hashMotionSeed, seededSigned } from './determinism';
+import { createStyleBrief } from './style-brief';
 import { motionStyle } from './styles';
 import type {
   MotionScene,
@@ -13,10 +14,16 @@ export interface PlanMotionGraphInput {
   style: MotionStyleId;
   scenes: MotionSourceScene[];
   seed?: number;
+  brandPalette?: string[];
 }
 
 export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
   const style = motionStyle(input.style);
+  const brief = createStyleBrief({
+    style: input.style,
+    brandPalette: input.brandPalette,
+    sceneCount: input.scenes.length
+  });
   const seed = input.seed ?? hashMotionSeed(`${input.projectId}:${input.style}`);
   let cursor = 0;
   const scenes: MotionScene[] = input.scenes.map((scene, index) => {
@@ -31,9 +38,7 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
       index === input.scenes.length - 1
         ? undefined
         : (deterministicChoice(
-            style.brief.transitionLanguage.length > 0
-              ? style.brief.transitionLanguage
-              : [style.transition],
+            brief.transitionLanguage.length > 0 ? brief.transitionLanguage : [style.transition],
             sceneSeed,
             5
           ) as MotionTransition['kind']);
@@ -81,11 +86,7 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
     schemaVersion: 1,
     style: input.style,
     seed,
-    brief: {
-      ...style.brief,
-      palette: [...style.brief.palette],
-      transitionLanguage: [...style.brief.transitionLanguage]
-    },
+    brief,
     scenes
   };
 }
