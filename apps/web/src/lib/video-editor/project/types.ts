@@ -435,8 +435,16 @@ export type CompositionControlProperty =
 	| 'text.text'
 	| 'text.color'
 	| 'shape.fillColor'
-	| 'shape.strokeColor';
-export type CompositionControlKind = 'text' | 'color';
+	| 'shape.strokeColor'
+	| 'shape.shapeType'
+	| 'motion.intensity'
+	| 'motion.depth'
+	| 'motion.speed';
+export type CompositionControlKind = 'text' | 'color' | 'number' | 'select';
+export interface CompositionControlOption {
+	value: string;
+	label: string;
+}
 export interface CompositionControlDefinition {
 	id: string;
 	name: string;
@@ -444,6 +452,10 @@ export interface CompositionControlDefinition {
 	property: CompositionControlProperty;
 	kind: CompositionControlKind;
 	defaultValue: string;
+	min?: number;
+	max?: number;
+	step?: number;
+	options?: CompositionControlOption[];
 }
 export interface CompositionControlSchema {
 	version: typeof COMPOSITION_CONTROLS_VERSION;
