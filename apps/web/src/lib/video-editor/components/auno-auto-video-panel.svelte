@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { MOTION_STYLES, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
@@ -208,6 +208,8 @@
 				scenes: sidecar.storyboard.scenes
 			});
 			const motionDiagnostics = validateMotionGraph(graph);
+			const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
+			const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
 			applyMotionGraphToLiveTimeline({
 				graph,
 				width: project.metadata.width,
@@ -227,7 +229,9 @@
 						style: graph.style,
 						seed: graph.seed,
 						brief: graph.brief,
-						diagnostics: motionDiagnostics
+						diagnostics: motionDiagnostics,
+						probePlan: motionProbePlan,
+						probeSignature: motionProbePlanSignature
 					}
 				}
 			};
@@ -267,6 +271,8 @@
 					scenes: nextSidecar.storyboard.scenes
 				});
 				const motionDiagnostics = validateMotionGraph(graph);
+				const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
+				const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
 				applyMotionGraphToLiveTimeline({
 					graph,
 					width: project.metadata.width,
@@ -285,7 +291,9 @@
 							style: graph.style,
 							seed: graph.seed,
 							brief: graph.brief,
-							diagnostics: motionDiagnostics
+							diagnostics: motionDiagnostics,
+							probePlan: motionProbePlan,
+							probeSignature: motionProbePlanSignature
 						}
 					}
 				};
