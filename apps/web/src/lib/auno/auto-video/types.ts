@@ -170,6 +170,12 @@ export interface AutoVideoMotionState {
 	probeSignature?: string;
 }
 
+export interface AutoVideoDocumentaryManifest {
+	runId: string;
+	beatIds: string[];
+	style: string;
+}
+
 export interface AutoVideoGenerationGraph {
 	version: 1;
 	blocks: AutoVideoGenerationBlock[];
@@ -177,6 +183,8 @@ export interface AutoVideoGenerationGraph {
 	ownedItems?: AutoVideoOwnedItem[];
 	media?: AutoVideoGeneratedMedia;
 	motion?: AutoVideoMotionState;
+	/** Durable Documentary Long-form provenance. Missing on short-form sidecars. */
+	documentary?: AutoVideoDocumentaryManifest;
 }
 
 export interface AutoVideoSidecar {
