@@ -5,6 +5,11 @@
 	import { Button } from '$lib/components/ui/button';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
+	import {
+		autoVideoMediaKind,
+		listAutoVideoLibraryMedia,
+		type AutoVideoLibraryMedia
+	} from '$lib/auno/auto-video/media-library';
 	import WorkspaceGatePanel from '$lib/video-editor/components/workspace-gate-panel.svelte';
 	import { createWorkspaceGate } from '$lib/video-editor/gate/workspace-gate.svelte';
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
@@ -36,6 +41,9 @@
 	let sourceMediaId = $state('');
 	let sourceMimeType = $state('');
 	let sourceUploading = $state(false);
+	let libraryMedia = $state.raw<AutoVideoLibraryMedia[]>([]);
+	let libraryLoading = $state(false);
+	let selectedLibraryMediaId = $state('');
 	let title = $state('');
 	let format = $state<AutoVideoFormat>('review');
 	let language = $state('en-US');
@@ -50,6 +58,42 @@
 	let error = $state('');
 	let planning = $state(false);
 	let creating = $state(false);
+
+	async function loadMediaLibrary(): Promise<void> {
+		const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
+		error = '';
+		if (!workspaceId) {
+			error = 'Select an Auno Studio workspace before browsing Media Library.';
+			return;
+		}
+		libraryLoading = true;
+		try {
+			libraryMedia = await listAutoVideoLibraryMedia(workspaceId);
+			if (libraryMedia.length === 0) {
+				error = 'No ready PDF, image, or video assets up to 25 MB were found in this workspace.';
+			}
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			libraryLoading = false;
+		}
+	}
+
+	function chooseLibraryMedia(event: Event): void {
+		const mediaId = (event.currentTarget as HTMLSelectElement).value;
+		selectedLibraryMediaId = mediaId;
+		const item = libraryMedia.find((entry) => entry.id === mediaId);
+		if (!item) return;
+		const kind = autoVideoMediaKind(item.mime_type);
+		if (!kind) return;
+		sourceKind = 'media';
+		sourceMediaId = item.id;
+		sourceMimeType = item.mime_type ?? '';
+		sourceValue = `Selected Media Library ${kind} source: ${item.id}`;
+		if (!title.trim()) title = `Media ${item.id.slice(0, 8)}`;
+		storyboard = null;
+		activeSource = null;
+	}
 
 	async function loadMediaSourceFile(event: Event): Promise<void> {
 		const input = event.currentTarget as HTMLInputElement;
@@ -145,7 +189,7 @@
 	async function generateStoryboard(): Promise<void> {
 		error = '';
 		if (!sourceValue.trim()) {
-			error = 'Add source text, Markdown, a TXT/Markdown file, or a URL first.';
+			error = 'Add text, Markdown, a TXT/Markdown file, URL, PDF/image/video file, or Media Library asset first.';
 			return;
 		}
 		planning = true;
@@ -290,6 +334,7 @@
 						<option value="url">URL</option>
 						<option value="markdown">Markdown</option>
 						<option value="txt">TXT file</option>
+						<option value="media">Media Library</option>
 					</select>
 				</label>
 				<label class="space-y-2 text-sm font-medium">
@@ -324,6 +369,31 @@
 					<input type="file" class="sr-only" accept="application/pdf,image/*,video/*" disabled={sourceUploading} onchange={loadMediaSourceFile} />
 				</label>
 				<span class="text-xs text-muted-foreground">Stored in Workspace Media · up to 25 MB · analyzed as multimodal source</span>
+			</div>
+
+			<div class="space-y-2 rounded-lg border bg-muted/20 p-3">
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<div>
+						<p class="text-xs font-medium">Media Library</p>
+						<p class="text-[11px] text-muted-foreground">Reuse an existing ready PDF, image, or video without uploading it again.</p>
+					</div>
+					<Button type="button" size="sm" variant="outline" onclick={loadMediaLibrary} disabled={libraryLoading}>
+						{libraryLoading ? 'Loading…' : libraryMedia.length > 0 ? 'Refresh library' : 'Browse library'}
+					</Button>
+				</div>
+				{#if libraryMedia.length > 0}
+					<select value={selectedLibraryMediaId} onchange={chooseLibraryMedia} class="h-10 w-full rounded-md border bg-background px-3 text-sm" aria-label="Media Library source">
+						<option value="">Select a Media Library asset…</option>
+						{#each libraryMedia as item (item.id)}
+							<option value={item.id}>
+								{(autoVideoMediaKind(item.mime_type) ?? 'media').toUpperCase()} · {item.id.slice(0, 8)} · {((item.size ?? 0) / 1024 / 1024).toFixed(1)} MB
+							</option>
+						{/each}
+					</select>
+					{#if selectedLibraryMediaId}
+						<p class="text-[11px] text-muted-foreground">Selected asset {selectedLibraryMediaId.slice(0, 12)}… will be analyzed through the configured multimodal provider.</p>
+					{/if}
+				{/if}
 			</div>
 
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
