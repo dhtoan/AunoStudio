@@ -22,6 +22,7 @@
 	import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
 	import { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';
 	import { applyMotionGraphToLiveTimeline } from '$lib/auno/motion/live-applier';
+	import { replaceOwnershipCategory } from '$lib/auno/auto-video/ownership';
 	import { editorSession } from '$lib/video-editor/editor.svelte';
 	import { inspectMusicGenerationStorage } from '$lib/video-editor/local-ai/music/ace-step-service';
 
@@ -210,11 +211,16 @@
 			const motionDiagnostics = validateMotionGraph(graph);
 			const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
 			const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
-			applyMotionGraphToLiveTimeline({
+			const appliedMotion = applyMotionGraphToLiveTimeline({
 				graph,
 				width: project.metadata.width,
 				height: project.metadata.height
 			});
+			const nextMotionOwnership = replaceOwnershipCategory(
+				sidecar,
+				'motion',
+				appliedMotion.ownedItems.map((entry) => ({ ...entry, category: 'motion' as const }))
+			);
 			const nextSidecar: AutoVideoSidecar = {
 				...sidecar,
 				generationVersion: sidecar.generationVersion + 1,
@@ -224,6 +230,7 @@
 					...sidecar.generationGraph,
 					version: 1,
 					blocks: sidecar.generationGraph?.blocks ?? [],
+					ownedItems: nextMotionOwnership,
 					motion: {
 						schemaVersion: 1,
 						style: graph.style,
@@ -237,7 +244,7 @@
 			};
 			await persistSidecar(nextSidecar);
 			onautosave();
-			status = `Applied ${MOTION_STYLES[motionStyle].label} as native editable motion.`;
+			status = `Regenerated ${MOTION_STYLES[motionStyle].label} motion only. Voice, captions, music, manual text, and compatible composition overrides were preserved.`;
 		} catch (cause) {
 			status = cause instanceof Error ? cause.message : String(cause);
 		} finally {
@@ -273,11 +280,16 @@
 				const motionDiagnostics = validateMotionGraph(graph);
 				const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
 				const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
-				applyMotionGraphToLiveTimeline({
+				const appliedMotion = applyMotionGraphToLiveTimeline({
 					graph,
 					width: project.metadata.width,
 					height: project.metadata.height
 				});
+				const nextMotionOwnership = replaceOwnershipCategory(
+					nextSidecar,
+					'motion',
+					appliedMotion.ownedItems.map((entry) => ({ ...entry, category: 'motion' as const }))
+				);
 				nextSidecar = {
 					...nextSidecar,
 					updatedAt: Date.now(),
@@ -286,6 +298,7 @@
 						...nextSidecar.generationGraph,
 						version: 1,
 						blocks: nextSidecar.generationGraph?.blocks ?? [],
+						ownedItems: nextMotionOwnership,
 						motion: {
 							schemaVersion: 1,
 							style: graph.style,
@@ -410,7 +423,7 @@
 						{/each}
 					</select>
 					<Button type="button" size="sm" variant="outline" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={applyMotionStyle}>
-						{motionBusy ? 'Applying…' : 'Apply motion'}
+						{motionBusy ? 'Regenerating…' : sidecar.generationGraph?.motion ? 'Regenerate motion' : 'Apply motion'}
 					</Button>
 				</div>
 
