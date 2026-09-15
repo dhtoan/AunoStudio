@@ -8,6 +8,7 @@ import type {
 	TimelineItem,
 	TimelineTransition
 } from '$lib/video-editor/project/types';
+import { aunoMotionTrack, buildMotionCompositionOverlays } from './motion-composition';
 
 function scalarTrack(
 	from: number,
@@ -198,10 +199,52 @@ export function applyMotionGraphToProject(project: Project, graph: MotionSceneGr
 		height: project.metadata.height,
 		graph
 	});
+	const overlays = buildMotionCompositionOverlays({
+		graph,
+		width: project.metadata.width,
+		height: project.metadata.height,
+		fps: project.metadata.fps
+	});
+	const overlayIds = new Set(overlays.map((entry) => entry.item.id));
+	const baseItems = compiled.items.filter(
+		(item) => !item.id.endsWith('-motion-composition') || overlayIds.has(item.id)
+	);
+	const nextItems = [
+		...baseItems.filter((item) => !overlayIds.has(item.id)),
+		...overlays.map((entry) => entry.item)
+	];
+	const compositionIds = new Set(overlays.map((entry) => entry.composition.id));
+	const previousCompositions = (timeline.compositions ?? []).filter(
+		(composition) =>
+			!composition.id.startsWith('auno-motion-composition-') || compositionIds.has(composition.id)
+	);
+	const nextCompositions = [
+		...previousCompositions.filter((composition) => !compositionIds.has(composition.id)),
+		...overlays.map((entry) => entry.composition)
+	];
+	const needsMotionTrack = overlays.length > 0;
+	const tracks = timeline.tracks
+		.filter((track) => track.id !== 'track-auno-motion')
+		.map((track) => {
+			if (!needsMotionTrack) return track;
+			if (track.id === 'track-video-main') return { ...track, order: 2 };
+			if (track.id === 'track-audio') return { ...track, order: 3 };
+			if (track.id === 'track-auno-music') return { ...track, order: 4 };
+			return track;
+		});
+	if (needsMotionTrack) tracks.push(aunoMotionTrack());
+	tracks.sort((left, right) => left.order - right.order);
+
 	return {
 		...project,
 		description: `${project.description.replace(/ · Motion [^·]+$/, '')} · Motion ${graph.style}`,
 		updatedAt: Date.now(),
-		timeline: { ...timeline, items: compiled.items, transitions: compiled.transitions }
+		timeline: {
+			...timeline,
+			tracks,
+			items: nextItems,
+			transitions: compiled.transitions,
+			compositions: nextCompositions
+		}
 	};
 }
