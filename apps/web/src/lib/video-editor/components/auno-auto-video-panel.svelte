@@ -246,9 +246,37 @@
 					voiceProgress = `${completed}/${total}`;
 				}
 			});
-			await persistSidecar(result.sidecar);
+			let nextSidecar = result.sidecar;
+			const project = editorSession.project;
+			const savedMotion = nextSidecar.generationGraph?.motion;
+			if (project && savedMotion && savedMotion.style in MOTION_STYLES) {
+				const style = savedMotion.style as MotionStyleId;
+				const graph = planMotionGraph({
+					projectId,
+					style,
+					seed: savedMotion.seed,
+					scenes: nextSidecar.storyboard.scenes
+				});
+				applyMotionGraphToLiveTimeline({
+					graph,
+					width: project.metadata.width,
+					height: project.metadata.height
+				});
+				nextSidecar = {
+					...nextSidecar,
+					updatedAt: Date.now(),
+					providerManifest: { ...nextSidecar.providerManifest, motion: `auno-motion:${style}` },
+					generationGraph: {
+						...nextSidecar.generationGraph,
+						version: 1,
+						blocks: nextSidecar.generationGraph?.blocks ?? [],
+						motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }
+					}
+				};
+			}
+			await persistSidecar(nextSidecar);
 			onautosave();
-			status = `Generated ${result.assets.length} editable voice clip(s) and retimed scenes from real speech duration.`;
+			status = `Generated ${result.assets.length} editable voice clip(s), retimed scenes from real speech duration, and reflowed native motion.`;
 		} catch (cause) {
 			status = cause instanceof Error ? cause.message : String(cause);
 		} finally {
