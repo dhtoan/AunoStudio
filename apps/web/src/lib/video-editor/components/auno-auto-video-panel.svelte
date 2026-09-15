@@ -7,13 +7,18 @@
 		loadAutoVideoSidecarRemote,
 		saveAutoVideoSidecarRemote
 	} from '$lib/auno/auto-video/sidecar';
+	import {
+		generateAutoVideoCaptions,
+		generateAutoVideoMusic,
+		generateAutoVideoVoices
+	} from '$lib/auno/auto-video/enrichment';
 	import type {
 		AutoVideoGenerationBlock,
 		AutoVideoScene,
 		AutoVideoSidecar
 	} from '$lib/auno/auto-video/types';
 	import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
-	import { updateItemProperties } from '$lib/video-editor/timeline/actions/items';
+	import { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';
 
 	let {
 		projectId,
@@ -26,9 +31,14 @@
 	let sidecar = $state<AutoVideoSidecar | null>(null);
 	let loading = $state(true);
 	let busyScene = $state<number | 'all' | null>(null);
+	let mediaBusy = $state<'voice' | 'captions' | 'music' | null>(null);
+	let voiceProgress = $state('');
 	let status = $state('');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id?.trim() ?? '');
+	const voiceCount = $derived(sidecar?.generationGraph?.media?.voices?.length ?? 0);
+	const hasCaptions = $derived(Boolean(sidecar?.generationGraph?.media?.captions));
+	const hasMusic = $derived(Boolean(sidecar?.generationGraph?.media?.music));
 
 	function blockForScene(sceneId: string): AutoVideoGenerationBlock | undefined {
 		return sidecar?.generationGraph?.blocks.find((block) => block.sceneId === sceneId);
@@ -47,6 +57,11 @@
 		return Boolean(item && item.text !== expectedText(scene));
 	}
 
+	async function persistSidecar(next: AutoVideoSidecar): Promise<void> {
+		sidecar = next;
+		await saveAutoVideoSidecarRemote(workspaceId, next);
+	}
+
 	async function refreshSidecar(): Promise<void> {
 		loading = true;
 		status = '';
@@ -58,7 +73,7 @@
 	}
 
 	async function regenerate(target: number | 'all'): Promise<void> {
-		if (!sidecar || busyScene !== null) return;
+		if (!sidecar || busyScene !== null || mediaBusy !== null) return;
 		if (!workspaceId) {
 			status = 'Select an Auno Studio workspace to use AI regeneration.';
 			return;
@@ -81,6 +96,7 @@
 
 			let updated = 0;
 			let protectedCount = 0;
+			const invalidatedSceneIds = new Set<string>();
 			const nextScenes = sidecar.storyboard.scenes.map((oldScene, index) => {
 				if (target !== 'all' && target !== index) return oldScene;
 				const nextGenerated = generated.storyboard.scenes[index];
@@ -102,6 +118,7 @@
 					{ text: expectedText(nextScene), label: nextScene.title },
 					'AUNO_REGENERATE_SCENE'
 				);
+				if (nextScene.voice !== oldScene.voice) invalidatedSceneIds.add(oldScene.id);
 				updated += 1;
 				return nextScene;
 			});
@@ -115,27 +132,105 @@
 					: { ...block, userModifiedItemIds: [...block.userModifiedItemIds, itemId] };
 			});
 
-			const now = Date.now();
+			const previousMedia = sidecar.generationGraph?.media;
+			const invalidVoiceItems = (previousMedia?.voices ?? [])
+				.filter((asset) => invalidatedSceneIds.has(asset.sceneId))
+				.map((asset) => asset.itemId);
+			if (invalidVoiceItems.length > 0) removeItems(invalidVoiceItems, false);
+			if (invalidatedSceneIds.size > 0 && previousMedia?.captions) {
+				removeItems([previousMedia.captions.itemId], false);
+			}
+
 			const nextSidecar: AutoVideoSidecar = {
 				...sidecar,
 				generationVersion: sidecar.generationVersion + 1,
-				updatedAt: now,
+				updatedAt: Date.now(),
 				storyboard: { ...sidecar.storyboard, scenes: nextScenes },
 				providerManifest: { ...sidecar.providerManifest, planner: generated.model },
 				generationGraph: sidecar.generationGraph
-					? { ...sidecar.generationGraph, blocks: nextBlocks }
+					? {
+							...sidecar.generationGraph,
+							blocks: nextBlocks,
+							media: previousMedia
+								? {
+										...previousMedia,
+										voices: previousMedia.voices?.filter(
+											(asset) => !invalidatedSceneIds.has(asset.sceneId)
+										),
+										captions:
+											invalidatedSceneIds.size > 0 ? undefined : previousMedia.captions
+									}
+								: undefined
+						}
 					: undefined
 			};
-			sidecar = nextSidecar;
-			await saveAutoVideoSidecarRemote(workspaceId, nextSidecar);
+			await persistSidecar(nextSidecar);
 			if (updated > 0) onautosave();
+			const staleMessage = invalidatedSceneIds.size > 0 ? ' Voice/captions for rewritten scenes were cleared.' : '';
 			status = protectedCount > 0
-				? `Updated ${updated} scene(s). Preserved ${protectedCount} manually edited scene(s).`
-				: `Updated ${updated} scene(s).`;
+				? `Updated ${updated} scene(s). Preserved ${protectedCount} manually edited scene(s).${staleMessage}`
+				: `Updated ${updated} scene(s).${staleMessage}`;
 		} catch (cause) {
 			status = cause instanceof Error ? cause.message : String(cause);
 		} finally {
 			busyScene = null;
+		}
+	}
+
+	async function generateVoices(): Promise<void> {
+		if (!sidecar || mediaBusy !== null || busyScene !== null) return;
+		mediaBusy = 'voice';
+		voiceProgress = '';
+		status = '';
+		try {
+			const result = await generateAutoVideoVoices({
+				projectId,
+				workspaceId,
+				sidecar,
+				onProgress: (completed, total) => {
+					voiceProgress = `${completed}/${total}`;
+				}
+			});
+			await persistSidecar(result.sidecar);
+			onautosave();
+			status = `Generated ${result.assets.length} editable voice clip(s) and retimed scenes from real speech duration.`;
+		} catch (cause) {
+			status = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			mediaBusy = null;
+			voiceProgress = '';
+		}
+	}
+
+	async function generateCaptions(): Promise<void> {
+		if (!sidecar || mediaBusy !== null || busyScene !== null) return;
+		mediaBusy = 'captions';
+		status = '';
+		try {
+			const result = generateAutoVideoCaptions(sidecar);
+			await persistSidecar(result.sidecar);
+			onautosave();
+			status = 'Created native editable captions directly from the approved script.';
+		} catch (cause) {
+			status = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			mediaBusy = null;
+		}
+	}
+
+	async function generateMusic(): Promise<void> {
+		if (!sidecar || mediaBusy !== null || busyScene !== null) return;
+		mediaBusy = 'music';
+		status = '';
+		try {
+			const result = await generateAutoVideoMusic({ projectId, workspaceId, sidecar });
+			await persistSidecar(result.sidecar);
+			onautosave();
+			status = 'Generated editable background music at a voice-friendly mix level.';
+		} catch (cause) {
+			status = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			mediaBusy = null;
 		}
 	}
 
@@ -172,7 +267,23 @@
 					<p class="mt-1 text-[11px] text-[var(--video-editor-muted)]">{sidecar.storyboard.format} · {sidecar.storyboard.language} · {sidecar.providerManifest.planner ?? 'planner'}</p>
 				</div>
 
-				<Button type="button" size="sm" variant="outline" class="w-full" disabled={busyScene !== null} onclick={() => regenerate('all')}>
+				<div class="grid grid-cols-3 gap-1.5">
+					<Button type="button" size="sm" variant="outline" disabled={mediaBusy !== null || busyScene !== null} onclick={generateVoices}>
+						{mediaBusy === 'voice' ? `Voice ${voiceProgress}` : voiceCount > 0 ? `Voice · ${voiceCount}` : 'Voice'}
+					</Button>
+					<Button type="button" size="sm" variant="outline" disabled={mediaBusy !== null || busyScene !== null} onclick={generateCaptions}>
+						{mediaBusy === 'captions' ? 'Captions…' : hasCaptions ? 'Captions ✓' : 'Captions'}
+					</Button>
+					<Button type="button" size="sm" variant="outline" disabled={mediaBusy !== null || busyScene !== null} onclick={generateMusic}>
+						{mediaBusy === 'music' ? 'Music…' : hasMusic ? 'Music ✓' : 'Music'}
+					</Button>
+				</div>
+
+				<p class="text-[10px] leading-relaxed text-[var(--video-editor-muted)]">
+					Voice uses the selected local TTS model, captions come from the approved script, and music uses local ACE-Step when WebGPU is available. All outputs remain editable project assets.
+				</p>
+
+				<Button type="button" size="sm" variant="outline" class="w-full" disabled={busyScene !== null || mediaBusy !== null} onclick={() => regenerate('all')}>
 					{busyScene === 'all' ? 'Regenerating…' : 'Rewrite generated narration'}
 				</Button>
 
@@ -189,7 +300,7 @@
 									<span class="shrink-0 rounded bg-[var(--video-editor-control)] px-1.5 py-0.5 text-[10px] text-[var(--video-editor-muted)]">Manual edit</span>
 								{/if}
 							</div>
-							<Button type="button" size="sm" variant="ghost" class="mt-2 w-full" disabled={busyScene !== null || protectedEdit} onclick={() => regenerate(index)}>
+							<Button type="button" size="sm" variant="ghost" class="mt-2 w-full" disabled={busyScene !== null || mediaBusy !== null || protectedEdit} onclick={() => regenerate(index)}>
 								{busyScene === index ? 'Regenerating…' : protectedEdit ? 'Manual edit protected' : 'Regenerate scene'}
 							</Button>
 						</div>
