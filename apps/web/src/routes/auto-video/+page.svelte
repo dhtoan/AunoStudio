@@ -3,9 +3,11 @@
 	import { resolveAppPath } from '$lib/app-path';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import WorkspaceGatePanel from '$lib/video-editor/components/workspace-gate-panel.svelte';
 	import { createWorkspaceGate } from '$lib/video-editor/gate/workspace-gate.svelte';
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
+	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
 	import {
 		AUTO_VIDEO_CANVAS_SETTINGS,
 		compileStoryboardToProject,
@@ -32,7 +34,10 @@
 	let targetDurationSeconds = $state(45);
 	let canvas = $state<AutoVideoCanvasPreset>('vertical');
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
+	let activeSource = $state<AutoVideoSource | null>(null);
+	let plannerModel = $state('starter-fallback');
 	let error = $state('');
+	let planning = $state(false);
 	let creating = $state(false);
 
 	function createSource(): AutoVideoSource {
@@ -46,24 +51,51 @@
 		};
 	}
 
-	function generateStoryboard(): void {
+	async function generateStoryboard(): Promise<void> {
 		error = '';
 		if (!sourceValue.trim()) {
 			error = 'Add source text, Markdown, or a URL first.';
 			return;
 		}
+		planning = true;
 		const source = createSource();
-		storyboard = buildStarterStoryboard({
-			format,
-			title,
-			language,
-			targetDurationSeconds,
-			source
-		});
+		activeSource = source;
+		const duration = Number(targetDurationSeconds);
+		try {
+			const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
+			if (workspaceId) {
+				const generated = await requestAIStoryboard({
+					workspaceId,
+					format,
+					title: title.trim(),
+					language,
+					targetDurationSeconds: duration,
+					source
+				});
+				if (generated) {
+					storyboard = generated.storyboard;
+					plannerModel = generated.model;
+					return;
+				}
+			}
+
+			storyboard = buildStarterStoryboard({
+				format,
+				title,
+				language,
+				targetDurationSeconds: duration,
+				source
+			});
+			plannerModel = 'starter-fallback';
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			planning = false;
+		}
 	}
 
 	async function createAndOpenProject(): Promise<void> {
-		if (!storyboard || creating) return;
+		if (!storyboard || !activeSource || creating) return;
 		error = '';
 		if (gate.state !== 'ready') {
 			error = 'Choose or reconnect a Video Editor workspace folder before creating the project.';
@@ -72,7 +104,6 @@
 
 		creating = true;
 		try {
-			const source = createSource();
 			const project = compileStoryboardToProject(storyboard, canvas);
 			await createProject(project);
 			const now = Date.now();
@@ -82,9 +113,9 @@
 				generationVersion: 1,
 				createdAt: now,
 				updatedAt: now,
-				source,
+				source: activeSource,
 				storyboard,
-				providerManifest: { planner: 'starter-fallback' }
+				providerManifest: { planner: plannerModel }
 			});
 			await goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));
 		} catch (cause) {
@@ -102,7 +133,7 @@
 		<p class="text-sm font-medium text-muted-foreground">Create</p>
 		<h1 class="text-3xl font-semibold tracking-tight">AI Auto Video</h1>
 		<p class="max-w-3xl text-sm text-muted-foreground">
-			Turn a source into an editable native Auno Studio timeline. The starter planner works without a cloud AI provider; configured AI providers can replace it in the next generation stage without changing the project model.
+			Turn a source into an editable native Auno Studio timeline. A configured AI provider plans the storyboard first; the local starter planner keeps creation available when AI is not configured or temporarily unavailable.
 		</p>
 	</header>
 
@@ -173,7 +204,7 @@
 			</div>
 
 			<div class="flex flex-wrap items-center gap-3">
-				<Button onclick={generateStoryboard}>Generate storyboard</Button>
+				<Button onclick={generateStoryboard} disabled={planning}>{planning ? 'Planning…' : 'Generate storyboard'}</Button>
 				<span class="text-xs text-muted-foreground">
 					{AUTO_VIDEO_FORMAT_SCENES[format].length} scenes · {AUTO_VIDEO_CANVAS_SETTINGS[canvas].width}×{AUTO_VIDEO_CANVAS_SETTINGS[canvas].height}
 				</span>
@@ -197,7 +228,7 @@
 		<section class="space-y-4">
 			<div class="flex flex-wrap items-end justify-between gap-3">
 				<div>
-					<p class="text-sm font-medium text-muted-foreground">Storyboard</p>
+					<p class="text-sm font-medium text-muted-foreground">Storyboard · {plannerModel}</p>
 					<h2 class="text-xl font-semibold">{storyboard.title}</h2>
 				</div>
 				<Button onclick={createAndOpenProject} disabled={creating || gate.state !== 'ready'}>
