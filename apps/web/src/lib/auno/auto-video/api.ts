@@ -26,6 +26,11 @@ type PlannerResponseDTO = {
 	model: string;
 };
 
+type ResolveSourceResponseDTO = {
+	source: AutoVideoSource;
+	truncated: boolean;
+};
+
 export type AIStoryboardResult = {
 	storyboard: AutoVideoStoryboard;
 	model: string;
@@ -39,6 +44,20 @@ export type AIStoryboardRequest = {
 	targetDurationSeconds: number;
 	source: AutoVideoSource;
 };
+
+function requestHeaders(): Headers {
+	return applyAPIRequestHeaders(new Headers({ 'Content-Type': 'application/json' }));
+}
+
+function sourceBody(source: AutoVideoSource) {
+	return {
+		id: source.id,
+		kind: source.kind,
+		label: source.label,
+		value: source.value,
+		url: source.url ?? ''
+	};
+}
 
 function fromDTO(value: PlannerStoryboardDTO): AutoVideoStoryboard {
 	return {
@@ -60,15 +79,39 @@ function fromDTO(value: PlannerStoryboardDTO): AutoVideoStoryboard {
 	};
 }
 
+export async function resolveAutoVideoSource(
+	workspaceId: string,
+	source: AutoVideoSource,
+	signal?: AbortSignal
+): Promise<{ source: AutoVideoSource; truncated: boolean }> {
+	if (source.kind !== 'url') return { source, truncated: false };
+	const response = await fetch('/api/v1/auno/auto-video/source/resolve', {
+		method: 'POST',
+		credentials: 'include',
+		headers: requestHeaders(),
+		signal,
+		body: JSON.stringify({ workspace_id: workspaceId, source: sourceBody(source) })
+	});
+	if (!response.ok) {
+		throw new Error(
+			response.status === 400
+				? 'That URL could not be used as a public article or text source.'
+				: `Source URL could not be loaded (${response.status}).`
+		);
+	}
+	const body = (await response.json()) as ResolveSourceResponseDTO;
+	if (!body?.source?.value) throw new Error('The source URL did not contain readable text.');
+	return { source: body.source, truncated: Boolean(body.truncated) };
+}
+
 export async function requestAIStoryboard(
 	input: AIStoryboardRequest,
 	signal?: AbortSignal
 ): Promise<AIStoryboardResult | null> {
-	const headers = applyAPIRequestHeaders(new Headers({ 'Content-Type': 'application/json' }));
 	const response = await fetch('/api/v1/auno/auto-video/storyboard', {
 		method: 'POST',
 		credentials: 'include',
-		headers,
+		headers: requestHeaders(),
 		signal,
 		body: JSON.stringify({
 			workspace_id: input.workspaceId,
@@ -76,20 +119,12 @@ export async function requestAIStoryboard(
 			title: input.title,
 			language: input.language,
 			target_duration_seconds: input.targetDurationSeconds,
-			source: {
-				id: input.source.id,
-				kind: input.source.kind,
-				label: input.source.label,
-				value: input.source.value,
-				url: input.source.url ?? ''
-			}
+			source: sourceBody(input.source)
 		})
 	});
 
 	if ([400, 429, 502, 503].includes(response.status)) return null;
-	if (!response.ok) {
-		throw new Error(`AI Auto Video planning failed (${response.status}).`);
-	}
+	if (!response.ok) throw new Error(`AI Auto Video planning failed (${response.status}).`);
 	const body = (await response.json()) as PlannerResponseDTO;
 	if (!body?.storyboard || !Array.isArray(body.storyboard.scenes)) return null;
 	return { storyboard: fromDTO(body.storyboard), model: body.model || 'configured AI' };
