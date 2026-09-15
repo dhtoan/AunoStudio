@@ -120,22 +120,12 @@ export function buildMotionCompositionOverlays(options: {
 				compositionControls: {
 					version: COMPOSITION_CONTROLS_VERSION,
 					controls: [
-						{
-							id: 'accent-color',
-							name: 'Accent color',
-							targetItemId: primaryShapeId,
-							property: 'shape.fillColor',
-							kind: 'color',
-							defaultValue: accent
-						},
-						{
-							id: 'frame-color',
-							name: 'Frame color',
-							targetItemId: accentShapeId,
-							property: 'shape.strokeColor',
-							kind: 'color',
-							defaultValue: secondary
-						}
+						{ id: 'intensity', name: 'Intensity', targetItemId: primaryShapeId, property: 'motion.intensity', kind: 'number', defaultValue: '1', min: 0, max: 1, step: 0.05 },
+						{ id: 'depth', name: 'Depth', targetItemId: primaryShapeId, property: 'motion.depth', kind: 'number', defaultValue: '1', min: 0, max: 1, step: 0.05 },
+						{ id: 'speed', name: 'Speed', targetItemId: primaryShapeId, property: 'motion.speed', kind: 'number', defaultValue: '1', min: 0.25, max: 2, step: 0.05 },
+						{ id: 'primary-color', name: 'Primary color', targetItemId: primaryShapeId, property: 'shape.fillColor', kind: 'color', defaultValue: accent },
+						{ id: 'secondary-color', name: 'Secondary color', targetItemId: accentShapeId, property: 'shape.strokeColor', kind: 'color', defaultValue: secondary },
+						{ id: 'background-variant', name: 'Background variant', targetItemId: accentShapeId, property: 'shape.shapeType', kind: 'select', defaultValue: 'rectangle', options: [{ value: 'rectangle', label: 'Frame' }, { value: 'ellipse', label: 'Oval' }, { value: 'circle', label: 'Circle' }] }
 					]
 				},
 				items: [primary, accentShape],
@@ -158,8 +148,8 @@ export function buildMotionCompositionOverlays(options: {
 				compositionWidth: options.width,
 				compositionHeight: options.height,
 				compositionControlOverrides: {
-					'accent-color': accent,
-					'frame-color': secondary
+					'primary-color': accent,
+					'secondary-color': secondary
 				},
 				transform: {
 					x: options.width / 2,
