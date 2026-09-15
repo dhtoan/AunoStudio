@@ -123,10 +123,17 @@ export interface AutoVideoGeneratedMedia {
 	music?: AutoVideoMusicAsset;
 }
 
+export interface AutoVideoMotionState {
+	schemaVersion: 1;
+	style: string;
+	seed: number;
+}
+
 export interface AutoVideoGenerationGraph {
 	version: 1;
 	blocks: AutoVideoGenerationBlock[];
 	media?: AutoVideoGeneratedMedia;
+	motion?: AutoVideoMotionState;
 }
 
 export interface AutoVideoSidecar {
