@@ -4,7 +4,8 @@ import type {
   MotionScene,
   MotionSceneGraph,
   MotionSourceScene,
-  MotionStyleId
+  MotionStyleId,
+  MotionTransition
 } from './types';
 
 export interface PlanMotionGraphInput {
@@ -26,15 +27,16 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
     const rotation = style.camera.rotationDegrees * seededSigned(sceneSeed, 3);
     const backgroundDriftX = style.background.drift * direction;
     const backgroundDriftY = style.background.drift * 0.55 * seededSigned(sceneSeed, 4);
-    const transitionKind = index === input.scenes.length - 1
-      ? undefined
-      : deterministicChoice(
-          style.brief.transitionLanguage.length > 0
-            ? style.brief.transitionLanguage
-            : [style.transition],
-          sceneSeed,
-          5
-        );
+    const transitionKind: MotionTransition['kind'] | undefined =
+      index === input.scenes.length - 1
+        ? undefined
+        : (deterministicChoice(
+            style.brief.transitionLanguage.length > 0
+              ? style.brief.transitionLanguage
+              : [style.transition],
+            sceneSeed,
+            5
+          ) as MotionTransition['kind']);
     const durationSeconds = Math.max(2, scene.durationSeconds);
     const planned: MotionScene = {
       id: `motion-${scene.id}`,
@@ -65,11 +67,7 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
       text: { ...style.text },
       transitionOut: transitionKind
         ? {
-            kind: transitionKind as MotionScene['transitionOut'] extends infer T
-              ? T extends { kind: infer K }
-                ? K
-                : never
-              : never,
+            kind: transitionKind,
             durationSeconds: Math.min(0.55, Math.max(0.18, durationSeconds * 0.08))
           }
         : undefined
@@ -82,7 +80,11 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
     schemaVersion: 1,
     style: input.style,
     seed,
-    brief: structuredClone(style.brief),
+    brief: {
+      ...style.brief,
+      palette: [...style.brief.palette],
+      transitionLanguage: [...style.brief.transitionLanguage]
+    },
     scenes
   };
 }
