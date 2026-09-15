@@ -4,6 +4,7 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { uploadMediaFile } from '$lib/media-upload-client';
 	import WorkspaceGatePanel from '$lib/video-editor/components/workspace-gate-panel.svelte';
 	import { createWorkspaceGate } from '$lib/video-editor/gate/workspace-gate.svelte';
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
@@ -30,8 +31,11 @@
 	} from '$lib/auno/auto-video/types';
 
 	const gate = createWorkspaceGate();
-	let sourceKind = $state<'text' | 'url' | 'markdown' | 'txt'>('text');
+	let sourceKind = $state<'text' | 'url' | 'markdown' | 'txt' | 'pdf' | 'image' | 'video' | 'media'>('text');
 	let sourceValue = $state('');
+	let sourceMediaId = $state('');
+	let sourceMimeType = $state('');
+	let sourceUploading = $state(false);
 	let title = $state('');
 	let format = $state<AutoVideoFormat>('review');
 	let language = $state('en-US');
@@ -46,6 +50,59 @@
 	let error = $state('');
 	let planning = $state(false);
 	let creating = $state(false);
+
+	async function loadMediaSourceFile(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		error = '';
+		const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
+		if (!workspaceId) {
+			error = 'Select an Auno Studio workspace before adding a PDF, image, or video source.';
+			input.value = '';
+			return;
+		}
+		if (file.size <= 0 || file.size > 25 * 1024 * 1024) {
+			error = 'Multimodal Auto Video source files are limited to 25 MB.';
+			input.value = '';
+			return;
+		}
+		const kind = file.type === 'application/pdf'
+			? 'pdf'
+			: file.type.startsWith('image/')
+				? 'image'
+				: file.type.startsWith('video/')
+					? 'video'
+					: null;
+		if (!kind) {
+			error = 'Choose a PDF, image, or video file.';
+			input.value = '';
+			return;
+		}
+		sourceUploading = true;
+		try {
+			const uploaded = await uploadMediaFile({
+				workspaceId,
+				file,
+				source: 'upload',
+				assetKind: 'library',
+				retentionClass: 'library',
+				prepareVideo: false
+			});
+			sourceKind = kind;
+			sourceMediaId = uploaded.id;
+			sourceMimeType = uploaded.mime_type || file.type;
+			sourceValue = `Attached ${kind} source: ${file.name}`;
+			if (!title.trim()) title = file.name.replace(/\.[^.]+$/, '');
+			storyboard = null;
+			activeSource = null;
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			sourceUploading = false;
+			input.value = '';
+		}
+	}
 
 	async function loadTextSourceFile(event: Event): Promise<void> {
 		const input = event.currentTarget as HTMLInputElement;
@@ -79,7 +136,9 @@
 			kind: sourceKind,
 			label: title.trim() || (sourceKind === 'url' ? 'Web source' : 'Source'),
 			value,
-			url: sourceKind === 'url' ? value : undefined
+			url: sourceKind === 'url' ? value : undefined,
+			mimeType: ['pdf', 'image', 'video', 'media'].includes(sourceKind) ? sourceMimeType : undefined,
+			mediaId: ['pdf', 'image', 'video', 'media'].includes(sourceKind) ? sourceMediaId : undefined
 		};
 	}
 
@@ -117,6 +176,10 @@
 				if (generated) {
 					storyboard = generated.storyboard;
 					plannerModel = generated.model;
+					return;
+				}
+				if (['pdf', 'image', 'video', 'media'].includes(source.kind)) {
+					error = 'A configured multimodal AI provider is required to analyze PDF, image, video, or Media Library sources.';
 					return;
 				}
 			}
@@ -236,7 +299,7 @@
 			</div>
 
 			<label class="block space-y-2 text-sm font-medium">
-				<span>{sourceKind === 'url' ? 'Source URL' : 'Source content'}</span>
+				<span>{sourceKind === 'url' ? 'Source URL' : sourceKind === 'pdf' ? 'PDF source' : sourceKind === 'image' ? 'Image source' : sourceKind === 'video' ? 'Video source' : 'Source content'}</span>
 				<textarea
 					bind:value={sourceValue}
 					rows="10"
@@ -253,6 +316,14 @@
 					<input type="file" class="sr-only" accept=".txt,.md,.markdown,text/plain,text/markdown" onchange={loadTextSourceFile} />
 				</label>
 				<span class="text-xs text-muted-foreground">Read locally · up to 1 MB · planner text capped at 200k characters</span>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-2">
+				<label class="inline-flex h-9 cursor-pointer items-center rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted">
+					{sourceUploading ? 'Uploading source…' : 'Choose PDF / Image / Video'}
+					<input type="file" class="sr-only" accept="application/pdf,image/*,video/*" disabled={sourceUploading} onchange={loadMediaSourceFile} />
+				</label>
+				<span class="text-xs text-muted-foreground">Stored in Workspace Media · up to 25 MB · analyzed as multimodal source</span>
 			</div>
 
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
