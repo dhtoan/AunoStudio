@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/openpost/backend/internal/ai"
+	"github.com/openpost/backend/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,4 +63,18 @@ func TestAunoE2EPlannerGeneratorIsOptInAndStructured(t *testing.T) {
 	require.Len(t, visualPayload.Plans, 2)
 	require.Equal(t, "beat-001", visualPayload.Plans[0].BeatID)
 	require.Equal(t, "beat-002", visualPayload.Plans[1].BeatID)
+}
+
+func TestAunoPlannerGeneratorUsesE2EFixtureWhenExplicitlyEnabled(t *testing.T) {
+	t.Setenv("OPENPOST_AUNO_E2E_FIXTURES", "1")
+	t.Setenv("AUNO_AI_PROVIDER", "")
+	t.Setenv("AUNO_GEMINI_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
+	generator, model, provider, err := aunoPlannerGenerator(&config.Config{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, generator)
+	require.Equal(t, "auno-e2e-fixture", model)
+	require.Equal(t, "fixture", provider)
 }
