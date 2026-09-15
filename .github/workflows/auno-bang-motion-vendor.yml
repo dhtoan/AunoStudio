@@ -1,0 +1,40 @@
+name: Vendor pinned Bang Motion snapshot
+
+on:
+  push:
+    paths:
+      - .github/workflows/auno-bang-motion-vendor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Vendor exact pinned snapshot
+        run: |
+          set -eu
+          pin='0f1bd1103835890354496d009af62885fe0a05d5'
+          tmp="$(mktemp -d)"
+          cp third_party/bang-motion/UPSTREAM.md "$tmp/UPSTREAM.md"
+          curl -fsSL "https://codeload.github.com/bangtutorial/bang-motion/tar.gz/$pin" -o "$tmp/upstream.tar.gz"
+          rm -rf third_party/bang-motion
+          mkdir -p third_party/bang-motion
+          tar -xzf "$tmp/upstream.tar.gz" -C third_party/bang-motion --strip-components=1
+          cp "$tmp/UPSTREAM.md" third_party/bang-motion/UPSTREAM.md
+          rm -rf third_party/bang-motion/.git
+      - name: Commit pinned snapshot
+        run: |
+          git config user.name "Auno Studio Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add third_party/bang-motion
+          if git diff --cached --quiet; then
+            echo "Snapshot already current"
+          else
+            git commit -m "chore: vendor pinned Bang Motion reference"
+            git push origin HEAD:main
+          fi
