@@ -286,6 +286,13 @@
 				providerManifest: { planner: plannerModel },
 				generationGraph: {
 					version: 1 as const,
+					ownedItems: storyboard.scenes.flatMap((scene) => [
+						{ itemId: `${scene.id}-background`, sceneId: scene.id, category: 'visual' as const },
+						{ itemId: `${scene.id}-text`, sceneId: scene.id, category: 'visual' as const },
+						...(scene.visualIntent === 'motion-composition'
+							? [{ itemId: `${scene.id}-motion-composition`, sceneId: scene.id, category: 'motion' as const }]
+							: [])
+					]),
 					blocks: storyboard.scenes.map((scene) => ({
 						sceneId: scene.id,
 						ownedItemIds: [
