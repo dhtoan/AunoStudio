@@ -12,6 +12,9 @@ export interface MotionProbePlan {
   schemaVersion: 1;
   fps: number;
   totalFrames: number;
+  /** Five stable whole-project frames shared by preview/export QA. */
+  projectFrames: number[];
+  /** Scene-local probes used to diagnose scene-specific regressions. */
   probes: MotionFrameProbe[];
 }
 
@@ -22,6 +25,19 @@ const POSITIONS = [
   ['three-quarter', 0.75],
   ['end', 1]
 ] as const;
+
+/** Stable 0/25/50/75/last-frame probe set for any project length. */
+export function frameProbeFrames(totalFrames: number): number[] {
+  const total = Math.max(1, Math.floor(totalFrames));
+  const last = total - 1;
+  return [
+    0,
+    Math.min(last, Math.round(total * 0.25)),
+    Math.min(last, Math.round(total * 0.5)),
+    Math.min(last, Math.round(total * 0.75)),
+    last
+  ].filter((frame, index, frames) => index === 0 || frame !== frames[index - 1]);
+}
 
 function boundedFrame(seconds: number, fps: number, totalFrames: number): number {
   const frame = Math.round(seconds * fps);
@@ -60,7 +76,13 @@ export function createMotionProbePlan(graph: MotionSceneGraph, fps: number): Mot
   }
 
   probes.sort((left, right) => left.frame - right.frame || left.id.localeCompare(right.id));
-  return { schemaVersion: 1, fps: normalizedFps, totalFrames, probes };
+  return {
+    schemaVersion: 1,
+    fps: normalizedFps,
+    totalFrames,
+    projectFrames: frameProbeFrames(totalFrames),
+    probes
+  };
 }
 
 /** Small serializable signature for comparing preview/export probe plans. */
@@ -69,6 +91,7 @@ export function motionProbeSignature(plan: MotionProbePlan): string {
     plan.schemaVersion,
     plan.fps,
     plan.totalFrames,
+    `project:${plan.projectFrames.join(',')}`,
     ...plan.probes.map((probe) => `${probe.sceneId}:${probe.frame}:${probe.position}`)
   ].join('|');
 }
