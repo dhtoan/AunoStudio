@@ -9,11 +9,11 @@ import {
 
 const MOTION_TRACK_ID = 'track-auno-motion';
 
-function keyframes(from: number, to: number, durationInFrames: number): KeyframeTrack {
+function keyframes(scope: string, from: number, to: number, durationInFrames: number): KeyframeTrack {
 	return {
 		frames: [0, Math.max(1, durationInFrames - 1)],
 		values: [from, to],
-		ids: [crypto.randomUUID(), crypto.randomUUID()],
+		ids: [`auno:${scope}:0`, `auno:${scope}:1`],
 		easings: ['ease-in-out', 'ease-in-out']
 	};
 }
@@ -77,14 +77,15 @@ export function buildMotionCompositionOverlays(options: {
 				},
 				keyframes: {
 					x: keyframes(
+						`${primaryShapeId}:x`,
 						options.width * (direction > 0 ? 0.82 : 0.18),
 						options.width * (direction > 0 ? 0.6 : 0.4),
 						durationInFrames
 					),
-					y: keyframes(options.height * 0.42, options.height * 0.56, durationInFrames),
-					scaleX: keyframes(0.82, 1.12, durationInFrames),
-					scaleY: keyframes(0.82, 1.12, durationInFrames),
-					opacity: keyframes(0.06, 0.22, durationInFrames)
+					y: keyframes(`${primaryShapeId}:y`, options.height * 0.42, options.height * 0.56, durationInFrames),
+					scaleX: keyframes(`${primaryShapeId}:scaleX`, 0.82, 1.12, durationInFrames),
+					scaleY: keyframes(`${primaryShapeId}:scaleY`, 0.82, 1.12, durationInFrames),
+					opacity: keyframes(`${primaryShapeId}:opacity`, 0.06, 0.22, durationInFrames)
 				}
 			};
 			const accentShape: TimelineItem = {
@@ -108,8 +109,8 @@ export function buildMotionCompositionOverlays(options: {
 					rotation: 0
 				},
 				keyframes: {
-					rotation: keyframes(-2.5 * direction, 2.5 * direction, durationInFrames),
-					opacity: keyframes(0.12, 0.36, durationInFrames)
+					rotation: keyframes(`${accentShapeId}:rotation`, -2.5 * direction, 2.5 * direction, durationInFrames),
+					opacity: keyframes(`${accentShapeId}:opacity`, 0.12, 0.36, durationInFrames)
 				}
 			};
 			const composition: SubComposition = {
