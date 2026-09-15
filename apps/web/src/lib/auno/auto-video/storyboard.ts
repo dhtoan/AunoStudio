@@ -32,7 +32,7 @@ function sourceSegments(value: string): string[] {
 	return normalized.length > 0 ? normalized : ['Add your key point here.'];
 }
 
-function sceneVoice(label: string, segment: string, index: number, total: number): string {
+function sceneVoice(label: string, segment: string, index: number): string {
 	if (index === 0) return segment;
 	if (/call to action/i.test(label)) return `Save or share this if ${segment.toLowerCase()}`;
 	if (/verdict|summary/i.test(label)) return `${label}: ${segment}`;
@@ -51,7 +51,7 @@ export function buildStarterStoryboard(input: BuildStoryboardInput): AutoVideoSt
 			id: `${storyboardId}-scene-${index + 1}`,
 			role: definition.role,
 			title: definition.label,
-			voice: sceneVoice(definition.label, segment, index, template.length),
+			voice: sceneVoice(definition.label, segment, index),
 			visualIntent: definition.visualIntent,
 			durationSeconds: Number(sceneDuration.toFixed(2)),
 			sourceIds: [input.source.id]
