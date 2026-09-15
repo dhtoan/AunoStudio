@@ -1,5 +1,6 @@
 import { applyAPIRequestHeaders } from '$lib/api/client';
 import type {
+	AutoVideoDocumentaryManifest,
 	AutoVideoGenerationGraph,
 	AutoVideoSidecar,
 	AutoVideoSource,
@@ -14,6 +15,14 @@ function key(projectId: string): string {
 
 function requestHeaders(): Headers {
 	return applyAPIRequestHeaders(new Headers({ 'Content-Type': 'application/json' }));
+}
+
+export function documentaryManifest(
+	sidecar: AutoVideoSidecar | null | undefined
+): AutoVideoDocumentaryManifest | null {
+	const manifest = sidecar?.generationGraph?.documentary;
+	if (!manifest?.runId || !Array.isArray(manifest.beatIds) || !manifest.style) return null;
+	return manifest;
 }
 
 export function saveAutoVideoSidecar(sidecar: AutoVideoSidecar): void {
