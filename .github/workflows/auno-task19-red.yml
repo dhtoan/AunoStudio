@@ -41,6 +41,13 @@ jobs:
             echo '::warning::bun.lock is stale on the current main baseline; showing generated lock diff'
             git diff -- bun.lock | head -n 240
           fi
+      - name: Upload repaired Bun lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: task19-bun-lock
+          path: bun.lock
+          if-no-files-found: error
+          retention-days: 1
       - name: Run dev fixture generator contracts
         run: >-
           cd apps/server && go test -tags dev ./cmd/openpost
