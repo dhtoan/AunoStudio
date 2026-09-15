@@ -48,7 +48,7 @@ jobs:
       - name: Test Auno Motion package
         run: bun test packages/auno-motion/src
       - name: Test browser motion adapters
-        run: bun --cwd apps/web x vitest run src/lib/auno/motion
+        run: cd apps/web && bunx vitest run src/lib/auno/motion
 
   backend-documentary:
     name: backend-documentary
@@ -90,7 +90,7 @@ jobs:
       - name: Check frontend
         run: bun run check -- frontend
       - name: Test Auno frontend modules
-        run: bun --cwd apps/web x vitest run src/lib/auno src/lib/video-editor/auno
+        run: cd apps/web && bunx vitest run src/lib/auno src/lib/video-editor/auno
       - name: Build production web embed
         run: bun run build -- frontend
       - name: Prove E2E fixture is unavailable in production build
