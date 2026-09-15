@@ -306,7 +306,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewVoiceProfileHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewThemeHandler(deps.DB, deps.Authenticator, deps.MediaStorage).RegisterRoutes(api)
 	handlers.NewPostBuilderHandler(deps.DB, deps.Authenticator, deps.PostBuilder).RegisterRoutes(api)
-	handlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner).RegisterRoutes(api)
+	handlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner, deps.MediaStorage).RegisterRoutes(api)
 	handlers.NewAutoVideoProjectHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	socialSetHandler := handlers.NewSocialSetHandler(deps.DB, deps.Authenticator)
 	socialSetHandler.SetCapabilityResolver(capabilityResolverHandler)
