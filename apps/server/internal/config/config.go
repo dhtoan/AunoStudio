@@ -34,7 +34,7 @@ type AnalyticsSourceConfig struct {
 // OPENPOST_DIAGNOSTICS_RECEIVER_URL or disables reporting with
 // OPENPOST_DIAGNOSTICS_ENABLED=false. It is a public endpoint address,
 // not a secret.
-const defaultDiagnosticsReceiverURL = "https://app.openpo.st/api/v1/diagnostics/ingest"
+const defaultDiagnosticsReceiverURL = ""
 
 type Config struct {
 	Edition                  string
@@ -188,8 +188,8 @@ type Config struct {
 
 const (
 	minSecretLength              = 32
-	managedPostHogBrowserHostURL = "https://cool.openpo.st"
-	managedPostHogUIHostURL      = "https://eu.posthog.com"
+	managedPostHogBrowserHostURL = ""
+	managedPostHogUIHostURL      = ""
 )
 
 const (
@@ -228,14 +228,14 @@ func Load() *Config {
 		defaultPrivacyURL = legalpolicy.PrivacyURL
 		defaultTermsVersion = legalpolicy.TermsVersion
 		defaultPrivacyVersion = legalpolicy.PrivacyVersion
-		defaultSupportEmail = "hello@openpo.st"
+		defaultSupportEmail = ""
 	}
 
 	cfg := &Config{
 		Edition:                 edition,
 		Port:                    getEnvWithFallbacks("OPENPOST_PORT", "8080"),
 		DatabaseDriver:          getEnvEnum("OPENPOST_DATABASE_DRIVER", DatabaseDriverSQLite, DatabaseDriverSQLite, DatabaseDriverPostgres),
-		DatabasePath:            getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:openpost.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH"),
+		DatabasePath:            getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:auno-studio.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH"),
 		DatabaseURL:             getEnvWithFallbacks("OPENPOST_DATABASE_URL", "", "DATABASE_URL"),
 		JWTSecret:               getEnvWithFallbacks("OPENPOST_JWT_SECRET", "", "JWT_SECRET"),
 		EncryptionKey:           getEnvWithFallbacks("OPENPOST_ENCRYPTION_KEY", "", "ENCRYPTION_KEY"),
@@ -282,8 +282,8 @@ func Load() *Config {
 		FeedbackEnabled:              getEnvBoolWithAliases(false, "OPENPOST_FEEDBACK_ENABLED"),
 		FeedbackDestinationURL:       getEnvDefault("OPENPOST_FEEDBACK_DESTINATION_URL", ""),
 		FeedbackRecipient:            getEnvDefault("OPENPOST_FEEDBACK_RECIPIENT", ""),
-		FeedbackSupportURL:           getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/getopenpost/openpost/issues/new"),
-		DiagnosticsEnabled:           getEnvBoolWithAliases(true, "OPENPOST_DIAGNOSTICS_ENABLED"),
+		FeedbackSupportURL:           getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/dhtoan/AunoStudio/issues/new"),
+		DiagnosticsEnabled:           getEnvBoolWithAliases(false, "OPENPOST_DIAGNOSTICS_ENABLED"),
 		DiagnosticsEnvSet:            isEnvSet("OPENPOST_DIAGNOSTICS_ENABLED"),
 		DiagnosticsReceiverURL:       strings.TrimRight(strings.TrimSpace(getEnvDefault("OPENPOST_DIAGNOSTICS_RECEIVER_URL", defaultDiagnosticsReceiverURL)), "/"),
 		DiagnosticsIngestEnabled:     getEnvBoolWithAliases(false, "OPENPOST_DIAGNOSTICS_INGEST_ENABLED"),
@@ -296,7 +296,7 @@ func Load() *Config {
 		), "/"),
 		PostHogUIHost:          strings.TrimRight(strings.TrimSpace(getEnvDefault("OPENPOST_POSTHOG_UI_HOST", postHogUIHost)), "/"),
 		TelemetryEnvironment:   strings.TrimSpace(getEnvDefault("OPENPOST_TELEMETRY_ENVIRONMENT", telemetryEnvironment)),
-		UpdateCheckEnabled:     getEnvBoolWithAliases(true, "OPENPOST_UPDATE_CHECK_ENABLED"),
+		UpdateCheckEnabled:     getEnvBoolWithAliases(false, "OPENPOST_UPDATE_CHECK_ENABLED"),
 		ConnectorsFile:         strings.TrimSpace(os.Getenv("OPENPOST_CONNECTORS_FILE")),
 		OIDCIssuer:             strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_ISSUER", "")),
 		OIDCClientID:           strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_CLIENT_ID", "")),
