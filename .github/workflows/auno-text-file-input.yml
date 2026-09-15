@@ -1,0 +1,54 @@
+name: Wire Auto Video Text File Sources
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-text-file-input.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch text file input
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = path.read_text()
+          text = text.replace(
+              "let sourceKind = $state<'text' | 'url' | 'markdown'>('text');",
+              "let sourceKind = $state<'text' | 'url' | 'markdown' | 'txt'>('text');"
+          )
+          anchor = "\tfunction createSource(): AutoVideoSource {\n"
+          helper = "\tasync function loadTextSourceFile(event: Event): Promise<void> {\n\t\tconst input = event.currentTarget as HTMLInputElement;\n\t\tconst file = input.files?.[0];\n\t\tif (!file) return;\n\t\terror = '';\n\t\tif (file.size > 1_000_000) {\n\t\t\terror = 'TXT/Markdown sources are limited to 1 MB. Use a URL or shorten the document first.';\n\t\t\tinput.value = '';\n\t\t\treturn;\n\t\t}\n\t\ttry {\n\t\t\tconst content = await file.text();\n\t\t\tif (!content.trim()) throw new Error('The selected text file is empty.');\n\t\t\tsourceValue = content.slice(0, 200_000);\n\t\t\tsourceKind = /\\.(md|markdown)$/i.test(file.name) ? 'markdown' : 'txt';\n\t\t\tif (!title.trim()) title = file.name.replace(/\\.[^.]+$/, '');\n\t\t\tstoryboard = null;\n\t\t\tactiveSource = null;\n\t\t} catch (cause) {\n\t\t\terror = cause instanceof Error ? cause.message : String(cause);\n\t\t} finally {\n\t\t\tinput.value = '';\n\t\t}\n\t}\n\n"
+          if "async function loadTextSourceFile" not in text:
+              if anchor not in text: raise SystemExit('missing createSource anchor')
+              text = text.replace(anchor, helper + anchor, 1)
+          text = text.replace(
+              "error = 'Add source text, Markdown, or a URL first.';",
+              "error = 'Add source text, Markdown, a TXT/Markdown file, or a URL first.';"
+          )
+          option_anchor = "\t\t\t\t\t\t<option value=\"markdown\">Markdown</option>\n"
+          if '<option value="txt">TXT file</option>' not in text:
+              if option_anchor not in text: raise SystemExit('missing source option anchor')
+              text = text.replace(option_anchor, option_anchor + "\t\t\t\t\t\t<option value=\"txt\">TXT file</option>\n", 1)
+          textarea_end = "\t\t\t\t></textarea>\n\t\t\t</label>\n"
+          file_markup = textarea_end + "\n\t\t\t<div class=\"flex flex-wrap items-center gap-2\">\n\t\t\t\t<label class=\"inline-flex h-9 cursor-pointer items-center rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted\">\n\t\t\t\t\tChoose TXT / Markdown\n\t\t\t\t\t<input type=\"file\" class=\"sr-only\" accept=\".txt,.md,.markdown,text/plain,text/markdown\" onchange={loadTextSourceFile} />\n\t\t\t\t</label>\n\t\t\t\t<span class=\"text-xs text-muted-foreground\">Read locally · up to 1 MB · planner text capped at 200k characters</span>\n\t\t\t</div>\n"
+          if "Choose TXT / Markdown" not in text:
+              if textarea_end not in text: raise SystemExit('missing textarea anchor')
+              text = text.replace(textarea_end, file_markup, 1)
+          path.write_text(text)
+          PY
+          path='apps/web/src/routes/auto-video/+page.svelte'
+          api_path='apps/web/src/routes/auto-video/%2Bpage.svelte'
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+            -f message='feat: accept local TXT and Markdown Auto Video sources' \
+            -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
