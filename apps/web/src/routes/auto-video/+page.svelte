@@ -7,7 +7,7 @@
 	import WorkspaceGatePanel from '$lib/video-editor/components/workspace-gate-panel.svelte';
 	import { createWorkspaceGate } from '$lib/video-editor/gate/workspace-gate.svelte';
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
-	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
+	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
 		AUTO_VIDEO_CANVAS_SETTINGS,
 		compileStoryboardToProject,
@@ -36,6 +36,7 @@
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
 	let activeSource = $state<AutoVideoSource | null>(null);
 	let plannerModel = $state('starter-fallback');
+	let sourceTruncated = $state(false);
 	let error = $state('');
 	let planning = $state(false);
 	let creating = $state(false);
@@ -58,11 +59,21 @@
 			return;
 		}
 		planning = true;
-		const source = createSource();
-		activeSource = source;
+		let source = createSource();
 		const duration = Number(targetDurationSeconds);
+		sourceTruncated = false;
 		try {
 			const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
+			if (source.kind === 'url') {
+				if (!workspaceId) {
+					error = 'Select a workspace before loading a URL source.';
+					return;
+				}
+				const resolved = await resolveAutoVideoSource(workspaceId, source);
+				source = resolved.source;
+				sourceTruncated = resolved.truncated;
+			}
+			activeSource = source;
 			if (workspaceId) {
 				const generated = await requestAIStoryboard({
 					workspaceId,
@@ -228,7 +239,7 @@
 		<section class="space-y-4">
 			<div class="flex flex-wrap items-end justify-between gap-3">
 				<div>
-					<p class="text-sm font-medium text-muted-foreground">Storyboard · {plannerModel}</p>
+					<p class="text-sm font-medium text-muted-foreground">Storyboard · {plannerModel}{sourceTruncated ? ' · source shortened to safe extraction limit' : ''}</p>
 					<h2 class="text-xl font-semibold">{storyboard.title}</h2>
 				</div>
 				<Button onclick={createAndOpenProject} disabled={creating || gate.state !== 'ready'}>
