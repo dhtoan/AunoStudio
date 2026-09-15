@@ -62,6 +62,7 @@ export interface MotionTransition {
 export interface MotionScene {
   id: string;
   sourceSceneId: string;
+  visualIntent: string;
   startSeconds: number;
   durationSeconds: number;
   camera: CameraPlan;
