@@ -102,6 +102,10 @@ async function init() {
 	// never message text, and only when the instance switch is on and no
 	// browser privacy signal refuses.
 	installMaintainerDiagnosticsCapture();
+	if (import.meta.env.VITE_AUNO_E2E === '1') {
+		const { installAunoMotionE2EHooks } = await import('$lib/auno/motion/e2e-hooks');
+		installAunoMotionE2EHooks();
+	}
 }
 
 export { init };
