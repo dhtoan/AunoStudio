@@ -1,0 +1,80 @@
+name: Wire Auno Motion Diagnostics
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-motion-diagnostics.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Motion diagnostics persistence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          route = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = route.read_text()
+          text = text.replace(
+              "import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';",
+              "import { MOTION_STYLES, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';"
+          )
+          old = "\t\t\tconst project = applyMotionGraphToProject(baseProject, motionGraph);\n"
+          new = old + "\t\t\tconst motionDiagnostics = validateMotionGraph(motionGraph);\n"
+          if "const motionDiagnostics = validateMotionGraph(motionGraph);" not in text:
+              if old not in text: raise SystemExit('missing project motion anchor')
+              text = text.replace(old, new, 1)
+          old = "motion: { schemaVersion: 1 as const, style: motionGraph.style, seed: motionGraph.seed }"
+          new = "motion: {\n\t\t\t\t\t\tschemaVersion: 1 as const,\n\t\t\t\t\t\tstyle: motionGraph.style,\n\t\t\t\t\t\tseed: motionGraph.seed,\n\t\t\t\t\t\tbrief: motionGraph.brief,\n\t\t\t\t\t\tdiagnostics: motionDiagnostics\n\t\t\t\t\t}"
+          if "diagnostics: motionDiagnostics" not in text:
+              if old not in text: raise SystemExit('missing initial motion sidecar anchor')
+              text = text.replace(old, new, 1)
+          route.write_text(text)
+
+          panel = Path('apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte')
+          text = panel.read_text()
+          text = text.replace(
+              "import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';",
+              "import { MOTION_STYLES, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';"
+          )
+          old = "\t\t\tconst graph = planMotionGraph({\n\t\t\t\tprojectId,\n\t\t\t\tstyle: motionStyle,\n\t\t\t\tseed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,\n\t\t\t\tscenes: sidecar.storyboard.scenes\n\t\t\t});\n"
+          new = old + "\t\t\tconst motionDiagnostics = validateMotionGraph(graph);\n"
+          if text.count("const motionDiagnostics = validateMotionGraph(graph);") == 0:
+              if old not in text: raise SystemExit('missing apply motion graph anchor')
+              text = text.replace(old, new, 1)
+          old = "motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }"
+          new = "motion: {\n\t\t\t\t\t\tschemaVersion: 1,\n\t\t\t\t\t\tstyle: graph.style,\n\t\t\t\t\t\tseed: graph.seed,\n\t\t\t\t\t\tbrief: graph.brief,\n\t\t\t\t\t\tdiagnostics: motionDiagnostics\n\t\t\t\t\t}"
+          if "diagnostics: motionDiagnostics" not in text:
+              if old not in text: raise SystemExit('missing panel motion sidecar anchor')
+              text = text.replace(old, new, 1)
+          old = "\t\t\t\tconst graph = planMotionGraph({\n\t\t\t\t\tprojectId,\n\t\t\t\t\tstyle,\n\t\t\t\t\tseed: savedMotion.seed,\n\t\t\t\t\tscenes: nextSidecar.storyboard.scenes\n\t\t\t\t});\n"
+          new = old + "\t\t\t\tconst motionDiagnostics = validateMotionGraph(graph);\n"
+          if text.count("const motionDiagnostics = validateMotionGraph(graph);") < 2:
+              if old not in text: raise SystemExit('missing voice reflow motion graph anchor')
+              text = text.replace(old, new, 1)
+          old = "motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }"
+          new = "motion: {\n\t\t\t\t\t\t\tschemaVersion: 1,\n\t\t\t\t\t\t\tstyle: graph.style,\n\t\t\t\t\t\t\tseed: graph.seed,\n\t\t\t\t\t\t\tbrief: graph.brief,\n\t\t\t\t\t\t\tdiagnostics: motionDiagnostics\n\t\t\t\t\t\t}"
+          if text.count("diagnostics: motionDiagnostics") < 2:
+              if old not in text: raise SystemExit('missing voice reflow sidecar motion anchor')
+              text = text.replace(old, new, 1)
+          panel.write_text(text)
+          PY
+
+          upload() {
+            path="$1"
+            api_path="$2"
+            message="$3"
+            encoded="$(base64 -w0 "$path")"
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+              -f message="$message" -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
+          }
+          upload 'apps/web/src/routes/auto-video/+page.svelte' 'apps/web/src/routes/auto-video/%2Bpage.svelte' 'feat: persist initial Motion brief and diagnostics'
+          upload 'apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte' 'apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte' 'feat: persist Motion diagnostics on style and timing changes'
