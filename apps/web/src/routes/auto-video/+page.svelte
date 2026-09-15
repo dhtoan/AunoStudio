@@ -148,7 +148,13 @@
 					version: 1 as const,
 					blocks: storyboard.scenes.map((scene) => ({
 						sceneId: scene.id,
-						ownedItemIds: [`${scene.id}-background`, `${scene.id}-text`],
+						ownedItemIds: [
+							`${scene.id}-background`,
+							`${scene.id}-text`,
+							...(scene.visualIntent === 'motion-composition'
+								? [`${scene.id}-motion-composition`]
+								: [])
+						],
 						userModifiedItemIds: []
 					})),
 					motion: { schemaVersion: 1 as const, style: motionGraph.style, seed: motionGraph.seed }
