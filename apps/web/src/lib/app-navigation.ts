@@ -38,9 +38,9 @@ export const appRouteFamilies = {
 	growth: ['/grow'],
 	analytics: ['/analytics'],
 	media: ['/media'],
-	editors: ['/editors', '/image-editor', '/video-editor'],
+	editors: ['/editors', '/auto-video', '/image-editor', '/video-editor'],
 	settings: ['/settings'],
-	'local-editors': ['/video-editor', '/quick-cut', '/record']
+	'local-editors': ['/auto-video', '/video-editor', '/quick-cut', '/record']
 } satisfies Record<AppRouteFamily, readonly string[]>;
 
 export const primaryNavigation: PrimaryNavigationItem[] = [
