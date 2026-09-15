@@ -16,7 +16,10 @@ func aunoAutoVideoPlanner(cfg *config.Config, openRouterGenerator ai.Generator) 
     }
     geminiKey := firstAunoEnv("AUNO_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
     useGemini := provider == "gemini" || (provider == "auto" && geminiKey != "")
-    if useGemini && geminiKey != "" {
+    if useGemini {
+        if geminiKey == "" {
+            return nil, "", "", nil
+        }
         model := strings.TrimSpace(os.Getenv("AUNO_GEMINI_MODEL"))
         if model == "" {
             model = "gemini-2.5-flash"
@@ -33,7 +36,7 @@ func aunoAutoVideoPlanner(cfg *config.Config, openRouterGenerator ai.Generator) 
         planner, err := autovideo.New(generator, model)
         return planner, model, "gemini", err
     }
-    if provider != "auto" && provider != "openrouter" && provider != "gemini" {
+    if provider != "auto" && provider != "openrouter" {
         return nil, "", "", nil
     }
     if openRouterGenerator == nil {
