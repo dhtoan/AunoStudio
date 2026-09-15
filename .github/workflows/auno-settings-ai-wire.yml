@@ -30,8 +30,9 @@ jobs:
           path.write_text(text)
           PY
           path='apps/web/src/routes/settings/+page.svelte'
+          api_path='apps/web/src/routes/settings/%2Bpage.svelte'
           encoded="$(base64 -w0 "$path")"
-          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
-          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
             -f message='feat: load Auno AI settings panel' \
             -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
