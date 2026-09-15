@@ -84,7 +84,7 @@
 								value={value(control)}
 								onchange={(event) => setValue(control, event.currentTarget.value)}
 							/>
-						{:else}
+						{:else if control.kind === 'color'}
 							<ColorPicker
 								label={control.name}
 								value={value(control)}
@@ -92,6 +92,15 @@
 								live={false}
 								onChange={(newValue) => setValue(control, newValue)}
 							/>
+						{:else if control.kind === 'number'}
+							<div class="flex min-w-0 flex-1 items-center gap-2">
+								<input type="range" class="min-w-0 flex-1" min={control.min ?? 0} max={control.max ?? 1} step={control.step ?? 0.05} value={Number(value(control))} onchange={(event) => setValue(control, event.currentTarget.value)} />
+								<span class="w-9 text-right tabular-nums">{Number(value(control)).toFixed(2)}</span>
+							</div>
+						{:else}
+							<select class="h-8 min-w-0 flex-1 rounded border border-[var(--video-editor-border)] bg-[var(--video-editor-panel)] px-2 text-xs" value={value(control)} onchange={(event) => setValue(control, event.currentTarget.value)}>
+								{#each control.options ?? [] as option (option.value)}<option value={option.value}>{option.label}</option>{/each}
+							</select>
 						{/if}
 						{#if isOverridden(control)}
 							<Button
