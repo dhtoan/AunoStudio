@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolveAppPath } from '$lib/app-path';
+	import { onMount } from 'svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -24,6 +25,12 @@
 	} from '$lib/auno/documentary/api';
 	import { cloneDocumentaryRun } from '$lib/auno/documentary/state';
 	import { createCloudDocumentaryProject } from '$lib/auno/documentary/project-handoff';
+	import {
+		documentaryCapabilityLevel,
+		documentaryNextActions,
+		loadDocumentaryCapabilities,
+		type DocumentaryCapabilities
+	} from '$lib/auno/documentary/capabilities';
 	import {
 		DOCUMENTARY_DURATIONS,
 		type DocumentaryDuration,
@@ -53,6 +60,16 @@
 	let busyAction = $state('');
 	let error = $state('');
 	let resumeRunId = $state('');
+	let capabilityLoading = $state(true);
+	let capabilities = $state<DocumentaryCapabilities>({
+		documentaryPlanner: false,
+		browserTTS: false,
+		browserMusic: false,
+		serverImageGeneration: false,
+		serverVideoGeneration: false
+	});
+	const capabilityLevel = $derived(documentaryCapabilityLevel(capabilities));
+	const nextActions = $derived(documentaryNextActions(capabilities, run));
 
 	let sourceMode = $state<'none' | 'text' | 'url' | 'media'>('none');
 	let sourceValue = $state('');
@@ -412,6 +429,19 @@
 		sourceMode = 'media';
 	}
 
+	onMount(() => {
+		void (async () => {
+			capabilityLoading = true;
+			try {
+				capabilities = await loadDocumentaryCapabilities();
+			} catch {
+				// A failed capability probe must not hide the text-only documentary workflow.
+			} finally {
+				capabilityLoading = false;
+			}
+		})();
+	});
+
 	async function uploadSourceFile(event: Event): Promise<void> {
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
@@ -478,6 +508,25 @@
 		<div class="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
 			1920×1080 · Vox Style · 30–300s
 		</div>
+	</div>
+
+	<div class="rounded-lg border bg-muted/20 p-3">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<div>
+				<p class="text-xs font-medium">Media capability</p>
+				<p class="mt-0.5 text-[11px] text-muted-foreground">{capabilityLoading ? 'Checking available adapters…' : capabilityLevel}</p>
+			</div>
+			<div class="flex flex-wrap gap-1.5">
+				{#each nextActions as action (action.id)}
+					<span class={`rounded-full border px-2 py-1 text-[10px] ${action.available ? 'bg-background text-foreground' : 'bg-muted/40 text-muted-foreground opacity-60'}`} title={action.reason ?? action.label}>
+						{action.available ? '✓' : '–'} {action.label}
+					</span>
+				{/each}
+			</div>
+		</div>
+		{#if capabilityLevel === 'text-only'}
+			<p class="mt-2 text-[11px] leading-relaxed text-muted-foreground">Optional media providers are unavailable. Prompt-pack export, editable paper placeholders, manual Media Library assignment, and native project creation remain available.</p>
+		{/if}
 	</div>
 
 	{#if error}<InlineNotice tone="error">{error}</InlineNotice>{/if}

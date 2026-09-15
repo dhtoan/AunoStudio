@@ -80,10 +80,13 @@ type AunoAICapabilitiesOutput struct {
 		ActiveModel              string `json:"active_model"`
 		GeminiConfigured         bool   `json:"gemini_configured"`
 		OpenRouterConfigured     bool   `json:"openrouter_configured"`
-		LocalStoryboardFallback  bool   `json:"local_storyboard_fallback"`
-		BrowserTTS               bool   `json:"browser_tts"`
-		BrowserTranscription     bool   `json:"browser_transcription"`
-		BrowserMusicGeneration   bool   `json:"browser_music_generation"`
+		LocalStoryboardFallback             bool   `json:"local_storyboard_fallback"`
+		BrowserTTS                          bool   `json:"browser_tts"`
+		BrowserTranscription                bool   `json:"browser_transcription"`
+		BrowserMusicGeneration              bool   `json:"browser_music_generation"`
+		DocumentaryPlannerAvailable         bool   `json:"documentary_planner_available"`
+		DocumentaryServerImageGeneration   bool   `json:"documentary_server_image_generation"`
+		DocumentaryServerVideoGeneration   bool   `json:"documentary_server_video_generation"`
 	}
 }
 
@@ -170,6 +173,11 @@ func (h *AutoVideoHandler) capabilities(context.Context, *struct{}) (*AunoAICapa
 	output.Body.BrowserTTS = true
 	output.Body.BrowserTranscription = true
 	output.Body.BrowserMusicGeneration = true
+	output.Body.DocumentaryPlannerAvailable = h.planner != nil
+	// No server image/video generator is registered in the current Auno runtime.
+	// Keep these false until a concrete adapter owns generation and media import.
+	output.Body.DocumentaryServerImageGeneration = false
+	output.Body.DocumentaryServerVideoGeneration = false
 	return output, nil
 }
 
