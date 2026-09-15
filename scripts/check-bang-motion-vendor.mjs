@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 const pin = '0f1bd1103835890354496d009af62885fe0a05d5';
 const required = [
@@ -27,4 +28,28 @@ if (existsSync('third_party/bang-motion/.git')) {
 	process.exit(1);
 }
 
-console.log(`Bang Motion vendor snapshot present and pinned to ${pin}.`);
+const productionRoots = ['packages/auno-motion/src', 'apps/web/src/lib/auno', 'apps/server/internal/aunomotion'];
+const sourceExtensions = new Set(['.ts', '.svelte', '.go', '.js', '.mjs']);
+const forbidden = 'third_party/bang-motion';
+const violations = [];
+
+function scan(path) {
+	if (!existsSync(path)) return;
+	const stats = statSync(path);
+	if (stats.isDirectory()) {
+		for (const entry of readdirSync(path)) scan(join(path, entry));
+		return;
+	}
+	const dot = path.lastIndexOf('.');
+	const extension = dot >= 0 ? path.slice(dot) : '';
+	if (!sourceExtensions.has(extension)) return;
+	if (readFileSync(path, 'utf8').includes(forbidden)) violations.push(path);
+}
+
+for (const root of productionRoots) scan(root);
+if (violations.length) {
+	console.error(`Production runtime must not import the Bang Motion reference snapshot: ${violations.join(', ')}`);
+	process.exit(1);
+}
+
+console.log(`Bang Motion vendor snapshot present and pinned to ${pin}; production runtime is isolated from the reference tree.`);
