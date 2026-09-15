@@ -89,8 +89,18 @@ export interface AutoVideoStoryboard {
 	scenes: AutoVideoScene[];
 }
 
+export type AutoVideoOwnershipCategory = 'visual' | 'motion' | 'voice' | 'caption' | 'music';
+
+export interface AutoVideoOwnedItem {
+	itemId: string;
+	sceneId?: string;
+	category: AutoVideoOwnershipCategory;
+	generatedHash?: string;
+}
+
 export interface AutoVideoGenerationBlock {
 	sceneId: string;
+	/** Legacy flat ownership retained for existing sidecars. */
 	ownedItemIds: string[];
 	userModifiedItemIds: string[];
 }
@@ -138,6 +148,8 @@ export interface AutoVideoMotionState {
 export interface AutoVideoGenerationGraph {
 	version: 1;
 	blocks: AutoVideoGenerationBlock[];
+	/** Category-aware ownership. Missing on legacy sidecars; consumers fall back to blocks/media. */
+	ownedItems?: AutoVideoOwnedItem[];
 	media?: AutoVideoGeneratedMedia;
 	motion?: AutoVideoMotionState;
 }
