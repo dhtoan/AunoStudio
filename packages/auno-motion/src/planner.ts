@@ -1,4 +1,5 @@
 import { deterministicChoice, hashMotionSeed, seededSigned } from './determinism';
+import { refineEditorialFashion } from './editorial-fashion';
 import { createStyleBrief } from './style-brief';
 import { motionStyle } from './styles';
 import type {
@@ -43,34 +44,43 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
             5
           ) as MotionTransition['kind']);
     const durationSeconds = Math.max(2, scene.durationSeconds);
+    const baseCamera = {
+      scaleFrom: 1,
+      scaleTo: 1 + style.camera.scaleDelta,
+      xFrom: -cameraX * 0.35,
+      xTo: cameraX,
+      yFrom: -cameraY * 0.3,
+      yTo: cameraY,
+      rotationFrom: -rotation * 0.2,
+      rotationTo: rotation
+    };
+    const refinement = input.style === 'editorial-fashion'
+      ? refineEditorialFashion(scene, index, baseCamera, { ...style.text })
+      : {
+          camera: baseCamera,
+          text: { ...style.text },
+          backgroundScaleMultiplier: 1,
+          backgroundDriftMultiplier: 1
+        };
     const planned: MotionScene = {
       id: `motion-${scene.id}`,
       sourceSceneId: scene.id,
       visualIntent: scene.visualIntent,
       startSeconds: cursor,
       durationSeconds,
-      camera: {
-        scaleFrom: 1,
-        scaleTo: 1 + style.camera.scaleDelta,
-        xFrom: -cameraX * 0.35,
-        xTo: cameraX,
-        yFrom: -cameraY * 0.3,
-        yTo: cameraY,
-        rotationFrom: -rotation * 0.2,
-        rotationTo: rotation
-      },
+      camera: refinement.camera,
       background: {
         rotationFrom: -style.background.rotationDegrees * 0.15,
         rotationTo: style.background.rotationDegrees * direction,
         scaleFrom: 1,
-        scaleTo: 1 + style.background.scaleDelta,
-        offsetXFrom: -backgroundDriftX * 0.25,
-        offsetXTo: backgroundDriftX,
-        offsetYFrom: -backgroundDriftY * 0.25,
-        offsetYTo: backgroundDriftY,
+        scaleTo: 1 + style.background.scaleDelta * refinement.backgroundScaleMultiplier,
+        offsetXFrom: -backgroundDriftX * 0.25 * refinement.backgroundDriftMultiplier,
+        offsetXTo: backgroundDriftX * refinement.backgroundDriftMultiplier,
+        offsetYFrom: -backgroundDriftY * 0.25 * refinement.backgroundDriftMultiplier,
+        offsetYTo: backgroundDriftY * refinement.backgroundDriftMultiplier,
         smoothness: style.background.smoothness
       },
-      text: { ...style.text },
+      text: refinement.text,
       transitionOut: transitionKind
         ? {
             kind: transitionKind,
