@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolveAppPath } from '$lib/app-path';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -21,6 +23,7 @@
 		updateDocumentaryRun
 	} from '$lib/auno/documentary/api';
 	import { cloneDocumentaryRun } from '$lib/auno/documentary/state';
+	import { createCloudDocumentaryProject } from '$lib/auno/documentary/project-handoff';
 	import {
 		DOCUMENTARY_DURATIONS,
 		type DocumentaryDuration,
@@ -333,6 +336,37 @@
 		try {
 			run = await generateDocumentaryThumbnails(workspaceId(), run);
 			activeStep = 'thumbnails';
+		} catch (cause) {
+			setFailure(cause);
+		} finally {
+			busyAction = '';
+		}
+	}
+
+	async function createOrOpenProject(): Promise<void> {
+		if (!run) return;
+		const currentWorkspaceId = workspaceId();
+		if (!currentWorkspaceId) {
+			error = 'Select the workspace that owns this documentary run.';
+			return;
+		}
+		if (run.projectId) {
+			await goto(resolveAppPath(`/video-editor/${run.projectId}?storage=cloud&auno=documentary&documentary_run=${encodeURIComponent(run.id)}`));
+			return;
+		}
+		error = '';
+		busyAction = 'project';
+		try {
+			const handoff = await createCloudDocumentaryProject(currentWorkspaceId, run);
+			const updated = await saveRun('project-link', (next) => {
+				next.projectId = handoff.projectId;
+				next.currentStep = 'project';
+			});
+			if (!updated) return;
+			if (handoff.missingMediaIds.length > 0) {
+				console.info(`Auno Documentary used editable placeholders for ${handoff.missingMediaIds.length} unresolved media asset(s).`);
+			}
+			await goto(resolveAppPath(`/video-editor/${handoff.projectId}?storage=cloud&auno=documentary&documentary_run=${encodeURIComponent(updated.id)}`));
 		} catch (cause) {
 			setFailure(cause);
 		} finally {
@@ -653,10 +687,22 @@
 					{#if run.thumbnails.length > 0}<DocumentaryThumbnails plans={run.thumbnails} />{/if}
 				</div>
 			{:else if activeStep === 'project'}
-				<div class="space-y-3 rounded-lg border p-4">
-					<h3 class="font-semibold">Native Video Editor handoff</h3>
-					<p class="text-sm text-muted-foreground">The durable planning run is ready for the native documentary compiler. Project creation stays disabled until the Vox Motion Style and native beat compiler are wired in the next implementation tasks.</p>
-					<Button type="button" disabled>Open in Video Editor</Button>
+				<div class="space-y-4 rounded-lg border p-4">
+					<div>
+						<h3 class="font-semibold">Native Video Editor handoff</h3>
+						<p class="mt-1 text-sm text-muted-foreground">Compile every documentary beat into an editable 1920×1080 OpenPost project. Assigned Media Library images/videos remain native media clips; unresolved visuals stay editable paper placeholders.</p>
+					</div>
+					<div class="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+						<div class="rounded-md bg-muted/30 p-3"><strong class="block text-foreground">{run.beats.length}</strong> native beats</div>
+						<div class="rounded-md bg-muted/30 p-3"><strong class="block text-foreground">{run.visualPlans.filter((plan) => plan.mediaId).length}</strong> assigned media</div>
+						<div class="rounded-md bg-muted/30 p-3"><strong class="block text-foreground">Vox Style</strong> editable motion</div>
+					</div>
+					{#if run.projectId}
+						<InlineNotice tone="success">Native project linked: {run.projectId}</InlineNotice>
+					{/if}
+					<Button type="button" disabled={busyAction !== '' || run.beats.length === 0} onclick={createOrOpenProject}>
+						{busyAction === 'project' || busyAction === 'project-link' ? 'Creating native project…' : run.projectId ? 'Open in Video Editor' : 'Create & open in Video Editor'}
+					</Button>
 				</div>
 			{/if}
 		</div>

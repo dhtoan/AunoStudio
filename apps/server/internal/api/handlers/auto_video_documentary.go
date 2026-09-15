@@ -186,6 +186,12 @@ func (h *DocumentaryHandler) update(ctx context.Context, input *UpdateDocumentar
 	}
 	next := *current
 	patch := input.Body.Run
+	if projectID := strings.TrimSpace(patch.ProjectID); projectID != "" && projectID != current.ProjectID {
+		if strings.TrimSpace(current.ProjectID) != "" {
+			return nil, huma.Error400BadRequest("documentary run is already linked to another project")
+		}
+		next.ProjectID = projectID
+	}
 	if input.Body.ClearSource && current.Source != nil {
 		next.Source = nil
 		documentary.InvalidateFrom(&next, documentary.StepSource)
