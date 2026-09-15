@@ -5,6 +5,7 @@ on:
     branches:
       - codex/task19-vox-motion-e2e
     paths:
+      - 'bun.lock'
       - 'tests/app/auno/**'
       - 'apps/server/cmd/openpost/auno_*'
       - 'apps/web/src/lib/auno/**'
@@ -13,6 +14,7 @@ on:
       - '.github/workflows/auno-task19-red.yml'
   pull_request:
     paths:
+      - 'bun.lock'
       - 'tests/app/auno/**'
       - 'apps/server/cmd/openpost/auno_*'
       - 'apps/web/src/lib/auno/**'
@@ -20,6 +22,9 @@ on:
       - 'tests/app/playwright.config.ts'
       - '.github/workflows/auno-task19-red.yml'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   browser-red:
@@ -48,6 +53,17 @@ jobs:
           path: bun.lock
           if-no-files-found: error
           retention-days: 1
+      - name: Commit canonical Bun lock repair
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- bun.lock; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bun.lock
+          git commit -m 'chore: sync Bun workspace lock'
+          git push origin HEAD:${GITHUB_REF_NAME}
       - name: Run dev fixture generator contracts
         run: >-
           cd apps/server && go test -tags dev ./cmd/openpost
