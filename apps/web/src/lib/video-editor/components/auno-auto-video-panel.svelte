@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleCustomization, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import MotionStyleCustomizer from '$lib/components/auno-motion/motion-style-customizer.svelte';
 	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
 	import {
 		loadAutoVideoSidecarRemote,
@@ -41,6 +42,7 @@
 	let mediaBusy = $state<'voice' | 'captions' | 'music' | null>(null);
 	let voiceProgress = $state('');
 	let motionStyle = $state<MotionStyleId>('editorial-fashion');
+	let motionCustomization = $state<MotionStyleCustomization>({});
 	let motionBusy = $state(false);
 	let autoEnrichmentStarted = false;
 	let status = $state('');
@@ -82,8 +84,10 @@
 		try {
 			const loaded = await loadAutoVideoSidecarRemote(workspaceId, projectId);
 			sidecar = loaded;
-			const savedStyle = loaded?.generationGraph?.motion?.style;
+			const savedMotion = loaded?.generationGraph?.motion;
+			const savedStyle = savedMotion?.style;
 			if (savedStyle && savedStyle in MOTION_STYLES) motionStyle = savedStyle as MotionStyleId;
+			motionCustomization = savedMotion?.customization ? { ...savedMotion.customization } : {};
 		} finally {
 			loading = false;
 		}
@@ -210,7 +214,7 @@
 				style: motionStyle,
 				seed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,
 				scenes: sidecar.storyboard.scenes,
-				customization: previousMotion?.customization
+				customization: motionCustomization
 			});
 			const motionDiagnostics = validateMotionGraph(graph);
 			const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
@@ -247,7 +251,7 @@
 						style: graph.style,
 						seed: graph.seed,
 						brief: graph.brief,
-						customization: previousMotion?.customization,
+						customization: Object.keys(motionCustomization).length ? motionCustomization : undefined,
 						diagnostics: motionDiagnostics,
 						visualDiagnostics,
 						probePlan: motionProbePlan,
@@ -449,6 +453,8 @@
 						{motionBusy ? 'Regenerating…' : sidecar.generationGraph?.motion ? 'Regenerate motion' : 'Apply motion'}
 					</Button>
 				</div>
+
+				<MotionStyleCustomizer bind:customization={motionCustomization} />
 
 				{#if allMotionIssues.length > 0}
 					<div class="space-y-1.5 rounded-md border border-[var(--video-editor-border)] bg-[var(--video-editor-control)] p-2.5">
