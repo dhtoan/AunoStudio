@@ -41,6 +41,7 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
     const planned: MotionScene = {
       id: `motion-${scene.id}`,
       sourceSceneId: scene.id,
+      visualIntent: scene.visualIntent,
       startSeconds: cursor,
       durationSeconds,
       camera: {
