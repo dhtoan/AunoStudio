@@ -4,4 +4,5 @@ export * from './determinism';
 export * from './style-brief';
 export * from './validate';
 export * from './probes';
+export * from './editorial-fashion';
 export * from './planner';
