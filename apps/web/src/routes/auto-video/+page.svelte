@@ -159,11 +159,11 @@
 				const repository = new CloudVideoProjectRepository<Project>(workspaceId);
 				const cloudProject = await repository.createWithId(project.id, project.name, project);
 				await saveAutoVideoSidecarRemote(workspaceId, sidecar);
-				await goto(resolveAppPath(`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video`));
+				await goto(resolveAppPath(`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video&autogen=voice,captions,music-if-ready`));
 			} else {
 				await createProject(project);
 				saveAutoVideoSidecar(sidecar);
-				await goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));
+				await goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video&autogen=voice,captions,music-if-ready`));
 			}
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : String(cause);
