@@ -48,7 +48,7 @@ jobs:
       - name: Test Auno Motion package
         run: bun test packages/auno-motion/src
       - name: Test browser motion adapters
-        run: cd apps/web && bunx vitest run --project server src/lib/auno/motion
+        run: cd apps/web && bunx vitest run --config vitest.auno-motion.config.ts
 
   backend-documentary:
     name: backend-documentary
