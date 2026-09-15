@@ -3,7 +3,6 @@ package autovideo
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,8 +13,6 @@ import (
 
 const aunoMotionTrackID = "track-auno-motion"
 
-// MotionRegenerationInput regenerates only Auno-owned Motion Composition state.
-// Voice, captions, music, regular scene items and unrelated compositions are kept.
 type MotionRegenerationInput struct {
 	WorkspaceID string
 	ProjectID   string
@@ -32,15 +29,7 @@ type projectTimelineCollections struct {
 	Compositions []json.RawMessage
 }
 
-// RegenerateMotion compiles the graph and applies it through the native
-// videoproject mutation/revision system. Concurrent timeline edits therefore
-// produce the same conflict behavior as normal editor mutations.
-func RegenerateMotion(
-	ctx context.Context,
-	projects *videoprojects.Service,
-	actor workspaceaccess.ActorFacts,
-	input MotionRegenerationInput,
-) (*videoprojects.MutationResult, error) {
+func RegenerateMotion(ctx context.Context, projects *videoprojects.Service, actor workspaceaccess.ActorFacts, input MotionRegenerationInput) (*videoprojects.MutationResult, error) {
 	if projects == nil || strings.TrimSpace(input.WorkspaceID) == "" || strings.TrimSpace(input.ProjectID) == "" || input.Width <= 0 || input.Height <= 0 || input.FPS <= 0 {
 		return nil, ErrInvalidInput
 	}
@@ -52,9 +41,7 @@ func RegenerateMotion(
 	if err != nil {
 		return nil, err
 	}
-	overlays := CompileMotion(MotionCompileInput{
-		Graph: input.Graph, Width: input.Width, Height: input.Height, FPS: input.FPS,
-	})
+	overlays := CompileMotion(MotionCompileInput{Graph: input.Graph, Width: input.Width, Height: input.Height, FPS: input.FPS})
 	items, err := mergeMotionItems(collections.Items, overlays)
 	if err != nil {
 		return nil, err
@@ -67,10 +54,18 @@ func RegenerateMotion(
 	if err != nil {
 		return nil, err
 	}
-
-	itemValue, _ := json.Marshal(items)
-	compositionValue, _ := json.Marshal(compositions)
-	trackValue, _ := json.Marshal(tracks)
+	itemValue, err := json.Marshal(items)
+	if err != nil {
+		return nil, err
+	}
+	compositionValue, err := json.Marshal(compositions)
+	if err != nil {
+		return nil, err
+	}
+	trackValue, err := json.Marshal(tracks)
+	if err != nil {
+		return nil, err
+	}
 	return projects.ApplyMutation(ctx, actor, videoprojects.ApplyMutationInput{
 		WorkspaceID: input.WorkspaceID,
 		ProjectID: input.ProjectID,
@@ -95,9 +90,7 @@ func readTimelineCollections(document json.RawMessage) (projectTimelineCollectio
 		return projectTimelineCollections{}, ErrInvalidInput
 	}
 	out := projectTimelineCollections{}
-	for key, destination := range map[string]*[]json.RawMessage{
-		"items": &out.Items, "tracks": &out.Tracks, "compositions": &out.Compositions,
-	} {
+	for key, destination := range map[string]*[]json.RawMessage{"items": &out.Items, "tracks": &out.Tracks, "compositions": &out.Compositions} {
 		raw := timeline[key]
 		if len(raw) == 0 {
 			*destination = []json.RawMessage{}
@@ -185,10 +178,9 @@ func ensureMotionTrack(existing []json.RawMessage, needed bool) ([]json.RawMessa
 		if err != nil {
 			return nil, ErrInvalidInput
 		}
-		if id == aunoMotionTrackID {
-			continue
+		if id != aunoMotionTrackID {
+			tracks = append(tracks, raw)
 		}
-		tracks = append(tracks, raw)
 	}
 	if !needed {
 		return tracks, nil
@@ -200,8 +192,5 @@ func ensureMotionTrack(existing []json.RawMessage, needed bool) ([]json.RawMessa
 	if err != nil {
 		return nil, err
 	}
-	tracks = append(tracks, motionTrack)
-	return tracks, nil
+	return append(tracks, motionTrack), nil
 }
-
-var _ = errors.Is
