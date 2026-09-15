@@ -171,3 +171,31 @@ export function inspectAunoMotionVisualQA(input: AunoMotionVisualQAInput): AutoV
 	}
 	return issues;
 }
+
+function diagnosticKey(issue: AutoVideoVisualIssue): string {
+	return `${issue.code}:${issue.sceneId ?? ''}:${issue.itemId ?? ''}`;
+}
+
+/** Runtime measurements override a duplicate authored warning while unrelated issues stay stable. */
+export function mergeVisualDiagnostics(
+	authored: readonly AutoVideoVisualIssue[],
+	runtime: readonly AutoVideoVisualIssue[]
+): AutoVideoVisualIssue[] {
+	const merged = authored.map((issue) => ({ ...issue }));
+	const indexByKey = new Map(merged.map((issue, index) => [diagnosticKey(issue), index]));
+	for (const issue of runtime) {
+		const key = diagnosticKey(issue);
+		const existingIndex = indexByKey.get(key);
+		if (existingIndex === undefined) {
+			indexByKey.set(key, merged.length);
+			merged.push({ ...issue });
+			continue;
+		}
+		const existing = merged[existingIndex]!;
+		merged[existingIndex] = {
+			...issue,
+			severity: existing.severity === 'error' || issue.severity === 'error' ? 'error' : 'warning'
+		};
+	}
+	return merged;
+}
