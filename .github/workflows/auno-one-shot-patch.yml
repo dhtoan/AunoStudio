@@ -12,11 +12,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
       - run: python3 scripts/auno-wire-gemini.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/server/internal/ai/gemini.go apps/server/cmd/openpost/auno_ai_routing.go apps/server/cmd/openpost/main.go .env.example
-          git commit -m "feat: route Auto Video through official Gemini provider"
-          git push origin HEAD:main
+      - name: Upload patched source through GitHub Contents API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          upload_file() {
+            path="$1"
+            encoded="$(base64 -w0 "$path")"
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha 2>/dev/null || true)"
+            if [ -n "$sha" ]; then
+              gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+                -f message="feat: route Auto Video through official Gemini provider" \
+                -f branch=main \
+                -f content="$encoded" \
+                -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+                -f message="feat: route Auto Video through official Gemini provider" \
+                -f branch=main \
+                -f content="$encoded" >/dev/null
+            fi
+          }
+          upload_file apps/server/internal/ai/gemini.go
+          upload_file apps/server/cmd/openpost/auno_ai_routing.go
+          upload_file apps/server/cmd/openpost/main.go
+          upload_file .env.example
