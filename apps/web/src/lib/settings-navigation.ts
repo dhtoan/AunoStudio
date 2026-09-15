@@ -58,6 +58,14 @@ const settingsDestinationDefinitions = [
 		aliases: ['workspace', 'media']
 	},
 	{
+		id: 'ai',
+		group: 'workspace',
+		label: () => 'AI',
+		description: () =>
+			'Check Auno AI routing, configured cloud providers, and free/local media AI capabilities.',
+		loadingVariant: 'cards'
+	},
+	{
 		id: 'brand',
 		group: 'workspace',
 		label: m.media_brand,
