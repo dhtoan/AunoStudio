@@ -1,3 +1,5 @@
+import type { MotionValidationIssue, StyleBrief } from '@auno/motion';
+
 export const AUTO_VIDEO_FORMATS = ['review', 'news', 'guide', 'compare', 'top-n'] as const;
 export type AutoVideoFormat = (typeof AUTO_VIDEO_FORMATS)[number];
 
@@ -127,6 +129,8 @@ export interface AutoVideoMotionState {
 	schemaVersion: 1;
 	style: string;
 	seed: number;
+	brief?: StyleBrief;
+	diagnostics?: MotionValidationIssue[];
 }
 
 export interface AutoVideoGenerationGraph {
