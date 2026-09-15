@@ -22,6 +22,7 @@ import {
 	inspectMusicGenerationSupport,
 	musicGenerationTags
 } from '$lib/video-editor/local-ai/music/ace-step-service';
+import { replaceOwnershipCategory } from './ownership';
 import type {
 	AutoVideoCaptionAsset,
 	AutoVideoMusicAsset,
@@ -215,6 +216,11 @@ export async function generateAutoVideoVoices(options: {
 			...options.sidecar.generationGraph,
 			version: 1,
 			blocks: options.sidecar.generationGraph?.blocks ?? [],
+			ownedItems: replaceOwnershipCategory(
+				options.sidecar,
+				'voice',
+				assets.map((asset) => ({ itemId: asset.itemId, sceneId: asset.sceneId, category: 'voice' as const }))
+			),
 			media: { ...options.sidecar.generationGraph?.media, voices: assets }
 		}
 	};
@@ -254,6 +260,9 @@ export function generateAutoVideoCaptions(sidecar: AutoVideoSidecar): {
 				...sidecar.generationGraph,
 				version: 1,
 				blocks: sidecar.generationGraph?.blocks ?? [],
+				ownedItems: replaceOwnershipCategory(sidecar, 'caption', [
+					{ itemId: asset.itemId, category: 'caption' as const }
+				]),
 				media: { ...sidecar.generationGraph?.media, captions: asset }
 			}
 		},
@@ -319,6 +328,9 @@ export async function generateAutoVideoMusic(options: {
 				...options.sidecar.generationGraph,
 				version: 1,
 				blocks: options.sidecar.generationGraph?.blocks ?? [],
+				ownedItems: replaceOwnershipCategory(options.sidecar, 'music', [
+					{ itemId: asset.itemId, category: 'music' as const }
+				]),
 				media: { ...options.sidecar.generationGraph?.media, music: asset }
 			}
 		},
