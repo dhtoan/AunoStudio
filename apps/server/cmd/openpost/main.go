@@ -37,6 +37,7 @@ import (
 	"github.com/openpost/backend/internal/queue"
 	accountpreflightservice "github.com/openpost/backend/internal/services/accountpreflight"
 	"github.com/openpost/backend/internal/services/aiprompts"
+	"github.com/openpost/backend/internal/services/autovideo"
 	analyticsservice "github.com/openpost/backend/internal/services/analytics"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
@@ -690,6 +691,7 @@ func main() {
 
 	var imageCaptioner imagecaption.Captioner
 	var postBuilder postgeneration.Builder
+	var autoVideoPlanner autovideo.Planner
 	if imageGenerator != nil {
 		imageCaptioner, err = imagecaption.New(imageGenerator, cfg.ImageCaptionModel)
 		if err != nil {
@@ -713,6 +715,11 @@ func main() {
 			cfg.ContentAIProvider,
 			cfg.ContentAIRequireZDR,
 		)
+		autoVideoPlanner, err = autovideo.New(contentGenerator, cfg.TextGenerationModel)
+		if err != nil {
+			fatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Auto Video planner: %v", err)
+		}
+		log.Printf("Auno Auto Video planner enabled with model %s", cfg.TextGenerationModel)
 	}
 
 	var publicSourceLoader sourcecontext.Loader
@@ -901,6 +908,7 @@ func main() {
 		MemeProvider:              memeProvider,
 		MemeSuggester:             memeSuggester,
 		PostBuilder:               postBuilder,
+		AutoVideoPlanner:          autoVideoPlanner,
 		ContentBuilderEnabled:     publicationBuilderApplication != nil,
 		ContentDiscoveryEnabled:   publicationDiscoveryService != nil,
 		PublicationBuilder:        publicationBuilderApplication,

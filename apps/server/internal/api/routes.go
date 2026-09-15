@@ -14,6 +14,7 @@ import (
 	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/accountfeatures"
 	"github.com/openpost/backend/internal/services/aiprompts"
+	"github.com/openpost/backend/internal/services/autovideo"
 	analyticsservice "github.com/openpost/backend/internal/services/analytics"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
@@ -76,6 +77,7 @@ type RouteDeps struct {
 	MemeProvider                 memes.Provider
 	MemeSuggester                memegeneration.Suggester
 	PostBuilder                  postgeneration.Builder
+	AutoVideoPlanner             autovideo.Planner
 	ContentBuilderEnabled        bool
 	ContentDiscoveryEnabled      bool
 	PublicationBuilder           *publicationbuilder.Application
@@ -304,6 +306,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewVoiceProfileHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewThemeHandler(deps.DB, deps.Authenticator, deps.MediaStorage).RegisterRoutes(api)
 	handlers.NewPostBuilderHandler(deps.DB, deps.Authenticator, deps.PostBuilder).RegisterRoutes(api)
+	handlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner).RegisterRoutes(api)
 	socialSetHandler := handlers.NewSocialSetHandler(deps.DB, deps.Authenticator)
 	socialSetHandler.SetCapabilityResolver(capabilityResolverHandler)
 	socialSetHandler.RegisterRoutes(api)
