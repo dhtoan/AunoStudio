@@ -30,19 +30,22 @@ type Planner interface {
 }
 
 type Source struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Label string `json:"label"`
-	Value string `json:"value"`
-	URL   string `json:"url,omitempty"`
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Value    string `json:"value"`
+	URL      string `json:"url,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
+	MediaID  string `json:"media_id,omitempty"`
 }
 
 type Input struct {
-	Format                string `json:"format"`
-	Title                 string `json:"title,omitempty"`
-	Language              string `json:"language"`
-	TargetDurationSeconds int    `json:"target_duration_seconds"`
-	Source                 Source `json:"source"`
+	Format                string              `json:"format"`
+	Title                 string              `json:"title,omitempty"`
+	Language              string              `json:"language"`
+	TargetDurationSeconds int                 `json:"target_duration_seconds"`
+	Source                 Source              `json:"source"`
+	Parts                  []ai.MultimodalPart `json:"-"`
 }
 
 type Scene struct {
@@ -177,6 +180,7 @@ func (s *Service) Plan(ctx context.Context, input Input) (Result, error) {
 		Model:        s.model,
 		SystemPrompt: systemPrompt(normalized, template),
 		UserPrompt:   string(prompt),
+		Parts:        normalized.Parts,
 		ResponseSchema: responseSchema(template),
 		MaxOutputTokens: maxOutputTokens,
 		ReasoningEffort: ai.ReasoningEffortLow,
@@ -213,6 +217,8 @@ func normalizeInput(input Input) (Input, []sceneTemplate, error) {
 	input.Source.Label = strings.TrimSpace(input.Source.Label)
 	input.Source.Value = strings.TrimSpace(input.Source.Value)
 	input.Source.URL = strings.TrimSpace(input.Source.URL)
+	input.Source.MIMEType = strings.ToLower(strings.TrimSpace(input.Source.MIMEType))
+	input.Source.MediaID = strings.TrimSpace(input.Source.MediaID)
 	if input.Language == "" || input.Source.ID == "" || input.Source.Value == "" || len(input.Source.Value) > maxSourceLength || len(input.Title) > maxTitleLength {
 		return Input{}, nil, ErrInvalidInput
 	}
