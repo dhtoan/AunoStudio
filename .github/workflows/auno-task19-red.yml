@@ -46,4 +46,5 @@ jobs:
           bunx playwright test --config tests/app/playwright.config.ts
           tests/app/auno/motion-determinism.spec.ts
           tests/app/auno/motion-visual-qa.spec.ts
+          tests/app/auno/vox-documentary.spec.ts
           --workers=1
