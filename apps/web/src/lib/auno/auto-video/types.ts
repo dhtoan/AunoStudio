@@ -1,4 +1,9 @@
-import type { MotionProbePlan, MotionValidationIssue, StyleBrief } from '@auno/motion';
+import type {
+	MotionProbePlan,
+	MotionStyleCustomization,
+	MotionValidationIssue,
+	StyleBrief
+} from '@auno/motion';
 
 export const AUTO_VIDEO_FORMATS = ['review', 'news', 'guide', 'compare', 'top-n'] as const;
 export type AutoVideoFormat = (typeof AUTO_VIDEO_FORMATS)[number];
@@ -157,6 +162,7 @@ export interface AutoVideoMotionState {
 	style: string;
 	seed: number;
 	brief?: StyleBrief;
+	customization?: MotionStyleCustomization;
 	diagnostics?: MotionValidationIssue[];
 	visualDiagnostics?: AutoVideoVisualIssue[];
 	probePlan?: MotionProbePlan;
