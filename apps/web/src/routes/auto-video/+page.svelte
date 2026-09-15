@@ -9,6 +9,8 @@
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
 	import { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';
 	import type { Project } from '$lib/video-editor/project/types';
+	import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
 		AUTO_VIDEO_CANVAS_SETTINGS,
@@ -35,6 +37,7 @@
 	let language = $state('en-US');
 	let targetDurationSeconds = $state(45);
 	let canvas = $state<AutoVideoCanvasPreset>('vertical');
+	let motionStyle = $state<MotionStyleId>('editorial-fashion');
 	let storageMode = $state<'cloud' | 'local'>('cloud');
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
 	let activeSource = $state<AutoVideoSource | null>(null);
@@ -123,7 +126,13 @@
 
 		creating = true;
 		try {
-			const project = compileStoryboardToProject(storyboard, canvas);
+			const baseProject = compileStoryboardToProject(storyboard, canvas);
+			const motionGraph = planMotionGraph({
+				projectId: baseProject.id,
+				style: motionStyle,
+				scenes: storyboard.scenes
+			});
+			const project = applyMotionGraphToProject(baseProject, motionGraph);
 			const now = Date.now();
 			const sidecar = {
 				version: 1 as const,
@@ -141,7 +150,8 @@
 						sceneId: scene.id,
 						ownedItemIds: [`${scene.id}-background`, `${scene.id}-text`],
 						userModifiedItemIds: []
-					}))
+					})),
+					motion: { schemaVersion: 1 as const, style: motionGraph.style, seed: motionGraph.seed }
 				}
 			};
 
@@ -205,7 +215,7 @@
 				></textarea>
 			</label>
 
-			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 				<label class="space-y-2 text-sm font-medium">
 					<span>Format</span>
 					<select bind:value={format} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
@@ -236,6 +246,14 @@
 					<select bind:value={storageMode} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
 						<option value="cloud">Cloud Workspace</option>
 						<option value="local">Local-only</option>
+					</select>
+				</label>
+				<label class="space-y-2 text-sm font-medium">
+					<span>Motion style</span>
+					<select bind:value={motionStyle} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+						{#each Object.values(MOTION_STYLES) as definition (definition.id)}
+							<option value={definition.id}>{definition.label}</option>
+						{/each}
 					</select>
 				</label>
 				<label class="space-y-2 text-sm font-medium">
