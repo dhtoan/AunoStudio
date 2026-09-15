@@ -146,6 +146,7 @@ export type AutoVideoVisualIssueCode =
 	| 'visual.text_overlap'
 	| 'visual.missing_subject'
 	| 'visual.low_contrast'
+	| 'visual.asset_not_ready'
 	| 'visual.invalid_transform'
 	| 'visual.composition_error';
 
