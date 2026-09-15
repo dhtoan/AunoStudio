@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import type { DocumentaryRun, DocumentaryStep } from '$lib/auno/documentary/types';
+	import { DOCUMENTARY_STEP_ORDER } from '$lib/auno/documentary/state';
 	import {
-		DOCUMENTARY_STEP_ORDER,
-		documentaryStepEnabled
-	} from '$lib/auno/documentary/state';
-	import { documentaryStepState } from '$lib/auno/documentary/wizard-model';
+		documentaryStepEnabled,
+		documentaryStepState
+	} from '$lib/auno/documentary/wizard-model';
 
 	let {
 		run,
