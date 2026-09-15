@@ -26,8 +26,20 @@ function scalarTrack(
 	};
 }
 
+function aunoOwnedTrack(track: KeyframeTrack | undefined): boolean {
+	return Boolean(track?.ids?.length && track.ids.every((id) => id.startsWith('auno:')));
+}
+
 function mergeKeyframes(item: TimelineItem, next: ItemKeyframes): ItemKeyframes {
-	return { ...(item.keyframes ?? {}), ...next };
+	const merged: ItemKeyframes = { ...(item.keyframes ?? {}) };
+	for (const [property, track] of Object.entries(next)) {
+		if (!track) continue;
+		const existing = merged[property as keyof ItemKeyframes];
+		// Regeneration owns only Auno-authored tracks. Any manual/legacy track is preserved.
+		if (existing && !aunoOwnedTrack(existing)) continue;
+		merged[property as keyof ItemKeyframes] = track;
+	}
+	return merged;
 }
 
 function textMotionForScene(
