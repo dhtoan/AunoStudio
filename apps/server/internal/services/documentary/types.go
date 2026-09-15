@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	SchemaVersion                  = 1
-	ModeDocumentaryLongForm        = "documentary-long-form"
-	StyleDocumentaryPaperCollage   = "documentary-paper-collage"
+	SchemaVersion                = 1
+	ModeDocumentaryLongForm      = "documentary-long-form"
+	StyleDocumentaryPaperCollage = "documentary-paper-collage"
 )
 
 type Step string
@@ -79,20 +79,20 @@ type VoiceManifest struct {
 type VisualIntent string
 
 const (
-	VisualIntentArchivalPhoto     VisualIntent = "archival-photo"
-	VisualIntentHalftoneSubject   VisualIntent = "halftone-subject"
-	VisualIntentPaperDocument     VisualIntent = "paper-document"
-	VisualIntentMap               VisualIntent = "map"
-	VisualIntentMapRoute          VisualIntent = "map-route"
-	VisualIntentTimeline          VisualIntent = "timeline"
-	VisualIntentNewspaperClipping VisualIntent = "newspaper-clipping"
-	VisualIntentObjectEvidence    VisualIntent = "object-evidence"
-	VisualIntentNumberCard        VisualIntent = "number-card"
-	VisualIntentQuoteStrip        VisualIntent = "quote-strip"
-	VisualIntentDiagram           VisualIntent = "diagram"
-	VisualIntentConnectionBoard   VisualIntent = "connection-board"
-	VisualIntentLocationCard      VisualIntent = "location-card"
-	VisualIntentMotionComposition VisualIntent = "motion-composition"
+	VisualIntentArchivalPhoto      VisualIntent = "archival-photo"
+	VisualIntentHalftoneSubject    VisualIntent = "halftone-subject"
+	VisualIntentPaperDocument      VisualIntent = "paper-document"
+	VisualIntentMap                VisualIntent = "map"
+	VisualIntentMapRoute           VisualIntent = "map-route"
+	VisualIntentTimeline           VisualIntent = "timeline"
+	VisualIntentNewspaperClipping  VisualIntent = "newspaper-clipping"
+	VisualIntentObjectEvidence     VisualIntent = "object-evidence"
+	VisualIntentNumberCard         VisualIntent = "number-card"
+	VisualIntentQuoteStrip         VisualIntent = "quote-strip"
+	VisualIntentDiagram            VisualIntent = "diagram"
+	VisualIntentConnectionBoard    VisualIntent = "connection-board"
+	VisualIntentLocationCard       VisualIntent = "location-card"
+	VisualIntentMotionComposition  VisualIntent = "motion-composition"
 )
 
 type Beat struct {
@@ -108,23 +108,24 @@ type Beat struct {
 }
 
 type AnimationBrief struct {
-	Camera         string   `json:"camera"`
-	Cadence        string   `json:"cadence"`
-	AssemblyOrder  string   `json:"assembly_order"`
-	HoldRatio      float64  `json:"hold_ratio"`
-	AmbientLife    []string `json:"ambient_life,omitempty"`
+	Camera        string   `json:"camera"`
+	Cadence       string   `json:"cadence"`
+	AssemblyOrder string   `json:"assembly_order"`
+	HoldRatio     float64  `json:"hold_ratio"`
+	AmbientLife   []string `json:"ambient_life,omitempty"`
 }
 
 type VisualPlan struct {
-	BeatID             string          `json:"beat_id"`
-	Hero               string          `json:"hero"`
-	Supports           []string        `json:"supports,omitempty"`
-	Label              string          `json:"label,omitempty"`
-	Prompt             string          `json:"prompt"`
-	RequiredSubjectIDs []string        `json:"required_subject_ids,omitempty"`
-	MediaID            string          `json:"media_id,omitempty"`
-	Animation          AnimationBrief  `json:"animation"`
-	Fingerprint        string          `json:"fingerprint,omitempty"`
+	BeatID             string         `json:"beat_id"`
+	VisualIntent       VisualIntent   `json:"visual_intent"`
+	Hero               string         `json:"hero"`
+	Supports           []string       `json:"supports,omitempty"`
+	Label              string         `json:"label,omitempty"`
+	Prompt             string         `json:"prompt"`
+	RequiredSubjectIDs []string       `json:"required_subject_ids,omitempty"`
+	MediaID            string         `json:"media_id,omitempty"`
+	Animation          AnimationBrief `json:"animation"`
+	Fingerprint        string         `json:"fingerprint,omitempty"`
 }
 
 type ThumbnailPlan struct {
@@ -137,30 +138,30 @@ type ThumbnailPlan struct {
 }
 
 type Run struct {
-	SchemaVersion         int                       `json:"schema_version"`
-	ID                    string                    `json:"id"`
-	WorkspaceID           string                    `json:"workspace_id"`
-	ProjectID             string                    `json:"project_id,omitempty"`
-	Mode                  string                    `json:"mode"`
-	Style                 string                    `json:"style"`
-	CurrentStep           Step                      `json:"current_step"`
-	GenerationVersion     int64                     `json:"generation_version"`
-	Source                *autovideo.Source         `json:"source,omitempty"`
-	Niche                 string                    `json:"niche,omitempty"`
-	Ideas                 []Idea                    `json:"ideas,omitempty"`
-	SelectedIdeaID        string                    `json:"selected_idea_id,omitempty"`
-	CustomTopic           string                    `json:"custom_topic,omitempty"`
-	TargetDurationSeconds int                       `json:"target_duration_seconds,omitempty"`
-	Language              string                    `json:"language,omitempty"`
-	Script                *Script                   `json:"script,omitempty"`
-	Voice                 *VoiceManifest            `json:"voice,omitempty"`
-	Beats                 []Beat                    `json:"beats,omitempty"`
-	VisualPlans           []VisualPlan              `json:"visual_plans,omitempty"`
-	Thumbnails            []ThumbnailPlan           `json:"thumbnails,omitempty"`
-	StepStates            map[Step]StepState        `json:"step_states,omitempty"`
-	ProviderManifest      map[string]string         `json:"provider_manifest,omitempty"`
-	CreatedAt             time.Time                 `json:"created_at"`
-	UpdatedAt             time.Time                 `json:"updated_at"`
+	SchemaVersion         int                `json:"schema_version"`
+	ID                    string             `json:"id"`
+	WorkspaceID           string             `json:"workspace_id"`
+	ProjectID             string             `json:"project_id,omitempty"`
+	Mode                  string             `json:"mode"`
+	Style                 string             `json:"style"`
+	CurrentStep           Step               `json:"current_step"`
+	GenerationVersion     int64              `json:"generation_version"`
+	Source                *autovideo.Source  `json:"source,omitempty"`
+	Niche                 string             `json:"niche,omitempty"`
+	Ideas                 []Idea             `json:"ideas,omitempty"`
+	SelectedIdeaID        string             `json:"selected_idea_id,omitempty"`
+	CustomTopic           string             `json:"custom_topic,omitempty"`
+	TargetDurationSeconds int                `json:"target_duration_seconds,omitempty"`
+	Language              string             `json:"language,omitempty"`
+	Script                *Script            `json:"script,omitempty"`
+	Voice                 *VoiceManifest     `json:"voice,omitempty"`
+	Beats                 []Beat             `json:"beats,omitempty"`
+	VisualPlans           []VisualPlan       `json:"visual_plans,omitempty"`
+	Thumbnails            []ThumbnailPlan    `json:"thumbnails,omitempty"`
+	StepStates            map[Step]StepState `json:"step_states,omitempty"`
+	ProviderManifest      map[string]string  `json:"provider_manifest,omitempty"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
 }
 
 func AllSteps() []Step {
