@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { resolveAppPath } from '$lib/app-path';
+	import { AUNO_CREATE_ACTIONS } from '$lib/auno/create-actions';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
@@ -52,7 +53,7 @@
 	);
 	const workspaceNavigationItems = $derived(
 		navigationItems.filter((item) =>
-			['publications', 'communications', 'analytics', 'media'].includes(item.id)
+			['home', 'publications', 'communications', 'analytics', 'media'].includes(item.id)
 		)
 	);
 	const sidebarNavigationItems = $derived(workspaceNavigationItems);
@@ -63,6 +64,8 @@
 
 	function navigationIcon(id: PrimaryNavigationItem['id']): ThemeIconRole {
 		switch (id) {
+			case 'home':
+				return 'home';
 			case 'new':
 				return 'compose';
 			case 'calendar':
@@ -86,6 +89,8 @@
 
 	function navigationLabel(id: PrimaryNavigationItem['id']) {
 		switch (id) {
+			case 'home':
+				return 'Home';
 			case 'new':
 				return m.sidebar_new_post();
 			case 'calendar':
@@ -151,9 +156,9 @@
 	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2" data-testid="app-sidebar">
 		<div class="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
 			<a
-				href={resolve('/')}
+				href={resolve('/home')}
 				class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-				aria-label={m.sidebar_openpost_home()}
+				aria-label="Auno Studio home"
 				data-testid="sidebar-home-brand"
 			>
 				<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} decorative />
@@ -216,18 +221,21 @@
 							variant="outline"
 							size="sm"
 							class="w-9 px-0 group-data-[collapsible=icon]:w-full"
-							aria-label={m.sidebar_new()}
+							aria-label="Create"
 							data-testid="sidebar-new-post-menu"
 							><ThemeIcon role="chevron-down" class="size-4" /></Button
 						>{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="start">
-					<DropdownMenu.Item onclick={() => navigate('/image-editor')}
-						><ThemeIcon role="image" class="size-4" />{m.image_editor_title()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => navigate('/video-editor')}
-						><ThemeIcon role="video" class="size-4" />{m.video_editor_title()}</DropdownMenu.Item
-					>
+				<DropdownMenu.Content align="start" class="w-64">
+					{#each AUNO_CREATE_ACTIONS as action (action.id)}
+						<DropdownMenu.Item class="gap-3" onclick={() => navigate(action.href)}>
+							<ThemeIcon role={action.icon} class="size-4" />
+							<div class="min-w-0">
+								<div>{action.label}</div>
+								<div class="truncate text-xs text-muted-foreground">{action.description}</div>
+							</div>
+						</DropdownMenu.Item>
+					{/each}
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		</div>
