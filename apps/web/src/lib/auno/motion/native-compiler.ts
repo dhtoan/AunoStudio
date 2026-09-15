@@ -5,7 +5,8 @@ import type {
 	KeyframeTrack,
 	Project,
 	TextMotionSpec,
-	TimelineItem
+	TimelineItem,
+	TimelineTransition
 } from '$lib/video-editor/project/types';
 
 function scalarTrack(
@@ -76,15 +77,29 @@ function textMotionForScene(
 	};
 }
 
-export function applyMotionGraphToProject(project: Project, graph: MotionSceneGraph): Project {
-	const timeline = project.timeline;
-	if (!timeline) return project;
-	const fps = project.metadata.fps;
-	const width = project.metadata.width;
-	const height = project.metadata.height;
-	const motionByScene = new Map(graph.scenes.map((scene, index) => [scene.sourceSceneId, { scene, index }]));
+export interface NativeMotionTimelineInput {
+	items: TimelineItem[];
+	transitions: TimelineTransition[];
+	fps: number;
+	width: number;
+	height: number;
+	graph: MotionSceneGraph;
+}
 
-	const items = timeline.items.map((item) => {
+export interface NativeMotionTimelineResult {
+	items: TimelineItem[];
+	transitions: TimelineTransition[];
+}
+
+export function compileMotionGraphToNativeTimeline(
+	input: NativeMotionTimelineInput
+): NativeMotionTimelineResult {
+	const { graph, fps, width, height } = input;
+	const motionByScene = new Map(
+		graph.scenes.map((scene, index) => [scene.sourceSceneId, { scene, index }])
+	);
+
+	const items = input.items.map((item) => {
 		const sceneId = item.id.endsWith('-background')
 			? item.id.slice(0, -'-background'.length)
 			: item.id.endsWith('-text')
@@ -157,7 +172,7 @@ export function applyMotionGraphToProject(project: Project, graph: MotionSceneGr
 		return item;
 	});
 
-	const transitions = (timeline.transitions ?? []).map((transition) => {
+	const transitions = input.transitions.map((transition) => {
 		const fromSceneId = transition.fromItemId.endsWith('-background')
 			? transition.fromItemId.slice(0, -'-background'.length)
 			: '';
@@ -169,10 +184,24 @@ export function applyMotionGraphToProject(project: Project, graph: MotionSceneGr
 		};
 	});
 
+	return { items, transitions };
+}
+
+export function applyMotionGraphToProject(project: Project, graph: MotionSceneGraph): Project {
+	const timeline = project.timeline;
+	if (!timeline) return project;
+	const compiled = compileMotionGraphToNativeTimeline({
+		items: timeline.items,
+		transitions: timeline.transitions ?? [],
+		fps: project.metadata.fps,
+		width: project.metadata.width,
+		height: project.metadata.height,
+		graph
+	});
 	return {
 		...project,
-		description: `${project.description} · Motion ${graph.style}`,
+		description: `${project.description.replace(/ · Motion [^·]+$/, '')} · Motion ${graph.style}`,
 		updatedAt: Date.now(),
-		timeline: { ...timeline, items, transitions }
+		timeline: { ...timeline, items: compiled.items, transitions: compiled.transitions }
 	};
 }
