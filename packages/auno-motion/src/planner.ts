@@ -1,5 +1,6 @@
 import { deterministicChoice, hashMotionSeed, seededSigned } from './determinism';
 import { refineEditorialFashion } from './editorial-fashion';
+import { refineDocumentaryPaperCollage } from './documentary-paper-collage';
 import { createStyleBrief } from './style-brief';
 import { motionStyle } from './styles';
 import type {
@@ -113,17 +114,17 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
       rotationFrom: -rotation * 0.2,
       rotationTo: rotation
     };
+    const plannedText = { ...style.text, intensity: userIntensity };
     const refinement = input.style === 'editorial-fashion'
-      ? refineEditorialFashion(scene, index, baseCamera, {
-          ...style.text,
-          intensity: userIntensity
-        })
-      : {
-          camera: baseCamera,
-          text: { ...style.text, intensity: userIntensity },
-          backgroundScaleMultiplier: 1,
-          backgroundDriftMultiplier: 1
-        };
+      ? refineEditorialFashion(scene, index, baseCamera, plannedText)
+      : input.style === 'documentary-paper-collage'
+        ? refineDocumentaryPaperCollage(baseCamera, plannedText)
+        : {
+            camera: baseCamera,
+            text: plannedText,
+            backgroundScaleMultiplier: 1,
+            backgroundDriftMultiplier: 1
+          };
     const planned: MotionScene = {
       id: `motion-${scene.id}`,
       sourceSceneId: scene.id,

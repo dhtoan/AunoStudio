@@ -164,6 +164,23 @@ export const MOTION_STYLES: Record<MotionStyleId, MotionStyleDefinition> = {
     camera: { scaleDelta: 0.018, xTravel: 0.012, yTravel: 0.008, rotationDegrees: 0 },
     background: { scaleDelta: 0.02, rotationDegrees: 1, drift: 0.012, smoothness: 0.82 },
     transition: 'crossfade'
+
+  },
+  'documentary-paper-collage': {
+    id: 'documentary-paper-collage',
+    label: 'Vox Style',
+    brief: {
+      palette: ['#D7C3A3', '#171411', '#69635B', '#C92828', '#B78A28'],
+      typography: 'condensed-editorial-typewriter-label',
+      cameraLanguage: 'locked-documentary-tabletop',
+      motionSignature: 'paper-assembly-stop-motion',
+      backgroundLanguage: 'archival-newsprint-paper',
+      transitionLanguage: ['hard-cut', 'crossfade']
+    },
+    text: { inPreset: 'cascade', outPreset: 'fade-down', intensity: 0.42, staggerFrames: 2 },
+    camera: { scaleDelta: 0.006, xTravel: 0.003, yTravel: 0.003, rotationDegrees: 0.08 },
+    background: { scaleDelta: 0.014, rotationDegrees: 0.4, drift: 0.008, smoothness: 0.38 },
+    transition: 'hard-cut'
   }
 };
 
