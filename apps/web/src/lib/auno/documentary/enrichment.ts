@@ -383,6 +383,33 @@ export async function generateDocumentaryVoice(options: {
 			fingerprint: `${options.run.id}:${generated.map((entry) => `${entry.chunk.id}:${entry.duration.toFixed(3)}`).join('|')}`
 		}
 	};
+	const withMotionOwnership: AutoVideoSidecar = {
+		...options.sidecar,
+		generationGraph: {
+			...options.sidecar.generationGraph,
+			version: 1,
+			blocks: options.sidecar.generationGraph?.blocks ?? [],
+			ownedItems: replaceOwnershipCategory(
+				options.sidecar,
+				'motion',
+				applied.ownedItems.map((item) => ({ ...item, category: 'motion' as const }))
+			)
+		}
+	};
+	const withVoiceOwnership: AutoVideoSidecar = {
+		...withMotionOwnership,
+		generationGraph: {
+			...withMotionOwnership.generationGraph!,
+			ownedItems: replaceOwnershipCategory(
+				withMotionOwnership,
+				'voice',
+				assets.map((asset) => ({ itemId: asset.itemId, sceneId: asset.sceneId, category: 'voice' as const }))
+			)
+		}
+	};
+	const ownedItems = replaceOwnershipCategory(withVoiceOwnership, 'caption', [
+		{ itemId: caption.itemId, category: 'caption' }
+	]);
 	const nextSidecar: AutoVideoSidecar = {
 		...options.sidecar,
 		generationVersion: options.sidecar.generationVersion + 1,
@@ -400,19 +427,7 @@ export async function generateDocumentaryVoice(options: {
 			...options.sidecar.generationGraph,
 			version: 1,
 			blocks: options.sidecar.generationGraph?.blocks ?? [],
-			ownedItems: replaceOwnershipCategory(
-				{
-					...options.sidecar,
-					generationGraph: {
-						...options.sidecar.generationGraph,
-						version: 1,
-						blocks: options.sidecar.generationGraph?.blocks ?? [],
-						ownedItems: replaceOwnershipCategory(options.sidecar, 'motion', applied.ownedItems.map((item) => ({ ...item, category: 'motion' as const })))
-					}
-				},
-				'voice',
-				assets.map((asset) => ({ itemId: asset.itemId, sceneId: asset.sceneId, category: 'voice' as const }))
-			),
+			ownedItems,
 			media: { ...options.sidecar.generationGraph?.media, voices: assets, captions: caption },
 			motion: {
 				...options.sidecar.generationGraph?.motion,

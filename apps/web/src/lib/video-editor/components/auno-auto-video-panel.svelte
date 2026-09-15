@@ -7,13 +7,15 @@
 	import MotionStyleCustomizer from '$lib/components/auno-motion/motion-style-customizer.svelte';
 	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
 	import {
+		documentaryManifest,
 		loadAutoVideoSidecarRemote,
 		saveAutoVideoSidecarRemote
 	} from '$lib/auno/auto-video/sidecar';
 	import {
 		generateAutoVideoCaptions,
 		generateAutoVideoMusic,
-		generateAutoVideoVoices
+		generateAutoVideoVoices,
+		generateDocumentaryVoice
 	} from '$lib/auno/auto-video/enrichment';
 	import type {
 		AutoVideoGenerationBlock,
@@ -27,6 +29,8 @@
 	import { replaceOwnershipCategory } from '$lib/auno/auto-video/ownership';
 	import { editorSession } from '$lib/video-editor/editor.svelte';
 	import { inspectMusicGenerationStorage } from '$lib/video-editor/local-ai/music/ace-step-service';
+	import { getDocumentaryRun, updateDocumentaryRun } from '$lib/auno/documentary/api';
+	import type { DocumentaryRun } from '$lib/auno/documentary/types';
 
 	let {
 		projectId,
@@ -37,6 +41,7 @@
 	} = $props();
 
 	let sidecar = $state<AutoVideoSidecar | null>(null);
+	let documentaryRun = $state<DocumentaryRun | null>(null);
 	let loading = $state(true);
 	let busyScene = $state<number | 'all' | null>(null);
 	let mediaBusy = $state<'voice' | 'captions' | 'music' | null>(null);
@@ -48,6 +53,7 @@
 	let status = $state('');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id?.trim() ?? '');
+	const documentary = $derived(documentaryManifest(sidecar));
 	const voiceCount = $derived(sidecar?.generationGraph?.media?.voices?.length ?? 0);
 	const hasCaptions = $derived(Boolean(sidecar?.generationGraph?.media?.captions));
 	const hasMusic = $derived(Boolean(sidecar?.generationGraph?.media?.music));
@@ -84,6 +90,15 @@
 		try {
 			const loaded = await loadAutoVideoSidecarRemote(workspaceId, projectId);
 			sidecar = loaded;
+			documentaryRun = null;
+			const manifest = documentaryManifest(loaded);
+			if (manifest && workspaceId) {
+				try {
+					documentaryRun = await getDocumentaryRun(workspaceId, manifest.runId);
+				} catch (cause) {
+					status = cause instanceof Error ? cause.message : String(cause);
+				}
+			}
 			const savedMotion = loaded?.generationGraph?.motion;
 			const savedStyle = savedMotion?.style;
 			if (savedStyle && savedStyle in MOTION_STYLES) motionStyle = savedStyle as MotionStyleId;
@@ -274,12 +289,39 @@
 		}
 	}
 
+	async function generateDocumentaryNarration(): Promise<boolean> {
+		if (!sidecar || !documentary || !documentaryRun) return false;
+		if (!workspaceId) {
+			status = 'Select the workspace that owns this documentary run.';
+			return true;
+		}
+		const result = await generateDocumentaryVoice({
+			projectId,
+			workspaceId,
+			run: documentaryRun,
+			sidecar,
+			onProgress: (completed, total) => {
+				voiceProgress = `${completed}/${total}`;
+			}
+		});
+		if (result.narrationPackage) {
+			status = `Local TTS is unavailable. Documentary remains editable with ${result.narrationPackage.chunks.length} bounded narration chunk(s) and voice-direction metadata.`;
+			return true;
+		}
+		documentaryRun = await updateDocumentaryRun(workspaceId, result.run);
+		await persistSidecar(result.sidecar);
+		onautosave();
+		status = `Generated ${result.assets.length} documentary voice chunk(s), reflowed beat timing from measured audio, regenerated Vox motion with the same seed, and rebuilt native captions.`;
+		return true;
+	}
+
 	async function generateVoices(): Promise<void> {
 		if (!sidecar || mediaBusy !== null || busyScene !== null) return;
 		mediaBusy = 'voice';
 		voiceProgress = '';
 		status = '';
 		try {
+			if (await generateDocumentaryNarration()) return;
 			const result = await generateAutoVideoVoices({
 				projectId,
 				workspaceId,
@@ -359,6 +401,12 @@
 		mediaBusy = 'captions';
 		status = '';
 		try {
+			if (documentary) {
+				status = hasCaptions
+					? 'Documentary captions are already synchronized to the measured narration timing.'
+					: 'Generate documentary voice first; captions are built from the approved narration after measured-duration reflow.';
+				return;
+			}
 			const result = generateAutoVideoCaptions(sidecar);
 			await persistSidecar(result.sidecar);
 			onautosave();
@@ -485,7 +533,7 @@
 
 				<div class="grid grid-cols-3 gap-1.5">
 					<Button type="button" size="sm" variant="outline" disabled={mediaBusy !== null || busyScene !== null} onclick={generateVoices}>
-						{mediaBusy === 'voice' ? `Voice ${voiceProgress}` : voiceCount > 0 ? `Voice · ${voiceCount}` : 'Voice'}
+						{mediaBusy === 'voice' ? `Voice ${voiceProgress}` : documentary ? (voiceCount > 0 ? `Doc voice · ${voiceCount}` : 'Doc voice + captions') : voiceCount > 0 ? `Voice · ${voiceCount}` : 'Voice'}
 					</Button>
 					<Button type="button" size="sm" variant="outline" disabled={mediaBusy !== null || busyScene !== null} onclick={generateCaptions}>
 						{mediaBusy === 'captions' ? 'Captions…' : hasCaptions ? 'Captions ✓' : 'Captions'}
@@ -499,10 +547,18 @@
 					Voice uses the selected local TTS model, captions come from the approved script, and music uses local ACE-Step when WebGPU is available. All outputs remain editable project assets.
 				</p>
 
-				<Button type="button" size="sm" variant="outline" class="w-full" disabled={busyScene !== null || mediaBusy !== null} onclick={() => regenerate('all')}>
-					{busyScene === 'all' ? 'Regenerating…' : 'Rewrite generated narration'}
-				</Button>
+				{#if !documentary}
+					<Button type="button" size="sm" variant="outline" class="w-full" disabled={busyScene !== null || mediaBusy !== null} onclick={() => regenerate('all')}>
+						{busyScene === 'all' ? 'Regenerating…' : 'Rewrite generated narration'}
+					</Button>
+				{:else}
+					<div class="rounded-md border border-[var(--video-editor-border)] bg-[var(--video-editor-control)] p-2.5">
+						<p class="text-[11px] font-medium text-[var(--video-editor-text)]">Documentary Long-form · Vox Style</p>
+						<p class="mt-1 text-[10px] leading-relaxed text-[var(--video-editor-muted)]">Narration edits stay in the durable Documentary run. Voice generation uses bounded ≤25s chunks, then reflows beats, motion, and captions from measured audio duration.</p>
+					</div>
+				{/if}
 
+				{#if !documentary}
 				<div class="space-y-2">
 					{#each sidecar.storyboard.scenes as scene, index (scene.id)}
 						{@const protectedEdit = manuallyEdited(scene)}
@@ -522,6 +578,7 @@
 						</div>
 					{/each}
 				</div>
+				{/if}
 
 				{#if status}
 					<p class="rounded-md bg-[var(--video-editor-control)] p-2 text-[11px] leading-relaxed text-[var(--video-editor-muted)]">{status}</p>

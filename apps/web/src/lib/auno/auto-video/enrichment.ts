@@ -1,3 +1,4 @@
+export { generateDocumentaryVoice, narrationPackage, planVoiceChunks, redistributeBeatDurations } from '../documentary/enrichment';
 import { page } from '$app/state';
 import type { Project, TimelineItem } from '$lib/video-editor/project/types';
 import type { MediaMetadata } from '$lib/video-editor/media/types';
