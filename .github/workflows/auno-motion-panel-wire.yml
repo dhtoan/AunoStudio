@@ -1,0 +1,68 @@
+name: Wire Auno Motion Style Controls
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-motion-panel-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Auno AI motion controls
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte')
+          text = path.read_text()
+
+          anchor = "\timport { onMount } from 'svelte';\n"
+          addition = anchor + "\timport { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';\n"
+          if "planMotionGraph" not in text:
+              if anchor not in text: raise SystemExit('missing onMount anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\timport { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';\n"
+          addition = anchor + "\timport { applyMotionGraphToLiveTimeline } from '$lib/auno/motion/live-applier';\n\timport { editorSession } from '$lib/video-editor/editor.svelte';\n"
+          if "applyMotionGraphToLiveTimeline" not in text:
+              if anchor not in text: raise SystemExit('missing timeline actions anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tlet voiceProgress = $state('');\n"
+          addition = anchor + "\tlet motionStyle = $state<MotionStyleId>('editorial-fashion');\n\tlet motionBusy = $state(false);\n"
+          if "let motionStyle" not in text:
+              if anchor not in text: raise SystemExit('missing voice progress anchor')
+              text = text.replace(anchor, addition, 1)
+
+          old = "\t\ttry {\n\t\t\tsidecar = await loadAutoVideoSidecarRemote(workspaceId, projectId);\n\t\t} finally {"
+          new = "\t\ttry {\n\t\t\tconst loaded = await loadAutoVideoSidecarRemote(workspaceId, projectId);\n\t\t\tsidecar = loaded;\n\t\t\tconst savedStyle = loaded?.generationGraph?.motion?.style;\n\t\t\tif (savedStyle && savedStyle in MOTION_STYLES) motionStyle = savedStyle as MotionStyleId;\n\t\t} finally {"
+          if "const savedStyle = loaded?.generationGraph?.motion?.style" not in text:
+              if old not in text: raise SystemExit('missing refresh sidecar anchor')
+              text = text.replace(old, new, 1)
+
+          anchor = "\tasync function generateVoices(): Promise<void> {\n"
+          function = "\tasync function applyMotionStyle(): Promise<void> {\n\t\tif (!sidecar || motionBusy || mediaBusy !== null || busyScene !== null) return;\n\t\tconst project = editorSession.project;\n\t\tif (!project) {\n\t\t\tstatus = 'The native video project is not ready yet.';\n\t\t\treturn;\n\t\t}\n\t\tmotionBusy = true;\n\t\tstatus = '';\n\t\ttry {\n\t\t\tconst previousMotion = sidecar.generationGraph?.motion;\n\t\t\tconst graph = planMotionGraph({\n\t\t\t\tprojectId,\n\t\t\t\tstyle: motionStyle,\n\t\t\t\tseed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,\n\t\t\t\tscenes: sidecar.storyboard.scenes\n\t\t\t});\n\t\t\tapplyMotionGraphToLiveTimeline({\n\t\t\t\tgraph,\n\t\t\t\twidth: project.metadata.width,\n\t\t\t\theight: project.metadata.height\n\t\t\t});\n\t\t\tconst nextSidecar: AutoVideoSidecar = {\n\t\t\t\t...sidecar,\n\t\t\t\tgenerationVersion: sidecar.generationVersion + 1,\n\t\t\t\tupdatedAt: Date.now(),\n\t\t\t\tproviderManifest: { ...sidecar.providerManifest, motion: `auno-motion:${motionStyle}` },\n\t\t\t\tgenerationGraph: {\n\t\t\t\t\t...sidecar.generationGraph,\n\t\t\t\t\tversion: 1,\n\t\t\t\t\tblocks: sidecar.generationGraph?.blocks ?? [],\n\t\t\t\t\tmotion: { schemaVersion: 1, style: graph.style, seed: graph.seed }\n\t\t\t\t}\n\t\t\t};\n\t\t\tawait persistSidecar(nextSidecar);\n\t\t\tonautosave();\n\t\t\tstatus = `Applied ${MOTION_STYLES[motionStyle].label} as native editable motion.`;\n\t\t} catch (cause) {\n\t\t\tstatus = cause instanceof Error ? cause.message : String(cause);\n\t\t} finally {\n\t\t\tmotionBusy = false;\n\t\t}\n\t}\n\n"
+          if "async function applyMotionStyle" not in text:
+              if anchor not in text: raise SystemExit('missing voice function anchor')
+              text = text.replace(anchor, function + anchor, 1)
+
+          anchor = "\t\t\t\t<div class=\"grid grid-cols-3 gap-1.5\">\n"
+          markup = "\t\t\t\t<div class=\"grid grid-cols-[minmax(0,1fr)_auto] gap-1.5\">\n\t\t\t\t\t<select bind:value={motionStyle} aria-label=\"Motion style\" class=\"h-9 min-w-0 rounded border border-[var(--video-editor-border)] bg-[var(--video-editor-panel)] px-2 text-[11px] text-[var(--video-editor-text)]\" disabled={motionBusy || mediaBusy !== null || busyScene !== null}>\n\t\t\t\t\t\t{#each Object.values(MOTION_STYLES) as definition (definition.id)}\n\t\t\t\t\t\t\t<option value={definition.id}>{definition.label}</option>\n\t\t\t\t\t\t{/each}\n\t\t\t\t\t</select>\n\t\t\t\t\t<Button type=\"button\" size=\"sm\" variant=\"outline\" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={applyMotionStyle}>\n\t\t\t\t\t\t{motionBusy ? 'Applying…' : 'Apply motion'}\n\t\t\t\t\t</Button>\n\t\t\t\t</div>\n\n"
+          if "onclick={applyMotionStyle}" not in text:
+              if anchor not in text: raise SystemExit('missing media controls anchor')
+              text = text.replace(anchor, markup + anchor, 1)
+
+          path.write_text(text)
+          PY
+          path='apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte'
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+            -f message='feat: change native Motion Style from Auno AI panel' \
+            -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
