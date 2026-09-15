@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
@@ -205,6 +205,7 @@
 				seed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,
 				scenes: sidecar.storyboard.scenes
 			});
+			const motionDiagnostics = validateMotionGraph(graph);
 			applyMotionGraphToLiveTimeline({
 				graph,
 				width: project.metadata.width,
@@ -219,7 +220,13 @@
 					...sidecar.generationGraph,
 					version: 1,
 					blocks: sidecar.generationGraph?.blocks ?? [],
-					motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }
+					motion: {
+						schemaVersion: 1,
+						style: graph.style,
+						seed: graph.seed,
+						brief: graph.brief,
+						diagnostics: motionDiagnostics
+					}
 				}
 			};
 			await persistSidecar(nextSidecar);
@@ -257,6 +264,7 @@
 					seed: savedMotion.seed,
 					scenes: nextSidecar.storyboard.scenes
 				});
+				const motionDiagnostics = validateMotionGraph(graph);
 				applyMotionGraphToLiveTimeline({
 					graph,
 					width: project.metadata.width,
@@ -270,7 +278,13 @@
 						...nextSidecar.generationGraph,
 						version: 1,
 						blocks: nextSidecar.generationGraph?.blocks ?? [],
-						motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }
+						motion: {
+							schemaVersion: 1,
+							style: graph.style,
+							seed: graph.seed,
+							brief: graph.brief,
+							diagnostics: motionDiagnostics
+						}
 					}
 				};
 			}
