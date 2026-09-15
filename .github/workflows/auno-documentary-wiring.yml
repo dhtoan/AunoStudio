@@ -1,0 +1,72 @@
+name: Apply Auno documentary wiring
+
+on:
+  push:
+    paths:
+      - .github/workflows/auno-documentary-wiring.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch source wiring
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          routes = Path('apps/server/internal/api/routes.go')
+          text = routes.read_text()
+          import_anchor = '\t"github.com/openpost/backend/internal/services/autovideo"\n'
+          import_insert = import_anchor + '\t"github.com/openpost/backend/internal/services/documentary"\n'
+          if 'internal/services/documentary' not in text:
+              if import_anchor not in text:
+                  raise SystemExit('routes import anchor missing')
+              text = text.replace(import_anchor, import_insert, 1)
+          field_anchor = '\tAutoVideoPlanner             autovideo.Planner\n'
+          field_insert = field_anchor + '\tDocumentaryPlanner           documentary.Planner\n'
+          if 'DocumentaryPlanner' not in text:
+              if field_anchor not in text:
+                  raise SystemExit('RouteDeps field anchor missing')
+              text = text.replace(field_anchor, field_insert, 1)
+          route_anchor = '\thandlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner, deps.MediaStorage).RegisterRoutes(api)\n'
+          route_insert = route_anchor + '\thandlers.NewDocumentaryHandler(deps.DB, deps.Authenticator, deps.DocumentaryPlanner, deps.MediaStorage).RegisterRoutes(api)\n'
+          if 'NewDocumentaryHandler' not in text:
+              if route_anchor not in text:
+                  raise SystemExit('documentary route anchor missing')
+              text = text.replace(route_anchor, route_insert, 1)
+          routes.write_text(text)
+
+          main = Path('apps/server/cmd/openpost/main.go')
+          text = main.read_text()
+          planner_anchor = '''\tautoVideoPlanner, autoVideoModel, autoVideoProvider, err := aunoAutoVideoPlanner(cfg, contentGenerator)\n\tif err != nil {\n\t\tfatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Auto Video planner: %v", err)\n\t}\n\tif autoVideoPlanner != nil {\n\t\tlog.Printf("Auno Auto Video planner enabled with model %s via %s", autoVideoModel, autoVideoProvider)\n\t}\n'''
+          planner_insert = planner_anchor + '''\tdocumentaryPlanner, documentaryModel, documentaryProvider, err := aunoDocumentaryPlanner(cfg, contentGenerator)\n\tif err != nil {\n\t\tfatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Documentary planner: %v", err)\n\t}\n\tif documentaryPlanner != nil {\n\t\tlog.Printf("Auno Documentary planner enabled with model %s via %s", documentaryModel, documentaryProvider)\n\t}\n'''
+          if 'aunoDocumentaryPlanner(cfg, contentGenerator)' not in text:
+              if planner_anchor not in text:
+                  raise SystemExit('main planner anchor missing')
+              text = text.replace(planner_anchor, planner_insert, 1)
+          deps_anchor = '\t\tAutoVideoPlanner:          autoVideoPlanner,\n'
+          deps_insert = deps_anchor + '\t\tDocumentaryPlanner:        documentaryPlanner,\n'
+          if 'DocumentaryPlanner:' not in text:
+              if deps_anchor not in text:
+                  raise SystemExit('main RouteDeps anchor missing')
+              text = text.replace(deps_anchor, deps_insert, 1)
+          main.write_text(text)
+          PY
+      - name: Commit source wiring
+        shell: bash
+        run: |
+          git config user.name "Auno Studio Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/server/internal/api/routes.go apps/server/cmd/openpost/main.go
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "feat: wire documentary planner and routes"
+          git push origin HEAD:main
