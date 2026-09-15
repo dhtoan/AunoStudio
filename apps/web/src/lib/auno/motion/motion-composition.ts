@@ -66,7 +66,6 @@ export function buildMotionCompositionOverlays(options: {
 				fillType: 'solid',
 				fillColor: accent,
 				strokeEnabled: false,
-				blendMode: 'screen',
 				transform: {
 					x: options.width * (direction > 0 ? 0.74 : 0.26),
 					y: options.height * 0.48,
