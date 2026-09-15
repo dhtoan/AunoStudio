@@ -37,14 +37,6 @@ function changedPixelMetrics(left: FrameCapture, right: FrameCapture) {
   };
 }
 
-async function motionHook(page: Parameters<typeof authenticatePage>[0]): Promise<MotionTestHook> {
-  return page.evaluate(() => {
-    const hook = (window as typeof window & { __AUNO_MOTION_TEST__?: MotionTestHook }).__AUNO_MOTION_TEST__;
-    if (!hook) throw new Error("Auno motion test hook is unavailable");
-    return hook;
-  });
-}
-
 test("preview and export pre-encode frames are deterministic across reload", async ({ page, request }) => {
   test.setTimeout(120_000);
   const unique = Date.now().toString(36);
