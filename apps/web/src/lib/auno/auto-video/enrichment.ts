@@ -198,12 +198,21 @@ export async function generateAutoVideoVoices(options: {
 		timelineStore._setItems(items);
 	});
 
+	const actualDurations = new Map(generated.map((entry) => [entry.scene.id, entry.duration]));
 	const nextSidecar: AutoVideoSidecar = {
 		...options.sidecar,
 		generationVersion: options.sidecar.generationVersion + 1,
 		updatedAt: Date.now(),
+		storyboard: {
+			...options.sidecar.storyboard,
+			scenes: options.sidecar.storyboard.scenes.map((scene) => ({
+				...scene,
+				durationSeconds: Math.max(2, actualDurations.get(scene.id) ?? scene.durationSeconds)
+			}))
+		},
 		providerManifest: { ...options.sidecar.providerManifest, voice: `${engine}:${voice}` },
 		generationGraph: {
+			...options.sidecar.generationGraph,
 			version: 1,
 			blocks: options.sidecar.generationGraph?.blocks ?? [],
 			media: { ...options.sidecar.generationGraph?.media, voices: assets }
@@ -242,6 +251,7 @@ export function generateAutoVideoCaptions(sidecar: AutoVideoSidecar): {
 			generationVersion: sidecar.generationVersion + 1,
 			updatedAt: Date.now(),
 			generationGraph: {
+				...sidecar.generationGraph,
 				version: 1,
 				blocks: sidecar.generationGraph?.blocks ?? [],
 				media: { ...sidecar.generationGraph?.media, captions: asset }
@@ -306,6 +316,7 @@ export async function generateAutoVideoMusic(options: {
 			updatedAt: Date.now(),
 			providerManifest: { ...options.sidecar.providerManifest, music: generated.model },
 			generationGraph: {
+				...options.sidecar.generationGraph,
 				version: 1,
 				blocks: options.sidecar.generationGraph?.blocks ?? [],
 				media: { ...options.sidecar.generationGraph?.media, music: asset }
