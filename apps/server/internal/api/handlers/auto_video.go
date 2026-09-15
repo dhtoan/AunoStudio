@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +68,21 @@ type GenerateAutoVideoStoryboardOutput struct {
 	}
 }
 
+type AunoAICapabilitiesOutput struct {
+	Body struct {
+		ProviderMode             string `json:"provider_mode"`
+		PlannerAvailable         bool   `json:"planner_available"`
+		ActiveProvider           string `json:"active_provider"`
+		ActiveModel              string `json:"active_model"`
+		GeminiConfigured         bool   `json:"gemini_configured"`
+		OpenRouterConfigured     bool   `json:"openrouter_configured"`
+		LocalStoryboardFallback  bool   `json:"local_storyboard_fallback"`
+		BrowserTTS               bool   `json:"browser_tts"`
+		BrowserTranscription     bool   `json:"browser_transcription"`
+		BrowserMusicGeneration   bool   `json:"browser_music_generation"`
+	}
+}
+
 func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner) *AutoVideoHandler {
 	loader, _ := sourcecontext.New(sourcecontext.Config{})
 	return &AutoVideoHandler{db: db, auth: auth, planner: planner, sourceLoader: loader, limiter: ratelimit.New()}
@@ -74,6 +90,16 @@ func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner auto
 
 func (h *AutoVideoHandler) RegisterRoutes(api huma.API) {
 	auth := huma.Middlewares{middleware.AuthMiddleware(api, h.auth)}
+	huma.Register(api, huma.Operation{
+		OperationID: "get-auno-ai-capabilities",
+		Method:      http.MethodGet,
+		Path:        "/auno/ai/capabilities",
+		Summary:     "Get Auno AI capability status",
+		Description: "Returns provider and local capability availability without exposing credentials or secret values.",
+		Tags:        []string{"Auno AI"},
+		Middlewares: auth,
+	}, h.capabilities)
+
 	huma.Register(api, huma.Operation{
 		OperationID: "resolve-auno-auto-video-source",
 		Method:      http.MethodPost,
@@ -95,6 +121,61 @@ func (h *AutoVideoHandler) RegisterRoutes(api huma.API) {
 		Middlewares: auth,
 		Errors:      []int{400, 403, 429, 502, 503},
 	}, h.generate)
+}
+
+func (h *AutoVideoHandler) capabilities(context.Context, *struct{}) (*AunoAICapabilitiesOutput, error) {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AUNO_AI_PROVIDER")))
+	if mode == "" {
+		mode = "auto"
+	}
+	geminiConfigured := firstConfiguredEnv("AUNO_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+	openRouterConfigured := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")) != ""
+	provider := "none"
+	model := ""
+	if h.planner != nil {
+		switch {
+		case mode == "gemini" && geminiConfigured:
+			provider = "gemini"
+		case mode == "openrouter" && openRouterConfigured:
+			provider = "openrouter"
+		case mode == "auto" && geminiConfigured:
+			provider = "gemini"
+		case mode == "auto" && openRouterConfigured:
+			provider = "openrouter"
+		}
+	}
+	if provider == "gemini" {
+		model = strings.TrimSpace(os.Getenv("AUNO_GEMINI_MODEL"))
+		if model == "" {
+			model = "gemini-2.5-flash"
+		}
+	} else if provider == "openrouter" {
+		model = strings.TrimSpace(os.Getenv("OPENPOST_TEXT_GENERATION_MODEL"))
+		if model == "" {
+			model = "openai/gpt-5.6-luna"
+		}
+	}
+	output := &AunoAICapabilitiesOutput{}
+	output.Body.ProviderMode = mode
+	output.Body.PlannerAvailable = h.planner != nil
+	output.Body.ActiveProvider = provider
+	output.Body.ActiveModel = model
+	output.Body.GeminiConfigured = geminiConfigured
+	output.Body.OpenRouterConfigured = openRouterConfigured
+	output.Body.LocalStoryboardFallback = true
+	output.Body.BrowserTTS = true
+	output.Body.BrowserTranscription = true
+	output.Body.BrowserMusicGeneration = true
+	return output, nil
+}
+
+func firstConfiguredEnv(keys ...string) bool {
+	for _, key := range keys {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *AutoVideoHandler) checkWorkspace(ctx context.Context, workspaceID string) error {
