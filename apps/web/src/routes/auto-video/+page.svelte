@@ -3,6 +3,7 @@
 	import { resolveAppPath } from '$lib/app-path';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import MotionStyleCustomizer from '$lib/components/auno-motion/motion-style-customizer.svelte';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import {
@@ -15,7 +16,7 @@
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
 	import { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';
 	import type { Project } from '$lib/video-editor/project/types';
-	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, recommendMotionStyle, validateMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, recommendMotionStyle, validateMotionGraph, type MotionStyleCustomization, type MotionStyleId } from '@auno/motion';
 	import { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';
 	import { inspectAunoMotionVisualQA } from '$lib/auno/motion/visual-qa';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
@@ -52,6 +53,7 @@
 	let canvas = $state<AutoVideoCanvasPreset>('vertical');
 	let motionStyle = $state<MotionStyleId>(recommendMotionStyle({ format: 'review' }));
 	let motionStyleUserSelected = $state(false);
+	let motionCustomization = $state<MotionStyleCustomization>({});
 	let storageMode = $state<'cloud' | 'local'>('cloud');
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
 	let activeSource = $state<AutoVideoSource | null>(null);
@@ -268,7 +270,8 @@
 			const motionGraph = planMotionGraph({
 				projectId: baseProject.id,
 				style: motionStyle,
-				scenes: storyboard.scenes
+				scenes: storyboard.scenes,
+				customization: motionCustomization
 			});
 			const project = applyMotionGraphToProject(baseProject, motionGraph);
 			const motionDiagnostics = validateMotionGraph(motionGraph);
@@ -317,6 +320,7 @@
 						style: motionGraph.style,
 						seed: motionGraph.seed,
 						brief: motionGraph.brief,
+						customization: Object.keys(motionCustomization).length ? motionCustomization : undefined,
 						diagnostics: motionDiagnostics,
 						visualDiagnostics,
 						probePlan: motionProbePlan,
@@ -477,6 +481,8 @@
 					</select>
 				</label>
 			</div>
+
+			<MotionStyleCustomizer bind:customization={motionCustomization} />
 
 			<div class="flex flex-wrap items-center gap-3">
 				<Button onclick={generateStoryboard} disabled={planning}>{planning ? 'Planning…' : 'Generate storyboard'}</Button>
