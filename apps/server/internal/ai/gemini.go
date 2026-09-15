@@ -110,10 +110,10 @@ func buildGeminiRequest(request GenerateRequest) (openai.ChatCompletionNewParams
 	if userPrompt := strings.TrimSpace(request.UserPrompt); userPrompt != "" {
 		content = append(content, openai.TextContentPart(userPrompt))
 	}
-	for index, part := range request.Parts {
+	for _, part := range request.Parts {
 		items, err := openRouterMultimodalPartContent(part)
 		if err != nil {
-			return openai.ChatCompletionNewParams{}, nil, errors.New("invalid Gemini multimodal part at index " + string(rune(index)))
+			return openai.ChatCompletionNewParams{}, nil, err
 		}
 		content = append(content, items...)
 	}
