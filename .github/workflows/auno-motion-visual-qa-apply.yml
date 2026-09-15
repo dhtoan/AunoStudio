@@ -1,0 +1,31 @@
+name: Apply Auno Motion Visual QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/auno-motion-visual-qa-apply.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply source patch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/auno_motion_visual_qa_patch.py
+          upload() {
+            path="$1"
+            message="$2"
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
+            encoded="$(base64 -w0 "$path")"
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+              -f message="$message" -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
+          }
+          upload apps/web/src/routes/auto-video/+page.svelte 'feat: persist initial Motion visual QA diagnostics'
+          upload apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte 'feat: surface deterministic Motion visual QA'
