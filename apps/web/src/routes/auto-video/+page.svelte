@@ -15,7 +15,7 @@
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
 	import { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';
 	import type { Project } from '$lib/video-editor/project/types';
-	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, recommendMotionStyle, validateMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
@@ -49,7 +49,8 @@
 	let language = $state('en-US');
 	let targetDurationSeconds = $state(45);
 	let canvas = $state<AutoVideoCanvasPreset>('vertical');
-	let motionStyle = $state<MotionStyleId>('editorial-fashion');
+	let motionStyle = $state<MotionStyleId>(recommendMotionStyle({ format: 'review' }));
+	let motionStyleUserSelected = $state(false);
 	let storageMode = $state<'cloud' | 'local'>('cloud');
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
 	let activeSource = $state<AutoVideoSource | null>(null);
@@ -58,6 +59,10 @@
 	let error = $state('');
 	let planning = $state(false);
 	let creating = $state(false);
+
+	$effect(() => {
+		if (!motionStyleUserSelected) motionStyle = recommendMotionStyle({ format });
+	});
 
 	async function loadMediaLibrary(): Promise<void> {
 		const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
@@ -442,7 +447,7 @@
 				</label>
 				<label class="space-y-2 text-sm font-medium">
 					<span>Motion style</span>
-					<select bind:value={motionStyle} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+					<select bind:value={motionStyle} onchange={() => (motionStyleUserSelected = true)} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
 						{#each Object.values(MOTION_STYLES) as definition (definition.id)}
 							<option value={definition.id}>{definition.label}</option>
 						{/each}
