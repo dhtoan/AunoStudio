@@ -23,7 +23,7 @@ Auno Studio's Auno Motion Engine adapts selected motion-design principles and ma
 - License: MIT
 - Copyright: Copyright (c) 2026 Bang Tutorial
 
-The Bang Motion MIT notice is preserved at `licenses/bang-motion/LICENSE`. Runtime Auno Motion code lives under Auno-owned modules such as `packages/auno-motion/`; the Bang Motion standalone HTML deliverable is not the Auno Studio project format.
+The exact pinned upstream reference snapshot is preserved under `third_party/bang-motion/` for provenance and review. The Bang Motion MIT notice is preserved both in that snapshot and at `licenses/bang-motion/LICENSE`. Production runtime imports do not depend on the vendored reference tree: Auno Motion runtime code lives under Auno-owned modules such as `packages/auno-motion/`, and the Bang Motion standalone HTML deliverable is not the Auno Studio project format.
 
 ## AI/media models and runtimes
 
