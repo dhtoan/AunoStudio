@@ -22,6 +22,7 @@
 	import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
 	import { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';
 	import { applyMotionGraphToLiveTimeline } from '$lib/auno/motion/live-applier';
+	import { inspectAunoMotionVisualQA } from '$lib/auno/motion/visual-qa';
 	import { replaceOwnershipCategory } from '$lib/auno/auto-video/ownership';
 	import { editorSession } from '$lib/video-editor/editor.svelte';
 	import { inspectMusicGenerationStorage } from '$lib/video-editor/local-ai/music/ace-step-service';
@@ -49,7 +50,9 @@
 	const hasCaptions = $derived(Boolean(sidecar?.generationGraph?.media?.captions));
 	const hasMusic = $derived(Boolean(sidecar?.generationGraph?.media?.music));
 	const motionIssues = $derived(sidecar?.generationGraph?.motion?.diagnostics ?? []);
-	const motionErrorCount = $derived(motionIssues.filter((issue) => issue.severity === 'error').length);
+	const visualIssues = $derived(sidecar?.generationGraph?.motion?.visualDiagnostics ?? []);
+	const allMotionIssues = $derived([...motionIssues, ...visualIssues]);
+	const motionErrorCount = $derived(allMotionIssues.filter((issue) => issue.severity === 'error').length);
 
 	function blockForScene(sceneId: string): AutoVideoGenerationBlock | undefined {
 		return sidecar?.generationGraph?.blocks.find((block) => block.sceneId === sceneId);
@@ -221,6 +224,13 @@
 				'motion',
 				appliedMotion.ownedItems.map((entry) => ({ ...entry, category: 'motion' as const }))
 			);
+			const visualDiagnostics = inspectAunoMotionVisualQA({
+				storyboard: sidecar.storyboard,
+				items: timelineStore.items,
+				width: project.metadata.width,
+				height: project.metadata.height,
+				compositionIds: new Set(appliedMotion.compositionIds)
+			});
 			const nextSidecar: AutoVideoSidecar = {
 				...sidecar,
 				generationVersion: sidecar.generationVersion + 1,
@@ -237,6 +247,7 @@
 						seed: graph.seed,
 						brief: graph.brief,
 						diagnostics: motionDiagnostics,
+						visualDiagnostics,
 						probePlan: motionProbePlan,
 						probeSignature: motionProbePlanSignature
 					}
@@ -290,6 +301,13 @@
 					'motion',
 					appliedMotion.ownedItems.map((entry) => ({ ...entry, category: 'motion' as const }))
 				);
+				const visualDiagnostics = inspectAunoMotionVisualQA({
+					storyboard: nextSidecar.storyboard,
+					items: timelineStore.items,
+					width: project.metadata.width,
+					height: project.metadata.height,
+					compositionIds: new Set(appliedMotion.compositionIds)
+				});
 				nextSidecar = {
 					...nextSidecar,
 					updatedAt: Date.now(),
@@ -305,6 +323,7 @@
 							seed: graph.seed,
 							brief: graph.brief,
 							diagnostics: motionDiagnostics,
+							visualDiagnostics,
 							probePlan: motionProbePlan,
 							probeSignature: motionProbePlanSignature
 						}
@@ -427,19 +446,19 @@
 					</Button>
 				</div>
 
-				{#if motionIssues.length > 0}
+				{#if allMotionIssues.length > 0}
 					<div class="space-y-1.5 rounded-md border border-[var(--video-editor-border)] bg-[var(--video-editor-control)] p-2.5">
 						<div class="flex items-center justify-between gap-2">
 							<p class="text-[11px] font-medium text-[var(--video-editor-text)]">Motion diagnostics</p>
-							<span class="text-[10px] text-[var(--video-editor-muted)]">{motionErrorCount > 0 ? `${motionErrorCount} error` : `${motionIssues.length} warning${motionIssues.length === 1 ? '' : 's'}`}</span>
+							<span class="text-[10px] text-[var(--video-editor-muted)]">{motionErrorCount > 0 ? `${motionErrorCount} error` : `${allMotionIssues.length} warning${allMotionIssues.length === 1 ? '' : 's'}`}</span>
 						</div>
-						{#each motionIssues.slice(0, 4) as issue (`${issue.code}:${issue.sceneId ?? 'project'}`)}
+						{#each allMotionIssues.slice(0, 4) as issue (`${issue.code}:${issue.sceneId ?? 'project'}`)}
 							<p class="text-[10px] leading-relaxed text-[var(--video-editor-muted)]">
 								{issue.severity === 'error' ? 'Error' : 'Warning'} · {issue.message}
 							</p>
 						{/each}
-						{#if motionIssues.length > 4}
-							<p class="text-[10px] text-[var(--video-editor-muted)]">+{motionIssues.length - 4} more</p>
+						{#if allMotionIssues.length > 4}
+							<p class="text-[10px] text-[var(--video-editor-muted)]">+{allMotionIssues.length - 4} more</p>
 						{/if}
 					</div>
 				{/if}
