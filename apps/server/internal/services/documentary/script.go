@@ -45,6 +45,38 @@ func targetWordCount(seconds int) int {
 	return int(math.Round(float64(seconds) * 2.5))
 }
 
+func NormalizeEditedScript(runID string, durationSeconds int, previous Script, rawText string) (Script, error) {
+	if strings.TrimSpace(runID) == "" {
+		return Script{}, ErrInvalid
+	}
+	if err := ValidateDuration(durationSeconds); err != nil {
+		return Script{}, err
+	}
+	raw := strings.TrimSpace(rawText)
+	if raw == "" || hasDocumentaryHeading(raw) {
+		return Script{}, ErrInvalid
+	}
+	text := strings.Join(strings.Fields(raw), " ")
+	words := len(strings.Fields(text))
+	if words == 0 {
+		return Script{}, ErrInvalid
+	}
+	target := targetWordCount(durationSeconds)
+	diagnostics := []string{}
+	deviation := math.Abs(float64(words-target)) / float64(max(1, target))
+	if deviation > 0.05 {
+		diagnostics = append(diagnostics, fmt.Sprintf("word_count_outside_target:%d/%d", words, target))
+	}
+	return Script{
+		Text:            text,
+		WordCount:       words,
+		TargetWordCount: target,
+		EvidenceRefs:    dedupeBoundedStrings(previous.EvidenceRefs, 64),
+		Fingerprint:     Fingerprint(runID, fmt.Sprintf("%d", durationSeconds), text),
+		Diagnostics:     diagnostics,
+	}, nil
+}
+
 func (s *Service) GenerateScript(ctx context.Context, input ScriptInput) (ScriptResult, error) {
 	if strings.TrimSpace(input.RunID) == "" || strings.TrimSpace(input.Language) == "" {
 		return ScriptResult{}, ErrInvalid
@@ -57,12 +89,12 @@ func (s *Service) GenerateScript(ctx context.Context, input ScriptInput) (Script
 	}
 	target := targetWordCount(input.TargetDurationSeconds)
 	payload := map[string]any{
-		"run_id":                   input.RunID,
-		"language":                 input.Language,
-		"target_duration_seconds":  input.TargetDurationSeconds,
-		"target_word_count":        target,
-		"custom_topic":             strings.TrimSpace(input.CustomTopic),
-		"source":                   sourcePayload(input.Source),
+		"run_id":                  input.RunID,
+		"language":                input.Language,
+		"target_duration_seconds": input.TargetDurationSeconds,
+		"target_word_count":       target,
+		"custom_topic":            strings.TrimSpace(input.CustomTopic),
+		"source":                  sourcePayload(input.Source),
 	}
 	if input.Idea != nil {
 		payload["selected_idea"] = input.Idea
@@ -72,27 +104,11 @@ func (s *Service) GenerateScript(ctx context.Context, input ScriptInput) (Script
 	if err != nil {
 		return ScriptResult{}, err
 	}
-	raw := strings.TrimSpace(response.Text)
-	if raw == "" || hasDocumentaryHeading(raw) {
+	script, err := NormalizeEditedScript(input.RunID, input.TargetDurationSeconds, Script{
+		EvidenceRefs: response.EvidenceRefs,
+	}, response.Text)
+	if err != nil {
 		return ScriptResult{}, ErrInvalidResponse
-	}
-	text := strings.Join(strings.Fields(raw), " ")
-	words := len(strings.Fields(text))
-	if words == 0 {
-		return ScriptResult{}, ErrInvalidResponse
-	}
-	diagnostics := []string{}
-	deviation := math.Abs(float64(words-target)) / float64(max(1, target))
-	if deviation > 0.05 {
-		diagnostics = append(diagnostics, fmt.Sprintf("word_count_outside_target:%d/%d", words, target))
-	}
-	script := Script{
-		Text:            text,
-		WordCount:       words,
-		TargetWordCount: target,
-		EvidenceRefs:    dedupeBoundedStrings(response.EvidenceRefs, 64),
-		Fingerprint:     Fingerprint(input.RunID, fmt.Sprintf("%d", input.TargetDurationSeconds), text),
-		Diagnostics:     diagnostics,
 	}
 	return ScriptResult{Script: script, Model: model}, nil
 }
