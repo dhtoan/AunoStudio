@@ -1,7 +1,7 @@
 import type { ThemeIconRole } from '$lib/themes';
 
 export type AunoCreateAction = {
-	id: 'video' | 'photo' | 'record' | 'post';
+	id: 'auto-video' | 'video' | 'photo' | 'record' | 'post';
 	label: string;
 	description: string;
 	href: string;
@@ -9,6 +9,13 @@ export type AunoCreateAction = {
 };
 
 export const AUNO_CREATE_ACTIONS: readonly AunoCreateAction[] = [
+	{
+		id: 'auto-video',
+		label: 'AI Auto Video',
+		description: 'Turn text, URL, or Markdown into an editable native video project.',
+		href: '/auto-video',
+		icon: 'sparkles'
+	},
 	{
 		id: 'video',
 		label: 'Video',
