@@ -103,8 +103,13 @@ async function init() {
 	// browser privacy signal refuses.
 	installMaintainerDiagnosticsCapture();
 	if (import.meta.env.VITE_AUNO_E2E === '1') {
-		const { installAunoMotionE2EHooks } = await import('$lib/auno/motion/e2e-hooks');
+		const [{ installAunoMotionE2EHooks }, { installAunoDocumentaryE2EHook }] =
+			await Promise.all([
+				import('$lib/auno/motion/e2e-hooks'),
+				import('$lib/auno/documentary/e2e-hooks')
+			]);
 		installAunoMotionE2EHooks();
+		installAunoDocumentaryE2EHook();
 	}
 }
 
