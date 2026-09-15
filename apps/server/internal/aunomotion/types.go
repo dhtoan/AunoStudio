@@ -3,20 +3,20 @@ package aunomotion
 // SceneGraph is the minimal server-side mirror required to author native OpenPost
 // motion overlays. It intentionally does not duplicate the entire web editor model.
 type SceneGraph struct {
-	SchemaVersion int      `json:"schemaVersion"`
-	Style         string   `json:"style"`
-	Seed          uint32   `json:"seed"`
-	Brief         Brief    `json:"brief"`
-	Scenes        []Scene  `json:"scenes"`
+	SchemaVersion int     `json:"schemaVersion"`
+	Style         string  `json:"style"`
+	Seed          uint32  `json:"seed"`
+	Brief         Brief   `json:"brief"`
+	Scenes        []Scene `json:"scenes"`
 }
 
 type Brief struct {
-	Palette              []string `json:"palette"`
-	Typography           string   `json:"typography"`
-	CameraLanguage       string   `json:"cameraLanguage"`
-	MotionSignature      string   `json:"motionSignature"`
-	BackgroundLanguage  string   `json:"backgroundLanguage"`
-	TransitionLanguage  []string `json:"transitionLanguage"`
+	Palette             []string `json:"palette"`
+	Typography          string   `json:"typography"`
+	CameraLanguage      string   `json:"cameraLanguage"`
+	MotionSignature     string   `json:"motionSignature"`
+	BackgroundLanguage string   `json:"backgroundLanguage"`
+	TransitionLanguage []string `json:"transitionLanguage"`
 }
 
 type Scene struct {
@@ -28,7 +28,7 @@ type Scene struct {
 }
 
 type NativeOverlay struct {
-	Composition NativeComposition `json:"composition"`
+	Composition  NativeComposition  `json:"composition"`
 	TimelineItem NativeTimelineItem `json:"timelineItem"`
 }
 
@@ -48,17 +48,26 @@ type NativeComposition struct {
 }
 
 type NativeCompositionControls struct {
-	Version  int                    `json:"version"`
-	Controls []NativeControl        `json:"controls"`
+	Version  int             `json:"version"`
+	Controls []NativeControl `json:"controls"`
+}
+
+type NativeControlOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type NativeControl struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	TargetItemID string `json:"targetItemId"`
-	Property     string `json:"property"`
-	Kind         string `json:"kind"`
-	DefaultValue string `json:"defaultValue"`
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	TargetItemID string                `json:"targetItemId"`
+	Property     string                `json:"property"`
+	Kind         string                `json:"kind"`
+	DefaultValue string                `json:"defaultValue"`
+	Min          *float64              `json:"min,omitempty"`
+	Max          *float64              `json:"max,omitempty"`
+	Step         *float64              `json:"step,omitempty"`
+	Options      []NativeControlOption `json:"options,omitempty"`
 }
 
 type NativeTrack struct {
