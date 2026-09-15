@@ -94,6 +94,7 @@ export default defineConfig({
           'OPENPOST_JWT_SECRET="jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"',
           'OPENPOST_ENCRYPTION_KEY="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"',
           "OPENPOST_DISABLE_REGISTRATIONS=false",
+          "OPENPOST_AUNO_E2E_FIXTURES=1",
           "OPENPOST_EMAIL_PROVIDER=smtp",
           'OPENPOST_EMAIL_FROM="OpenPost <hello@openpost.test>"',
           `OPENPOST_SMTP_HOST=${host}`,
