@@ -10,7 +10,7 @@ import { createCloudDocumentaryProject } from './project-handoff';
 import { workspaceCtx } from '$lib/stores/workspace.svelte';
 import { editorSession } from '$lib/video-editor/editor.svelte';
 import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
-import type { TimelineItem } from '$lib/video-editor/project/types';
+import type { Project, TimelineItem } from '$lib/video-editor/project/types';
 
 interface VoxFixtureSummary {
 	runId: string;
@@ -65,7 +65,7 @@ async function waitForEditorProject(projectId?: string): Promise<void> {
 	throw new Error(`Auno documentary editor project ${projectId ?? ''} did not become ready`);
 }
 
-function findCompositionFixture(project: NonNullable<typeof editorSession.project> | Awaited<ReturnType<typeof createCloudDocumentaryProject>>['project']) {
+function findCompositionFixture(project: Project) {
 	const timeline = project.timeline;
 	const item = timeline?.items.find(
 		(candidate): candidate is TimelineItem & { type: 'composition'; compositionId: string } =>
