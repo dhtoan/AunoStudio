@@ -135,12 +135,30 @@ export interface AutoVideoGeneratedMedia {
 	music?: AutoVideoMusicAsset;
 }
 
+export type AutoVideoVisualIssueCode =
+	| 'visual.blank_scene'
+	| 'visual.text_clipped'
+	| 'visual.text_overlap'
+	| 'visual.missing_subject'
+	| 'visual.low_contrast'
+	| 'visual.invalid_transform'
+	| 'visual.composition_error';
+
+export interface AutoVideoVisualIssue {
+	code: AutoVideoVisualIssueCode;
+	severity: 'warning' | 'error';
+	message: string;
+	sceneId?: string;
+	itemId?: string;
+}
+
 export interface AutoVideoMotionState {
 	schemaVersion: 1;
 	style: string;
 	seed: number;
 	brief?: StyleBrief;
 	diagnostics?: MotionValidationIssue[];
+	visualDiagnostics?: AutoVideoVisualIssue[];
 	probePlan?: MotionProbePlan;
 	probeSignature?: string;
 }
