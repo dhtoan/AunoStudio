@@ -209,7 +209,8 @@
 				projectId,
 				style: motionStyle,
 				seed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,
-				scenes: sidecar.storyboard.scenes
+				scenes: sidecar.storyboard.scenes,
+				customization: previousMotion?.customization
 			});
 			const motionDiagnostics = validateMotionGraph(graph);
 			const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
@@ -246,6 +247,7 @@
 						style: graph.style,
 						seed: graph.seed,
 						brief: graph.brief,
+						customization: previousMotion?.customization,
 						diagnostics: motionDiagnostics,
 						visualDiagnostics,
 						probePlan: motionProbePlan,
@@ -286,7 +288,8 @@
 					projectId,
 					style,
 					seed: savedMotion.seed,
-					scenes: nextSidecar.storyboard.scenes
+					scenes: nextSidecar.storyboard.scenes,
+					customization: savedMotion.customization
 				});
 				const motionDiagnostics = validateMotionGraph(graph);
 				const motionProbePlan = createMotionProbePlan(graph, project.metadata.fps);
@@ -322,6 +325,7 @@
 							style: graph.style,
 							seed: graph.seed,
 							brief: graph.brief,
+							customization: savedMotion.customization,
 							diagnostics: motionDiagnostics,
 							visualDiagnostics,
 							probePlan: motionProbePlan,
