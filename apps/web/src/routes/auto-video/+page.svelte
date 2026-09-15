@@ -7,6 +7,8 @@
 	import WorkspaceGatePanel from '$lib/video-editor/components/workspace-gate-panel.svelte';
 	import { createWorkspaceGate } from '$lib/video-editor/gate/workspace-gate.svelte';
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
+	import { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';
+	import type { Project } from '$lib/video-editor/project/types';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
 		AUTO_VIDEO_CANVAS_SETTINGS,
@@ -17,7 +19,7 @@
 		AUTO_VIDEO_FORMAT_LABELS,
 		AUTO_VIDEO_FORMAT_SCENES
 	} from '$lib/auno/auto-video/formats';
-	import { saveAutoVideoSidecar } from '$lib/auno/auto-video/sidecar';
+	import { saveAutoVideoSidecar, saveAutoVideoSidecarRemote } from '$lib/auno/auto-video/sidecar';
 	import { buildStarterStoryboard } from '$lib/auno/auto-video/storyboard';
 	import type {
 		AutoVideoFormat,
@@ -33,6 +35,7 @@
 	let language = $state('en-US');
 	let targetDurationSeconds = $state(45);
 	let canvas = $state<AutoVideoCanvasPreset>('vertical');
+	let storageMode = $state<'cloud' | 'local'>('cloud');
 	let storyboard = $state<AutoVideoStoryboard | null>(null);
 	let activeSource = $state<AutoVideoSource | null>(null);
 	let plannerModel = $state('starter-fallback');
@@ -108,27 +111,50 @@
 	async function createAndOpenProject(): Promise<void> {
 		if (!storyboard || !activeSource || creating) return;
 		error = '';
-		if (gate.state !== 'ready') {
-			error = 'Choose or reconnect a Video Editor workspace folder before creating the project.';
+		const workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';
+		if (storageMode === 'local' && gate.state !== 'ready') {
+			error = 'Choose or reconnect a Video Editor workspace folder before creating the local project.';
+			return;
+		}
+		if (storageMode === 'cloud' && !workspaceId) {
+			error = 'Select an Auno Studio workspace before creating a cloud project.';
 			return;
 		}
 
 		creating = true;
 		try {
 			const project = compileStoryboardToProject(storyboard, canvas);
-			await createProject(project);
 			const now = Date.now();
-			saveAutoVideoSidecar({
-				version: 1,
+			const sidecar = {
+				version: 1 as const,
 				projectId: project.id,
 				generationVersion: 1,
+				templateId: storyboard.format,
 				createdAt: now,
 				updatedAt: now,
 				source: activeSource,
 				storyboard,
-				providerManifest: { planner: plannerModel }
-			});
-			await goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));
+				providerManifest: { planner: plannerModel },
+				generationGraph: {
+					version: 1 as const,
+					blocks: storyboard.scenes.map((scene) => ({
+						sceneId: scene.id,
+						ownedItemIds: [`${scene.id}-background`, `${scene.id}-text`],
+						userModifiedItemIds: []
+					}))
+				}
+			};
+
+			if (storageMode === 'cloud') {
+				const repository = new CloudVideoProjectRepository<Project>(workspaceId);
+				const cloudProject = await repository.createWithId(project.id, project.name, project);
+				await saveAutoVideoSidecarRemote(workspaceId, sidecar);
+				await goto(resolveAppPath(`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video`));
+			} else {
+				await createProject(project);
+				saveAutoVideoSidecar(sidecar);
+				await goto(resolveAppPath(`/video-editor/${project.id}?auno=auto-video`));
+			}
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : String(cause);
 		} finally {
@@ -179,7 +205,7 @@
 				></textarea>
 			</label>
 
-			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 				<label class="space-y-2 text-sm font-medium">
 					<span>Format</span>
 					<select bind:value={format} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
@@ -206,6 +232,13 @@
 					</select>
 				</label>
 				<label class="space-y-2 text-sm font-medium">
+					<span>Storage</span>
+					<select bind:value={storageMode} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+						<option value="cloud">Cloud Workspace</option>
+						<option value="local">Local-only</option>
+					</select>
+				</label>
+				<label class="space-y-2 text-sm font-medium">
 					<span>Language</span>
 					<select bind:value={language} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
 						<option value="en-US">English (US)</option>
@@ -224,13 +257,19 @@
 
 		<section class="space-y-4 rounded-xl border bg-card p-5">
 			<div>
-				<h2 class="font-semibold">Video Editor workspace</h2>
-				<p class="mt-1 text-sm text-muted-foreground">The generated project is saved as a normal editable Video Editor project.</p>
+				<h2 class="font-semibold">Project storage</h2>
+				<p class="mt-1 text-sm text-muted-foreground">Cloud Workspace syncs native project revisions and AI metadata. Local-only keeps the project in your selected browser folder.</p>
 			</div>
-			{#if gate.state !== 'ready'}
+			{#if storageMode === 'cloud'}
+				{#if workspaceCtx.currentWorkspace?.id}
+					<InlineNotice tone="success">Cloud Workspace ready. The native project and Auto Video metadata will sync to this workspace.</InlineNotice>
+				{:else}
+					<InlineNotice tone="warning">Select a workspace to use Cloud Workspace storage.</InlineNotice>
+				{/if}
+			{:else if gate.state !== 'ready'}
 				<WorkspaceGatePanel {gate} />
 			{:else}
-				<InlineNotice tone="success">Workspace ready. Native project creation is available.</InlineNotice>
+				<InlineNotice tone="success">Local Video Editor workspace ready.</InlineNotice>
 			{/if}
 		</section>
 	</div>
@@ -242,7 +281,10 @@
 					<p class="text-sm font-medium text-muted-foreground">Storyboard · {plannerModel}{sourceTruncated ? ' · source shortened to safe extraction limit' : ''}</p>
 					<h2 class="text-xl font-semibold">{storyboard.title}</h2>
 				</div>
-				<Button onclick={createAndOpenProject} disabled={creating || gate.state !== 'ready'}>
+				<Button
+					onclick={createAndOpenProject}
+					disabled={creating || (storageMode === 'local' ? gate.state !== 'ready' : !workspaceCtx.currentWorkspace?.id)}
+				>
 					{creating ? 'Creating project…' : 'Open in Video Editor'}
 				</Button>
 			</div>
