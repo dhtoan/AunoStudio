@@ -1,0 +1,29 @@
+name: Apply Auno Manual Keyframe Protection
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/auno-preserve-manual-keyframes-apply.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Apply source patch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/auno_preserve_manual_keyframes_patch.py
+          path='apps/web/src/lib/auno/motion/native-compiler.ts'
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
+          encoded="$(base64 -w0 "$path")"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+            -f message='fix: preserve manual keyframes during motion regeneration' \
+            -f branch=main \
+            -f content="$encoded" \
+            -f sha="$sha" >/dev/null
