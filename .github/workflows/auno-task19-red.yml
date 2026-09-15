@@ -24,7 +24,7 @@ on:
 jobs:
   browser-red:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -43,6 +43,8 @@ jobs:
           fi
       - name: Run dev fixture generator contract
         run: cd apps/server && go test -tags dev ./cmd/openpost -run TestAunoE2EPlannerGeneratorIsOptInAndStructured -count=1 -v
+      - name: Build production web embed
+        run: bun run build -- frontend
       - name: Run production fixture guard contract
         run: cd apps/server && go test ./cmd/openpost -run TestAunoE2EPlannerGeneratorIsUnavailableInProduction -count=1 -v
       - name: Install Chromium
