@@ -86,7 +86,7 @@ export default defineConfig({
       cwd: repositoryRoot,
       command: [
         `rm -f ${dbPath}`,
-        ...(usePrebuiltArtifact ? [] : ["bun run build -- frontend"]),
+        ...(usePrebuiltArtifact ? [] : ["VITE_AUNO_E2E=1 bun run build -- frontend"]),
         [
           "cd apps/server &&",
           `OPENPOST_PORT=${port}`,
