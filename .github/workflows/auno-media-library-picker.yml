@@ -1,0 +1,69 @@
+name: Wire Auto Video Media Library Picker
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-media-library-picker.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Media Library picker into Auto Video
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = path.read_text()
+
+          anchor = "\timport { uploadMediaFile } from '$lib/media-upload-client';\n"
+          addition = anchor + "\timport {\n\t\tautoVideoMediaKind,\n\t\tlistAutoVideoLibraryMedia,\n\t\ttype AutoVideoLibraryMedia\n\t} from '$lib/auno/auto-video/media-library';\n"
+          if "listAutoVideoLibraryMedia" not in text:
+              if anchor not in text: raise SystemExit('missing media upload import anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tlet sourceUploading = $state(false);\n"
+          addition = anchor + "\tlet libraryMedia = $state.raw<AutoVideoLibraryMedia[]>([]);\n\tlet libraryLoading = $state(false);\n\tlet selectedLibraryMediaId = $state('');\n"
+          if "let libraryMedia" not in text:
+              if anchor not in text: raise SystemExit('missing sourceUploading state anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tasync function loadMediaSourceFile(event: Event): Promise<void> {\n"
+          helpers = "\tasync function loadMediaLibrary(): Promise<void> {\n\t\tconst workspaceId = workspaceCtx.currentWorkspace?.id?.trim() ?? '';\n\t\terror = '';\n\t\tif (!workspaceId) {\n\t\t\terror = 'Select an Auno Studio workspace before browsing Media Library.';\n\t\t\treturn;\n\t\t}\n\t\tlibraryLoading = true;\n\t\ttry {\n\t\t\tlibraryMedia = await listAutoVideoLibraryMedia(workspaceId);\n\t\t\tif (libraryMedia.length === 0) {\n\t\t\t\terror = 'No ready PDF, image, or video assets up to 25 MB were found in this workspace.';\n\t\t\t}\n\t\t} catch (cause) {\n\t\t\terror = cause instanceof Error ? cause.message : String(cause);\n\t\t} finally {\n\t\t\tlibraryLoading = false;\n\t\t}\n\t}\n\n\tfunction chooseLibraryMedia(event: Event): void {\n\t\tconst mediaId = (event.currentTarget as HTMLSelectElement).value;\n\t\tselectedLibraryMediaId = mediaId;\n\t\tconst item = libraryMedia.find((entry) => entry.id === mediaId);\n\t\tif (!item) return;\n\t\tconst kind = autoVideoMediaKind(item.mime_type);\n\t\tif (!kind) return;\n\t\tsourceKind = 'media';\n\t\tsourceMediaId = item.id;\n\t\tsourceMimeType = item.mime_type ?? '';\n\t\tsourceValue = `Selected Media Library ${kind} source: ${item.id}`;\n\t\tif (!title.trim()) title = `Media ${item.id.slice(0, 8)}`;\n\t\tstoryboard = null;\n\t\tactiveSource = null;\n\t}\n\n"
+          if "async function loadMediaLibrary" not in text:
+              if anchor not in text: raise SystemExit('missing media source helper anchor')
+              text = text.replace(anchor, helpers + anchor, 1)
+
+          option_anchor = "\t\t\t\t\t\t<option value=\"txt\">TXT file</option>\n"
+          if '<option value="media">Media Library</option>' not in text:
+              if option_anchor not in text: raise SystemExit('missing source type option anchor')
+              text = text.replace(option_anchor, option_anchor + "\t\t\t\t\t\t<option value=\"media\">Media Library</option>\n", 1)
+
+          media_upload_hint = "\t\t\t\t<span class=\"text-xs text-muted-foreground\">Stored in Workspace Media · up to 25 MB · analyzed as multimodal source</span>\n\t\t\t</div>\n"
+          picker = media_upload_hint + "\n\t\t\t<div class=\"space-y-2 rounded-lg border bg-muted/20 p-3\">\n\t\t\t\t<div class=\"flex flex-wrap items-center justify-between gap-2\">\n\t\t\t\t\t<div>\n\t\t\t\t\t\t<p class=\"text-xs font-medium\">Media Library</p>\n\t\t\t\t\t\t<p class=\"text-[11px] text-muted-foreground\">Reuse an existing ready PDF, image, or video without uploading it again.</p>\n\t\t\t\t\t</div>\n\t\t\t\t\t<Button type=\"button\" size=\"sm\" variant=\"outline\" onclick={loadMediaLibrary} disabled={libraryLoading}>\n\t\t\t\t\t\t{libraryLoading ? 'Loading…' : libraryMedia.length > 0 ? 'Refresh library' : 'Browse library'}\n\t\t\t\t\t</Button>\n\t\t\t\t</div>\n\t\t\t\t{#if libraryMedia.length > 0}\n\t\t\t\t\t<select value={selectedLibraryMediaId} onchange={chooseLibraryMedia} class=\"h-10 w-full rounded-md border bg-background px-3 text-sm\" aria-label=\"Media Library source\">\n\t\t\t\t\t\t<option value=\"\">Select a Media Library asset…</option>\n\t\t\t\t\t\t{#each libraryMedia as item (item.id)}\n\t\t\t\t\t\t\t<option value={item.id}>\n\t\t\t\t\t\t\t\t{(autoVideoMediaKind(item.mime_type) ?? 'media').toUpperCase()} · {item.id.slice(0, 8)} · {((item.size ?? 0) / 1024 / 1024).toFixed(1)} MB\n\t\t\t\t\t\t\t</option>\n\t\t\t\t\t\t{/each}\n\t\t\t\t\t</select>\n\t\t\t\t\t{#if selectedLibraryMediaId}\n\t\t\t\t\t\t<p class=\"text-[11px] text-muted-foreground\">Selected asset {selectedLibraryMediaId.slice(0, 12)}… will be analyzed through the configured multimodal provider.</p>\n\t\t\t\t\t{/if}\n\t\t\t\t{/if}\n\t\t\t</div>\n"
+          if "Reuse an existing ready PDF" not in text:
+              if media_upload_hint not in text: raise SystemExit('missing media upload UI anchor')
+              text = text.replace(media_upload_hint, picker, 1)
+
+          text = text.replace(
+              "error = 'Add source text, Markdown, a TXT/Markdown file, or a URL first.';",
+              "error = 'Add text, Markdown, a TXT/Markdown file, URL, PDF/image/video file, or Media Library asset first.';"
+          )
+
+          path.write_text(text)
+          PY
+
+          path='apps/web/src/routes/auto-video/+page.svelte'
+          api_path='apps/web/src/routes/auto-video/%2Bpage.svelte'
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+            -f message='feat: browse Media Library sources in Auto Video' \
+            -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
