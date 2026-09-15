@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -22,6 +23,7 @@
 	import { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';
 	import { applyMotionGraphToLiveTimeline } from '$lib/auno/motion/live-applier';
 	import { editorSession } from '$lib/video-editor/editor.svelte';
+	import { inspectMusicGenerationStorage } from '$lib/video-editor/local-ai/music/ace-step-service';
 
 	let {
 		projectId,
@@ -38,6 +40,7 @@
 	let voiceProgress = $state('');
 	let motionStyle = $state<MotionStyleId>('editorial-fashion');
 	let motionBusy = $state(false);
+	let autoEnrichmentStarted = false;
 	let status = $state('');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id?.trim() ?? '');
@@ -286,8 +289,37 @@
 		}
 	}
 
+	async function runRequestedAutoEnrichment(): Promise<void> {
+		if (!sidecar || autoEnrichmentStarted) return;
+		const requested = new Set(
+			(page.url.searchParams.get('autogen') ?? '')
+				.split(',')
+				.map((value) => value.trim())
+				.filter(Boolean)
+		);
+		if (requested.size === 0) return;
+		autoEnrichmentStarted = true;
+		if (requested.has('voice') && (sidecar.generationGraph?.media?.voices?.length ?? 0) === 0) {
+			await generateVoices();
+		}
+		if (requested.has('captions') && sidecar && !sidecar.generationGraph?.media?.captions) {
+			await generateCaptions();
+		}
+		if (requested.has('music-if-ready') && sidecar && !sidecar.generationGraph?.media?.music) {
+			try {
+				const storage = await inspectMusicGenerationStorage('standard');
+				if (storage.missingBytes === 0 && storage.sufficient) await generateMusic();
+			} catch {
+				// Optional background music never blocks a completed Auto Video project.
+			}
+		}
+	}
+
 	onMount(() => {
-		void refreshSidecar();
+		void (async () => {
+			await refreshSidecar();
+			await runRequestedAutoEnrichment();
+		})();
 	});
 </script>
 
