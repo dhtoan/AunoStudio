@@ -1,0 +1,45 @@
+name: Surface Auno Motion Diagnostics
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-motion-diagnostics-ui.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Motion diagnostics UI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte')
+          text = path.read_text()
+
+          anchor = "\tconst hasMusic = $derived(Boolean(sidecar?.generationGraph?.media?.music));\n"
+          addition = anchor + "\tconst motionIssues = $derived(sidecar?.generationGraph?.motion?.diagnostics ?? []);\n\tconst motionErrorCount = $derived(motionIssues.filter((issue) => issue.severity === 'error').length);\n"
+          if "const motionIssues = $derived" not in text:
+              if anchor not in text: raise SystemExit('missing motion derived anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\t\t\t\t<div class=\"grid grid-cols-3 gap-1.5\">\n"
+          markup = "\t\t\t\t{#if motionIssues.length > 0}\n\t\t\t\t\t<div class=\"space-y-1.5 rounded-md border border-[var(--video-editor-border)] bg-[var(--video-editor-control)] p-2.5\">\n\t\t\t\t\t\t<div class=\"flex items-center justify-between gap-2\">\n\t\t\t\t\t\t\t<p class=\"text-[11px] font-medium text-[var(--video-editor-text)]\">Motion diagnostics</p>\n\t\t\t\t\t\t\t<span class=\"text-[10px] text-[var(--video-editor-muted)]\">{motionErrorCount > 0 ? `${motionErrorCount} error` : `${motionIssues.length} warning${motionIssues.length === 1 ? '' : 's'}`}</span>\n\t\t\t\t\t\t</div>\n\t\t\t\t\t\t{#each motionIssues.slice(0, 4) as issue (`${issue.code}:${issue.sceneId ?? 'project'}`)}\n\t\t\t\t\t\t\t<p class=\"text-[10px] leading-relaxed text-[var(--video-editor-muted)]\">\n\t\t\t\t\t\t\t\t{issue.severity === 'error' ? 'Error' : 'Warning'} · {issue.message}\n\t\t\t\t\t\t\t</p>\n\t\t\t\t\t\t{/each}\n\t\t\t\t\t\t{#if motionIssues.length > 4}\n\t\t\t\t\t\t\t<p class=\"text-[10px] text-[var(--video-editor-muted)]\">+{motionIssues.length - 4} more</p>\n\t\t\t\t\t\t{/if}\n\t\t\t\t\t</div>\n\t\t\t\t{/if}\n\n"
+          if "Motion diagnostics</p>" not in text:
+              if anchor not in text: raise SystemExit('missing media controls anchor')
+              text = text.replace(anchor, markup + anchor, 1)
+
+          path.write_text(text)
+          PY
+
+          path='apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte'
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+            -f message='feat: show Motion diagnostics in Auno AI panel' \
+            -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
