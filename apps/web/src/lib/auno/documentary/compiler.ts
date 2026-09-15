@@ -119,16 +119,16 @@ function placeholderBackground(beatId: string, from: number, durationInFrames: n
 		label: `${beatId} archival paper`,
 		type: 'background',
 		background: {
-			kind: 'shader',
-			shader: 'paper:paper-01',
-			colors: ['#D7C3A3', '#B8A489', '#69635B', '#171411'],
-			speed: 0,
-			phase: index * 0.07,
-			detail: 0.35,
-			rotation: 0,
-			scale: 1.04,
+			kind: 'pattern',
+			pattern: 'grid',
+			foreground: '#69635B',
+			background: '#D7C3A3',
+			scale: 1.15,
+			rotation: index % 2 === 0 ? -0.7 : 0.7,
 			offsetX: 0,
-			offsetY: 0
+			offsetY: 0,
+			density: 0.18,
+			foregroundOpacity: 0.08
 		}
 	};
 }
