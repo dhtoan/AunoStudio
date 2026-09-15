@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { resolveAppPath } from '$lib/app-path';
 	import {
 		isMoreNavigationRoute,
 		isNavigationItemActive,
 		mobileNavigation
 	} from '$lib/app-navigation';
+	import { AUNO_CREATE_ACTIONS } from '$lib/auno/create-actions';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -23,7 +23,6 @@
 	function focusMoreMenuOnOpen(event: Event) {
 		if (!moreMenuContent) return;
 		event.preventDefault();
-		// Floating-layer setup must not replace a keyboard choice made while opening.
 		if (!moreMenuContent.contains(moreMenuContent.ownerDocument.activeElement)) {
 			moreMenuContent.focus({ preventScroll: true });
 		}
@@ -67,6 +66,14 @@
 		}
 		goto(resolveAppPath(item.id === 'publications' ? publicationView.href : item.href));
 	}
+
+	function openCreateAction(href: string) {
+		if (href === '/') {
+			if (!ui.startNewPost()) return;
+			if (pathname === '/') return;
+		}
+		goto(resolveAppPath(href));
+	}
 </script>
 
 <nav
@@ -87,33 +94,23 @@
 									{...props}
 									type="button"
 									class="flex min-h-11 w-full items-center justify-center rounded-md text-primary focus-visible:ring-2 focus-visible:ring-ring"
-									aria-label={m.sidebar_new()}><ThemeIcon role="add" class="size-6" /></button
-								>
+									aria-label="Create"
+								><ThemeIcon role="add" class="size-6" /></button>
 							{/snippet}
 						</DropdownMenu.Trigger>
-						<DropdownMenu.Content side="top" align="center" class="w-[min(18rem,calc(100vw-2rem))]">
-							<DropdownMenu.Item class="min-h-11 gap-3" onclick={() => navigate(item)}
-								><ThemeIcon
-									role="compose"
-									class="size-4"
-								/>{m.sidebar_new_post()}</DropdownMenu.Item
-							>
-							<DropdownMenu.Item
-								class="min-h-11 gap-3"
-								onclick={() => goto(resolveAppPath('/image-editor'))}
-								><ThemeIcon
-									role="image"
-									class="size-4"
-								/>{m.image_editor_title()}</DropdownMenu.Item
-							>
-							<DropdownMenu.Item
-								class="min-h-11 gap-3"
-								onclick={() => goto(resolveAppPath('/video-editor'))}
-								><ThemeIcon
-									role="video"
-									class="size-4"
-								/>{m.video_editor_title()}</DropdownMenu.Item
-							>
+						<DropdownMenu.Content side="top" align="center" class="w-[min(20rem,calc(100vw-2rem))]">
+							{#each AUNO_CREATE_ACTIONS as action (action.id)}
+								<DropdownMenu.Item
+									class="min-h-11 gap-3"
+									onclick={() => openCreateAction(action.href)}
+								>
+									<ThemeIcon role={action.icon} class="size-4" />
+									<div class="min-w-0">
+										<div>{action.label}</div>
+										<div class="truncate text-xs text-muted-foreground">{action.description}</div>
+									</div>
+								</DropdownMenu.Item>
+							{/each}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
 				{:else}
@@ -131,8 +128,7 @@
 						aria-label={labelFor(item.id)}
 					>
 						<span class="flex size-7 items-center justify-center"
-							><ThemeIcon role={icon} class="size-5" /></span
-						>
+							><ThemeIcon role={icon} class="size-5" /></span>
 					</button>
 				{/if}
 			</li>
