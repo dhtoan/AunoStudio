@@ -87,15 +87,28 @@ export interface AutoVideoStoryboard {
 	scenes: AutoVideoScene[];
 }
 
+export interface AutoVideoGenerationBlock {
+	sceneId: string;
+	ownedItemIds: string[];
+	userModifiedItemIds: string[];
+}
+
+export interface AutoVideoGenerationGraph {
+	version: 1;
+	blocks: AutoVideoGenerationBlock[];
+}
+
 export interface AutoVideoSidecar {
 	version: 1;
 	projectId: string;
 	generationVersion: number;
+	templateId?: string;
 	createdAt: number;
 	updatedAt: number;
 	source: AutoVideoSource;
 	storyboard: AutoVideoStoryboard;
 	providerManifest: Record<string, string>;
+	generationGraph?: AutoVideoGenerationGraph;
 }
 
 export interface BuildStoryboardInput {
