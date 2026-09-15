@@ -723,6 +723,13 @@ func main() {
 	if autoVideoPlanner != nil {
 		log.Printf("Auno Auto Video planner enabled with model %s via %s", autoVideoModel, autoVideoProvider)
 	}
+	documentaryPlanner, documentaryModel, documentaryProvider, err := aunoDocumentaryPlanner(cfg, contentGenerator)
+	if err != nil {
+		fatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Documentary planner: %v", err)
+	}
+	if documentaryPlanner != nil {
+		log.Printf("Auno Documentary planner enabled with model %s via %s", documentaryModel, documentaryProvider)
+	}
 
 	var publicSourceLoader sourcecontext.Loader
 	var publicationBuilderApplication *publicationbuilder.Application
@@ -911,6 +918,7 @@ func main() {
 		MemeSuggester:             memeSuggester,
 		PostBuilder:               postBuilder,
 		AutoVideoPlanner:          autoVideoPlanner,
+		DocumentaryPlanner:        documentaryPlanner,
 		ContentBuilderEnabled:     publicationBuilderApplication != nil,
 		ContentDiscoveryEnabled:   publicationDiscoveryService != nil,
 		PublicationBuilder:        publicationBuilderApplication,
