@@ -13,6 +13,7 @@ import (
 	"github.com/openpost/backend/internal/ai"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/services/autovideo"
+	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/ratelimit"
 	"github.com/openpost/backend/internal/services/sourcecontext"
 	"github.com/uptrace/bun"
@@ -24,6 +25,7 @@ type AutoVideoHandler struct {
 	db           *bun.DB
 	auth         middleware.Authenticator
 	planner      autovideo.Planner
+	storage      mediastore.BlobStorage
 	sourceLoader sourcecontext.Loader
 	limiter      *ratelimit.Limiter
 }
@@ -33,7 +35,9 @@ type autoVideoSourceBody struct {
 	Kind  string `json:"kind" required:"true"`
 	Label string `json:"label" required:"true"`
 	Value string `json:"value" required:"true" minLength:"1" maxLength:"50000"`
-	URL   string `json:"url,omitempty"`
+	URL      string `json:"url,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
+	MediaID  string `json:"media_id,omitempty"`
 }
 
 type ResolveAutoVideoSourceInput struct {
@@ -83,9 +87,9 @@ type AunoAICapabilitiesOutput struct {
 	}
 }
 
-func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner) *AutoVideoHandler {
+func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner, storage mediastore.BlobStorage) *AutoVideoHandler {
 	loader, _ := sourcecontext.New(sourcecontext.Config{})
-	return &AutoVideoHandler{db: db, auth: auth, planner: planner, sourceLoader: loader, limiter: ratelimit.New()}
+	return &AutoVideoHandler{db: db, auth: auth, planner: planner, storage: storage, sourceLoader: loader, limiter: ratelimit.New()}
 }
 
 func (h *AutoVideoHandler) RegisterRoutes(api huma.API) {
@@ -196,7 +200,7 @@ func (h *AutoVideoHandler) checkWorkspace(ctx context.Context, workspaceID strin
 func sourceFromBody(source autoVideoSourceBody) autovideo.Source {
 	return autovideo.Source{
 		ID: source.ID, Kind: source.Kind, Label: source.Label,
-		Value: source.Value, URL: source.URL,
+		Value: source.Value, URL: source.URL, MIMEType: source.MIMEType, MediaID: source.MediaID,
 	}
 }
 
@@ -250,12 +254,21 @@ func (h *AutoVideoHandler) generate(ctx context.Context, input *GenerateAutoVide
 		return nil, huma.Error429TooManyRequests("AI Auto Video planning limit reached; try again in one minute")
 	}
 
+	source := sourceFromBody(input.Body.Source)
+	source, parts, mediaErr := resolveAutoVideoMediaSource(ctx, h.db, h.storage, input.Body.WorkspaceID, source)
+	if mediaErr != nil {
+		if errors.Is(mediaErr, errAutoVideoMediaInvalid) {
+			return nil, huma.Error400BadRequest("Auto Video media source is invalid, unavailable, too large, or unsupported")
+		}
+		return nil, huma.Error503ServiceUnavailable("Auto Video media source could not be read")
+	}
 	result, err := h.planner.Plan(ctx, autovideo.Input{
 		Format:                input.Body.Format,
 		Title:                 input.Body.Title,
 		Language:              input.Body.Language,
 		TargetDurationSeconds: input.Body.TargetDurationSeconds,
-		Source:                sourceFromBody(input.Body.Source),
+		Source:                source,
+		Parts:                 parts,
 	})
 	if err != nil {
 		log.Printf("Auno Auto Video planning failed for workspace %s (%T)", strings.TrimSpace(input.Body.WorkspaceID), err)
