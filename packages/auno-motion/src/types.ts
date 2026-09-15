@@ -9,7 +9,8 @@ export const MOTION_STYLE_IDS = [
   'cartoon-collage',
   'vintage-sketch',
   'breaking-news',
-  'minimal-data'
+  'minimal-data',
+  'documentary-paper-collage'
 ] as const;
 
 export type MotionStyleId = (typeof MOTION_STYLE_IDS)[number];
