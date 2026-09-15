@@ -14,6 +14,13 @@ export const MOTION_STYLE_IDS = [
 
 export type MotionStyleId = (typeof MOTION_STYLE_IDS)[number];
 
+export type MotionTransitionKind =
+  | 'crossfade'
+  | 'depth-push'
+  | 'match-movement'
+  | 'hard-cut'
+  | 'slide';
+
 export interface StyleBrief {
   palette: string[];
   typography: string;
@@ -21,6 +28,15 @@ export interface StyleBrief {
   motionSignature: string;
   backgroundLanguage: string;
   transitionLanguage: string[];
+}
+
+/** User-authored style overrides. All fields are optional and remain preset-relative. */
+export interface MotionStyleCustomization {
+  palette?: string[];
+  cameraLanguage?: string;
+  motionIntensity?: number;
+  backgroundLanguage?: string;
+  transitionLanguage?: MotionTransitionKind[];
 }
 
 export interface CameraPlan {
@@ -55,7 +71,7 @@ export interface TextMotionPlan {
 }
 
 export interface MotionTransition {
-  kind: 'crossfade' | 'depth-push' | 'match-movement' | 'hard-cut' | 'slide';
+  kind: MotionTransitionKind;
   durationSeconds: number;
 }
 
