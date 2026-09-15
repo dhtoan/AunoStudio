@@ -1,0 +1,18 @@
+name: Task 18 Go parity TDD gate
+
+on:
+  push:
+    paths:
+      - .github/workflows/auno-task18-go-parity-tdd.yml
+      - apps/server/internal/aunomotion/compiler.go
+      - apps/server/internal/aunomotion/compiler_test.go
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+      - run: cd apps/server && go test ./internal/aunomotion -run TestCompileCompositionOverlaysDocumentaryPaperParity -v
