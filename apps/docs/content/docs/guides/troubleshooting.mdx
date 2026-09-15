@@ -1,0 +1,47 @@
+---
+title: Troubleshooting
+description: Fix common connection, media, scheduling, and delivery problems.
+icon: CircleQuestionMark
+---
+
+Start with the error shown on the affected post or account. Note the provider, destination, and exact error text. Those details tell you whether to fix a connection, change a file, or retry delivery.
+
+## An account will not connect
+
+1. Sign in to the provider directly and confirm you can access the profile, Page, or channel you want to connect.
+2. In OpenPost, reconnect the account and approve the requested permissions. Use the provider account that owns or manages the destination.
+3. For Bluesky, use an app password. For a custom Mastodon server, use its public HTTPS address.
+
+If you use Hosted, OpenPost manages the provider app. If you self-host, also check the [provider setup guide](/self-hosting/integrations): the callback URL must match your public origin exactly, and the app must have the required permissions or approval.
+
+See [Connect accounts](/guides/accounts) for connection types and reconnect behavior.
+
+## A provider rejects media
+
+- Check the destination's file type, size, duration, and attachment limits in the composer.
+- Preview the media and confirm you attached the finished export, not an editor project.
+- If the error says the provider cannot fetch a URL, check that the media is reachable over public HTTPS. A URL that works only on your local network will fail for providers that download it themselves.
+
+OpenPost may accept an upload that a particular provider cannot publish. Adjust the version for that destination or [prepare a new export](/guides/media), then retry the failed destination.
+
+## A scheduled post did not publish
+
+Open **Publications**, select the post, and inspect the account that failed. Fix the reported permission, connection, or media problem, then retry that destination. You do not need to republish destinations that already succeeded.
+
+If the post is still **Scheduled**, it has not failed. Check its date, time, and the timezone shown in the composer before retrying anything. See [Schedule and calendar](/guides/scheduling).
+
+## A self-hosted server is not ready
+
+From the directory containing your Compose file, check the service and recent logs:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 openpost
+curl -i http://localhost:8080/api/v1/ready
+```
+
+If the container is stopped, read its error in the logs. If it runs but readiness fails, check free disk space and access to the configured database and media paths. Read [configuration](/self-hosting/configuration) and [backup and recovery](/self-hosting/maintenance) before changing storage or restoring data.
+
+## Get help
+
+If the problem remains, [report an issue](https://github.com/getopenpost/openpost/issues) with the affected provider, whether you use Hosted or self-hosting, the steps that failed, and the error text. Remove tokens, passwords, and private media URLs before sharing logs or screenshots.

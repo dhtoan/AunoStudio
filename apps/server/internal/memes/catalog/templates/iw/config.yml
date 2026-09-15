@@ -1,0 +1,37 @@
+name: Insanity Wolf
+source: http://knowyourmeme.com/memes/insanity-wolf
+keywords:
+  -
+text:
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.0
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.8
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - does testing
+  - in production
+overlay:
+  - center_x: 0.505
+    center_y: 0.515
+    angle: 0.0
+    scale: 0.525
+    start: 0.0
+    stop: 1.0

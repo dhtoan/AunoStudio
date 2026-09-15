@@ -1,0 +1,35 @@
+---
+title: Tools and permissions
+description: Understand OpenPost MCP tools, scopes, and safe request patterns.
+icon: Wrench
+---
+
+OpenPost gives assistants a small set of tools. The assistant can find a supported operation, read the fields it needs, and run it. You can ask in ordinary language; you do not need to name a tool or write an API request.
+
+## Choose access
+
+Choose the narrowest scope that fits the job:
+
+| Scope      | Can do                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `mcp:read` | Search and inspect read operations, query data, and review the schedule                                      |
+| `mcp:full` | Everything in `mcp:read`, plus execute write operations such as creating, editing, scheduling, or publishing |
+
+If you omit an OAuth scope, OpenPost defaults to `mcp:full`. Select `mcp:read` explicitly when you only need inspection. Developer tokens can use these MCP scopes or the broader `cli:full` scope. A token's workspace access is separate from its MCP scope; bind it to one workspace when possible.
+
+## Try a request
+
+Try these after connecting:
+
+```text
+List my workspaces and tell me which one you are using.
+Review this week's scheduled publications and flag anything missing media.
+Show the connected accounts that can publish to LinkedIn.
+Draft a launch post for the selected workspace, but do not schedule or publish it.
+```
+
+For a write-capable connection, say where to stop: "Create the draft, then stop for my review." A client's confirmation prompt is separate from OpenPost permissions and varies by client. Check the workspace, account, destination, time, and text before publishing.
+
+## Fix a connection
+
+Use `/mcp`, not `/api/v1/mcp`. The server uses Streamable HTTP and bearer authentication. A `401` usually means the OAuth connection expired or the bearer token is wrong; reconnect the client or issue a new token. A `403` can mean the token lacks `mcp:full`, lacks the requested workspace, or the operation is unavailable for the account or plan. If a self-hosted client cannot connect, check public HTTPS, reverse-proxy POST support, and the OAuth discovery paths under `/.well-known/`.

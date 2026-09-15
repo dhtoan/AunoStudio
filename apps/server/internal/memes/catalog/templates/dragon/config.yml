@@ -1,0 +1,25 @@
+name: What Color Do You Want Your Dragon
+source: https://knowyourmeme.com/photos/1052192-tumblr
+keywords:
+  - wish
+text:
+  - style: upper
+    color: black
+    font: comic
+    anchor_x: 0.22
+    anchor_y: 0.505
+    angle: 0.0
+    scale_x: 0.25
+    scale_y: 0.119
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - OK I want a boyfriend
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

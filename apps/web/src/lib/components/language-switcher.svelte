@@ -1,0 +1,112 @@
+<script lang="ts">
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { ThemeIcon } from '$lib/themes/icons';
+	import { m } from '$lib/paraglide/messages';
+	import { locales, type Locale } from '$lib/paraglide/runtime';
+	import { getCurrentLocale, localeLabels, switchLocale } from '$lib/i18n';
+
+	interface Props {
+		compact?: boolean;
+		variant?: 'button' | 'menu';
+		touchSize?: boolean;
+		inline?: boolean;
+	}
+
+	let { compact = false, variant = 'button', touchSize = false, inline = false }: Props = $props();
+
+	let currentLocale = $derived(getCurrentLocale());
+	let expanded = $state(false);
+
+	function selectLocale(locale: Locale) {
+		switchLocale(locale);
+	}
+</script>
+
+{#if variant === 'menu' && inline}
+	<DropdownMenu.Item
+		class={touchSize ? 'min-h-11' : ''}
+		aria-expanded={expanded}
+		onSelect={(event) => {
+			event.preventDefault();
+			expanded = !expanded;
+		}}
+	>
+		<ThemeIcon role="language" class="mr-2 size-4 text-muted-foreground" />
+		<span>{m.language_label()}</span>
+		<span class="ml-auto text-muted-foreground">{localeLabels[currentLocale]}</span>
+		<ThemeIcon
+			role="chevron-down"
+			class={`size-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+		/>
+	</DropdownMenu.Item>
+	{#if expanded}
+		<div
+			class="grid gap-0.5 border-l border-border/60 pl-8"
+			role="group"
+			aria-label={m.language_label()}
+		>
+			{#each locales as locale (locale)}
+				<DropdownMenu.Item class={touchSize ? 'min-h-11' : ''} onclick={() => selectLocale(locale)}>
+					<div class="flex w-full items-center justify-between gap-3">
+						<span>{localeLabels[locale]}</span>
+						{#if locale === currentLocale}
+							<ThemeIcon role="check" class="h-4 w-4 text-primary" />
+						{/if}
+					</div>
+				</DropdownMenu.Item>
+			{/each}
+		</div>
+	{/if}
+{:else if variant === 'menu'}
+	<DropdownMenu.Sub>
+		<DropdownMenu.SubTrigger class={touchSize ? 'min-h-11' : ''}>
+			<ThemeIcon role="language" class="mr-2 size-4 text-muted-foreground" />
+			<span>{m.language_label()}</span>
+			<span class="text-muted-foreground">{localeLabels[currentLocale]}</span>
+		</DropdownMenu.SubTrigger>
+		<DropdownMenu.SubContent class="w-44">
+			{#each locales as locale (locale)}
+				<DropdownMenu.Item class={touchSize ? 'min-h-11' : ''} onclick={() => selectLocale(locale)}>
+					<div class="flex w-full items-center justify-between gap-3">
+						<span>{localeLabels[locale]}</span>
+						{#if locale === currentLocale}
+							<ThemeIcon role="check" class="h-4 w-4 text-primary" />
+						{/if}
+					</div>
+				</DropdownMenu.Item>
+			{/each}
+		</DropdownMenu.SubContent>
+	</DropdownMenu.Sub>
+{:else}
+	<DropdownMenu.Root>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<button
+					{...props}
+					type="button"
+					class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm text-foreground transition-colors hover:border-foreground/30"
+					aria-label={m.language_label()}
+				>
+					<ThemeIcon role="language" class="h-4 w-4" />
+					{#if !compact}
+						<span>{localeLabels[currentLocale]}</span>
+					{/if}
+				</button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content class="w-44" align="end">
+			<DropdownMenu.Label>{m.language_label()}</DropdownMenu.Label>
+			<DropdownMenu.Separator />
+			{#each locales as locale (locale)}
+				<DropdownMenu.Item onclick={() => selectLocale(locale)}>
+					<div class="flex w-full items-center justify-between gap-3">
+						<span>{localeLabels[locale]}</span>
+						{#if locale === currentLocale}
+							<ThemeIcon role="check" class="h-4 w-4 text-primary" />
+						{/if}
+					</div>
+				</DropdownMenu.Item>
+			{/each}
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/if}

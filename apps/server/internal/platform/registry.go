@@ -1,0 +1,284 @@
+package platform
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+// AppConfig describes one configured provider application. Self-hosted installs
+// usually populate these from legacy env vars; hosted deployments can build the
+// same registry from structured config.
+type AppConfig struct {
+	Provider       string `json:"provider"`
+	ConnectionMode string `json:"connection_mode,omitempty"`
+	Name           string `json:"name,omitempty"`
+	ClientID       string `json:"client_id,omitempty"`
+	ClientSecret   string `json:"client_secret,omitempty"`
+	RedirectURI    string `json:"redirect_uri,omitempty"`
+	InstanceURL    string `json:"instance_url,omitempty"`
+	BotToken       string `json:"bot_token,omitempty"`
+	BotUsername    string `json:"bot_username,omitempty"`
+	WebhookSecret  string `json:"webhook_secret,omitempty"`
+}
+
+type RegistryOptions struct {
+	DisableLinkedInThreadReplies bool
+	EnableLinkedInOrganizations  bool
+}
+
+type RegistryEntry struct {
+	Key            string
+	Provider       string
+	ConnectionMode string
+	Name           string
+	InstanceURL    string
+	Adapter        Adapter
+}
+
+type appBuilder func(AppConfig, RegistryOptions) (Adapter, error)
+
+var appBuilders = map[string]appBuilder{
+	providerX: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("x provider app requires client_id")
+		}
+		return NewXAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerMastodon: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" || strings.TrimSpace(app.ClientSecret) == "" || strings.TrimSpace(app.InstanceURL) == "" {
+			return nil, fmt.Errorf("mastodon provider app requires client_id, client_secret, and instance_url")
+		}
+		return NewMastodonAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, app.InstanceURL), nil
+	},
+	providerLemmy: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		// An empty instance URL builds the template adapter used for
+		// credential connects; publishing always resolves an
+		// instance-bound adapter registered at connect time.
+		return NewLemmyAdapter(app.InstanceURL), nil
+	},
+	providerPieFed: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		return NewPieFedAdapter(app.InstanceURL), nil
+	},
+	providerPeerTube: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		return NewPeerTubeAdapter(app.InstanceURL), nil
+	},
+	providerPixelfed: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" || strings.TrimSpace(app.ClientSecret) == "" || strings.TrimSpace(app.InstanceURL) == "" {
+			return nil, fmt.Errorf("pixelfed provider app requires client_id, client_secret, and instance_url")
+		}
+		return NewPixelfedAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, app.InstanceURL), nil
+	},
+	providerBluesky: func(_ AppConfig, _ RegistryOptions) (Adapter, error) {
+		return NewBlueskyAdapter(""), nil
+	},
+	providerDiscord: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if app.ConnectionMode == ConnectionModeBot {
+			return NewDiscordBotAdapter(app.ClientID, app.ClientSecret, app.BotToken, app.RedirectURI), nil
+		}
+		return NewDiscordAdapter(), nil
+	},
+	providerPinterest: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" || strings.TrimSpace(app.ClientSecret) == "" || strings.TrimSpace(app.RedirectURI) == "" {
+			return nil, fmt.Errorf("pinterest provider app requires client_id, client_secret, and redirect_uri")
+		}
+		return NewPinterestAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerFacebook: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("facebook provider app requires client_id")
+		}
+		return NewFacebookAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerInstagram: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("instagram provider app requires client_id")
+		}
+		return NewInstagramAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerLinkedIn: func(app AppConfig, opts RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("linkedin provider app requires client_id")
+		}
+		return NewLinkedInAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, opts.DisableLinkedInThreadReplies, opts.EnableLinkedInOrganizations), nil
+	},
+	providerThreads: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("threads provider app requires client_id")
+		}
+		return NewThreadsAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerTikTok: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("tiktok provider app requires client_id")
+		}
+		return NewTikTokAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+	providerYouTube: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		if strings.TrimSpace(app.ClientID) == "" {
+			return nil, fmt.Errorf("youtube provider app requires client_id")
+		}
+		return NewYouTubeAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
+}
+
+// NewInstanceAdapter builds a stateless instance-bound adapter for
+// credential-connected providers. OAuth providers need stored client
+// material and cannot use this path.
+func NewInstanceAdapter(provider, instanceURL string) (Adapter, bool) {
+	instanceURL = strings.TrimRight(strings.TrimSpace(instanceURL), "/")
+	if instanceURL == "" {
+		return nil, false
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case providerPeerTube:
+		return NewPeerTubeAdapter(instanceURL), true
+	case providerLemmy:
+		return NewLemmyAdapter(instanceURL), true
+	case providerPieFed:
+		return NewPieFedAdapter(instanceURL), true
+	default:
+		return nil, false
+	}
+}
+
+func BuildAdapterRegistry(apps []AppConfig, opts RegistryOptions) (map[string]Adapter, []RegistryEntry, error) {
+	adapters := make(map[string]Adapter)
+	entries := make([]RegistryEntry, 0, len(apps))
+
+	for _, app := range apps {
+		app = NormalizeAppConfig(app)
+		if err := ValidateAppConfig(app); err != nil {
+			return nil, nil, err
+		}
+		contract, _ := ApplicationContract(app.Provider, app.ConnectionMode)
+		if !contract.AdapterBacked {
+			continue
+		}
+		builder, ok := appBuilders[app.Provider]
+		if !ok {
+			return nil, nil, fmt.Errorf("provider adapter is not registered: %s (%s)", app.Provider, app.ConnectionMode)
+		}
+
+		adapter, err := builder(app, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, key := range adapterKeys(app) {
+			adapters[key] = adapter
+			entries = append(entries, RegistryEntry{
+				Key:            key,
+				Provider:       app.Provider,
+				ConnectionMode: app.ConnectionMode,
+				Name:           app.Name,
+				InstanceURL:    app.InstanceURL,
+				Adapter:        adapter,
+			})
+		}
+	}
+
+	return adapters, entries, nil
+}
+
+func MergeAppConfigs(base []AppConfig, overrides ...AppConfig) []AppConfig {
+	merged := make([]AppConfig, 0, len(base)+len(overrides))
+	indexByKey := make(map[string]int, len(base)+len(overrides))
+
+	for _, app := range base {
+		app = NormalizeAppConfig(app)
+		key := AppConfigMergeKey(app)
+		indexByKey[key] = len(merged)
+		merged = append(merged, app)
+	}
+	for _, app := range overrides {
+		app = NormalizeAppConfig(app)
+		key := AppConfigMergeKey(app)
+		if i, ok := indexByKey[key]; ok {
+			merged[i] = app
+			continue
+		}
+		indexByKey[key] = len(merged)
+		merged = append(merged, app)
+	}
+	return merged
+}
+
+func AppConfigMergeKey(app AppConfig) string {
+	app = NormalizeAppConfig(app)
+	if app.Provider == providerMastodon || app.Provider == providerPixelfed {
+		return app.Provider + ":" + app.InstanceURL
+	}
+	if app.Provider == providerDiscord && app.ConnectionMode == ConnectionModeBot {
+		return app.Provider + ":" + app.ConnectionMode
+	}
+	return app.Provider
+}
+
+// AccountProviderKey selects a mode-specific adapter without exposing
+// credentials. Discord accounts created before connection_type was introduced
+// continue to resolve to the canonical incoming-webhook adapter.
+func AccountProviderKey(provider, instanceURL, capabilityStateJSON string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == providerMastodon || provider == providerPixelfed {
+		return provider + ":" + strings.TrimRight(strings.TrimSpace(instanceURL), "/")
+	}
+	if provider == providerPeerTube || provider == providerLemmy || provider == providerPieFed {
+		if instance := strings.TrimRight(strings.TrimSpace(instanceURL), "/"); instance != "" {
+			return provider + ":" + instance
+		}
+		return provider
+	}
+	if provider == providerBluesky {
+		if instance := CanonicalBlueskyPDSURL(instanceURL); instance != "" && instance != BlueskyDefaultPDSURL {
+			return providerBluesky + ":" + instance
+		}
+		return providerBluesky
+	}
+	if provider == providerDiscord {
+		state := map[string]string{}
+		_ = json.Unmarshal([]byte(capabilityStateJSON), &state)
+		if state["connection_type"] == ConnectionModeBot {
+			return providerDiscord + ":" + ConnectionModeBot
+		}
+		if state["connection_type"] == ConnectionModeWebhook {
+			return providerDiscord + ":" + ConnectionModeWebhook
+		}
+	}
+	return provider
+}
+
+func NormalizeAppConfig(app AppConfig) AppConfig {
+	app.Provider = strings.ToLower(strings.TrimSpace(app.Provider))
+	app.ConnectionMode = normalizeConnectionMode(app.Provider, app.ConnectionMode, app)
+	app.Name = strings.TrimSpace(app.Name)
+	app.ClientID = strings.TrimSpace(app.ClientID)
+	app.ClientSecret = strings.TrimSpace(app.ClientSecret)
+	app.RedirectURI = strings.TrimSpace(app.RedirectURI)
+	app.InstanceURL = strings.TrimRight(strings.TrimSpace(app.InstanceURL), "/")
+	app.BotToken = strings.TrimSpace(app.BotToken)
+	app.BotUsername = strings.TrimPrefix(strings.TrimSpace(app.BotUsername), "@")
+	app.WebhookSecret = strings.TrimSpace(app.WebhookSecret)
+	return app
+}
+
+func adapterKeys(app AppConfig) []string {
+	if app.Provider == providerDiscord {
+		if app.ConnectionMode == ConnectionModeBot {
+			return []string{providerDiscord + ":" + ConnectionModeBot}
+		}
+		return []string{providerDiscord, providerDiscord + ":" + ConnectionModeWebhook}
+	}
+	if app.Provider != providerMastodon && app.Provider != providerPixelfed {
+		return []string{app.Provider}
+	}
+
+	keys := []string{}
+	if app.InstanceURL != "" {
+		keys = append(keys, app.Provider+":"+app.InstanceURL)
+	}
+	if app.Name != "" {
+		keys = append(keys, app.Provider+":"+app.Name)
+	}
+	return keys
+}

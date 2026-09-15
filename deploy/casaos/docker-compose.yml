@@ -1,0 +1,68 @@
+# Import this file from CasaOS App Store > "+" > Install a customized app.
+# Replace the IP address and both secret placeholders first.
+services:
+  openpost:
+    image: ghcr.io/getopenpost/openpost:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "8080:8080"
+    volumes:
+      - openpost_data:/data
+    environment:
+      OPENPOST_PORT: 8080
+      OPENPOST_DATABASE_PATH: /data/db/openpost.db
+      OPENPOST_MEDIA_PATH: /data/media
+      # Use the local address for setup, then set the public HTTPS origin.
+      OPENPOST_APP_URL: http://10.0.0.1:8080
+      OPENPOST_PUBLIC_URL: http://10.0.0.1:8080
+      OPENPOST_MEDIA_URL: http://10.0.0.1:8080/media
+      # Generate each secret with `openssl rand -base64 32`.
+      OPENPOST_JWT_SECRET: REPLACE-WITH-GENERATED-JWT-SECRET
+      OPENPOST_ENCRYPTION_KEY: REPLACE-WITH-GENERATED-ENCRYPTION-KEY
+    # Process liveness only. Gate traffic and rollouts on /api/v1/ready.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/api/v1/health",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  openpost_data:
+
+x-casaos:
+  id: st.openpo.openpost
+  main: openpost
+  index: /
+  port_map: "8080"
+  scheme: http
+  icon: https://docs.openpo.st/assets/brand/icon.svg
+  title:
+    en_US: OpenPost
+  tagline:
+    en_US: Turn your work into channel-ready content
+  description:
+    en_US: OpenPost is the all-in-one content team for solo founders. It turns your work into channel-ready posts, publishes them to your social accounts, and brings outcomes back into one workspace.
+  author: OpenPost
+  developer: OpenPost
+  category: Productivity
+  architectures:
+    - amd64
+  version: "4.31.1"
+  update_at: "2026-09-13"
+  release_notes:
+    en_US: Ready-to-import CasaOS customized-app recipe for OpenPost.
+  website: https://openpo.st
+  repo: https://github.com/getopenpost/openpost
+  support: https://github.com/getopenpost/openpost/issues
+  docs: https://docs.openpo.st/self-hosting/casaos

@@ -1,0 +1,163 @@
+@import '../../../web/src/routes/layout.css';
+
+@source './**/*.{svelte,ts}';
+@source '../../../web/src/lib/components';
+@source '../../../../packages/social-preview/src';
+
+@layer base {
+	html {
+		scroll-behavior: smooth;
+	}
+
+	body {
+		background: var(--background);
+		color: var(--foreground);
+		font-feature-settings: 'ss01', 'cv02', 'cv03', 'cv04';
+	}
+
+	::selection {
+		background: color-mix(in oklch, var(--primary) 42%, transparent);
+		color: var(--foreground);
+	}
+}
+
+@layer utilities {
+	.section-pad {
+		padding-block: clamp(5rem, 9vw, 9rem);
+	}
+
+	.section-label,
+	.eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted-foreground);
+	}
+
+	.section-label::before,
+	.eyebrow::before {
+		width: 0.42rem;
+		height: 0.42rem;
+		border-radius: 0.12rem;
+		background: currentColor;
+		content: '';
+	}
+
+	.text-pretty {
+		text-wrap: pretty;
+	}
+
+	.marketing-shell {
+		width: min(100% - 2rem, 78rem);
+		margin-inline: auto;
+	}
+
+	.marketing-copy {
+		max-width: 68ch;
+		font-size: clamp(1rem, 1.3vw, 1.125rem);
+		line-height: 1.75;
+		color: var(--muted-foreground);
+	}
+
+	.marketing-title {
+		max-width: 14ch;
+		font-size: clamp(2.5rem, 5.7vw, 4.875rem);
+		font-weight: 550;
+		line-height: 1.06;
+		letter-spacing: -0.04em;
+		text-wrap: balance;
+	}
+
+	.marketing-heading {
+		max-width: 18ch;
+		font-size: clamp(2.2rem, 4.2vw, 4rem);
+		font-weight: 630;
+		line-height: 1;
+		letter-spacing: -0.038em;
+		text-wrap: balance;
+	}
+
+	.marketing-frame {
+		border: 1px solid var(--border);
+		background: color-mix(in oklch, var(--card) 92%, var(--background));
+		border-radius: 1.25rem;
+		box-shadow: 0 1.5rem 5rem color-mix(in oklch, var(--foreground) 7%, transparent);
+	}
+
+	.marketing-rule {
+		border-color: color-mix(in oklch, var(--border) 76%, transparent);
+	}
+
+	.reading-shell {
+		width: min(100% - 2rem, 72ch);
+		margin-inline: auto;
+	}
+
+	.focus-ring {
+		outline: none;
+	}
+
+	.focus-ring:focus-visible {
+		box-shadow:
+			0 0 0 2px var(--background),
+			0 0 0 4px var(--ring);
+	}
+}
+
+@media (min-width: 40rem) {
+	@layer utilities {
+		.marketing-shell {
+			width: min(100% - 3rem, 78rem);
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+}
+
+/* Public surfaces keep Workshop chrome and give authored examples their own palette. */
+:root {
+	--marketing-soft-ink: oklch(0.52 0.025 145);
+	--marketing-lilac: oklch(0.91 0.04 300);
+	--marketing-lilac-ink: oklch(0.3 0.055 300);
+	--marketing-mint: oklch(0.92 0.06 130);
+	--marketing-mint-ink: oklch(0.28 0.04 145);
+	--marketing-blue: oklch(0.92 0.035 235);
+	--marketing-blue-ink: oklch(0.3 0.05 245);
+	--marketing-launch-art: #d7edb6;
+	--marketing-launch-art-ink: #213b2c;
+	--marketing-launch-fold-1: #396747;
+	--marketing-launch-fold-2: #588254;
+	--marketing-launch-fold-3: #80a66c;
+	--marketing-launch-fold-4: #aacb86;
+	--marketing-launch-fold-5: #eaf4ce;
+	--marketing-section: oklch(0.965 0.006 80);
+	--marketing-dither-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%239b4c2b' fill-opacity='.065' d='M0 0h2v2H0zM16 4h2v2h-2zM8 12h2v2H8zM24 16h2v2h-2zM4 24h2v2H4zM20 28h2v2h-2z'/%3E%3C/svg%3E");
+	scrollbar-color: var(--border) var(--background);
+	caret-color: var(--foreground);
+}
+.dark {
+	--marketing-soft-ink: oklch(0.72 0.035 145);
+	--marketing-lilac: oklch(0.29 0.04 300);
+	--marketing-lilac-ink: oklch(0.9 0.035 300);
+	--marketing-mint: oklch(0.29 0.035 145);
+	--marketing-mint-ink: oklch(0.91 0.05 130);
+	--marketing-blue: oklch(0.28 0.035 245);
+	--marketing-blue-ink: oklch(0.91 0.035 235);
+	--marketing-launch-art: #1f3427;
+	--marketing-launch-art-ink: #e4f2d2;
+	--marketing-launch-fold-1: #89a86e;
+	--marketing-launch-fold-2: #75935f;
+	--marketing-launch-fold-3: #638050;
+	--marketing-launch-fold-4: #506b43;
+	--marketing-launch-fold-5: #dcebbe;
+	--marketing-section: oklch(0.18 0.008 55);
+	--marketing-dither-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%23c77a55' fill-opacity='.1' d='M0 0h2v2H0zM16 4h2v2h-2zM8 12h2v2H8zM24 16h2v2h-2zM4 24h2v2H4zM20 28h2v2h-2z'/%3E%3C/svg%3E");
+}

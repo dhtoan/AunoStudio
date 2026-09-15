@@ -1,0 +1,37 @@
+name: Spider-Man Pointing at Spider-Man
+source: https://knowyourmeme.com/memes/spider-man-pointing-at-spider-man
+keywords:
+  -
+text:
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.05
+    anchor_y: 0.0
+    angle: 0.0
+    scale_x: 0.45
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.5
+    anchor_y: 0.85
+    angle: 0.0
+    scale_x: 0.45
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - me pointing at you
+  - you pointing at me
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

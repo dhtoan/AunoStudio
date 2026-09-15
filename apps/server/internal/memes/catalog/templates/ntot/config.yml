@@ -1,0 +1,49 @@
+name: No Take, Only Throw
+source: https://knowyourmeme.com/memes/no-take-only-throw
+keywords:
+  -
+text:
+  - style: default
+    color: black
+    font: thin
+    anchor_x: 0.055
+    anchor_y: 0.08
+    angle: 12.0
+    scale_x: 0.21
+    scale_y: 0.15
+    align: center
+    start: 0.1
+    stop: 1.0
+  - style: default
+    color: black
+    font: thin
+    anchor_x: 0.46
+    anchor_y: 0.15
+    angle: 0.0
+    scale_x: 0.18
+    scale_y: 0.15
+    align: center
+    start: 0.4
+    stop: 1.0
+  - style: upper
+    color: black
+    font: thick
+    anchor_x: 0.7
+    anchor_y: 0.135
+    angle: 0.0
+    scale_x: 0.25
+    scale_y: 0.15
+    align: center
+    start: 0.7
+    stop: 1.0
+example:
+  - Pls throw??
+  - NO TAKE!!
+  - ONLY THROW
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

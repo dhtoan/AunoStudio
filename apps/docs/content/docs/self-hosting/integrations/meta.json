@@ -1,0 +1,28 @@
+{
+  "title": "Social integrations",
+  "icon": "Plug",
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "---Connect directly---",
+    "bluesky",
+    "mastodon",
+    "pixelfed",
+    "peertube",
+    "lemmy",
+    "piefed",
+    "discord",
+    "telegram",
+    "---Set up a developer app---",
+    "linkedin",
+    "x",
+    "facebook",
+    "instagram",
+    "threads",
+    "youtube",
+    "tiktok",
+    "pinterest",
+    "---Get help---",
+    "troubleshooting"
+  ]
+}

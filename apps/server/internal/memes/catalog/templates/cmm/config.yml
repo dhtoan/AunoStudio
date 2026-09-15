@@ -1,0 +1,26 @@
+name: Change My Mind
+source:
+  https://knowyourmeme.com/memes/steven-crowders-change-my-mind-campus-sign
+keywords:
+  -
+text:
+  - style: upper
+    color: black
+    font: thin
+    anchor_x: 0.33
+    anchor_y: 0.33
+    angle: 23.0
+    scale_x: 0.46
+    scale_y: 0.25
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - pineapples don't belong on pizza
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

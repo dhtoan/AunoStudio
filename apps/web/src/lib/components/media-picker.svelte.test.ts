@@ -1,0 +1,219 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render } from 'vitest-browser-svelte';
+import type { ImageEditorMediaItem } from '$lib/image-editor/types';
+import type { MemeTemplate, MemeTemplateListResult } from '$lib/meme-generator/types';
+import { m } from '$lib/paraglide/messages';
+import MediaPicker from './media-picker.svelte';
+
+const mocks = {
+	listMedia: vi.fn(),
+	listTags: vi.fn(),
+	listTemplates: vi.fn(),
+	thumbnailURL: vi.fn(),
+	suggest: vi.fn(),
+	preview: vi.fn(),
+	render: vi.fn()
+};
+
+const services = {
+	listMedia: mocks.listMedia,
+	listTags: mocks.listTags,
+	listTemplates: mocks.listTemplates,
+	memeAPI: {
+		listTemplates: mocks.listTemplates,
+		thumbnailURL: mocks.thumbnailURL,
+		suggest: mocks.suggest,
+		preview: mocks.preview,
+		render: mocks.render
+	}
+};
+
+const template: MemeTemplate = {
+	id: 'fry',
+	name: 'Futurama Fry',
+	lines: 2,
+	overlays: 1,
+	styles: ['default'],
+	blank_url: '',
+	example: { text: ['not sure if', 'or just careful'], url: '' },
+	source_url: 'https://knowyourmeme.com/memes/futurama-fry-not-sure-if',
+	keywords: ['fry'],
+	search_terms: ['fry', 'futurama'],
+	animated: false,
+	semantic: {
+		visual: 'Fry squints at an uncertain situation.',
+		meaning: 'Doubt between two explanations.',
+		mechanism: 'setup_payoff',
+		caption_roles: ['uncertain setup', 'alternative explanation'],
+		tags: ['doubt', 'comparison']
+	}
+};
+
+const overlayMedia: ImageEditorMediaItem = {
+	id: 'media-team-photo',
+	workspace_id: 'workspace-1',
+	mime_type: 'image/png',
+	size: 1024,
+	original_filename: 'Team photo.png',
+	width: 640,
+	height: 480,
+	alt_text: 'The team after a successful release.',
+	is_favorite: false,
+	created_at: '2026-08-09T12:00:00Z',
+	url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNk+M/wHwAF/gL+Xw4J5QAAAABJRU5ErkJggg==',
+	thumbnail_url:
+		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNk+M/wHwAF/gL+Xw4J5QAAAABJRU5ErkJggg==',
+	usage_count: 0,
+	can_delete: true,
+	processing_status: 'ready',
+	processing_progress: 100,
+	analysis_status: 'ready',
+	duration_ms: 0,
+	frame_rate: 0,
+	source: 'upload',
+	asset_kind: 'library',
+	tags: []
+};
+
+function svgBase64(label: string): string {
+	return btoa(
+		`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#29292f"/><text x="320" y="240" text-anchor="middle" fill="white" font-size="32">${label}</text></svg>`
+	);
+}
+
+function templateResult(configured = true): MemeTemplateListResult {
+	return {
+		templates: configured ? [template] : [],
+		configured,
+		ai_configured: configured,
+		catalog: {
+			provider_key: 'openpost',
+			returned: configured ? 1 : 0,
+			revision: 'catalog-1',
+			stale: false,
+			total_templates: configured ? 1 : 0
+		}
+	};
+}
+
+function renderPicker(
+	enableMeme: boolean,
+	compactNavigation = false,
+	memeSeed: {
+		initialMode?: 'library' | 'meme';
+		memeInitialIdea?: string;
+		memeInitialCandidate?: {
+			template_id: string;
+			caption_lines: string[];
+			rationale: string;
+			alt_text: string;
+			template: MemeTemplate;
+		};
+		memeInitialPreview?: string;
+	} = {},
+	onConfirm: (
+		mediaIDs: string[],
+		media: ImageEditorMediaItem[]
+	) => void | boolean | Promise<void | boolean> = vi.fn()
+) {
+	return render(MediaPicker, {
+		props: {
+			open: true,
+			workspaceId: 'workspace-1',
+			accept: ['image/*'],
+			maxSelection: 4,
+			multiple: true,
+			showCreate: false,
+			enableMeme,
+			compactNavigation,
+			...memeSeed,
+			services,
+			onConfirm
+		}
+	});
+}
+
+describe('MediaPicker meme source', () => {
+	beforeEach(() => {
+		mocks.listMedia.mockReset().mockResolvedValue([]);
+		mocks.listTags.mockReset().mockResolvedValue({ tags: [], canEdit: true });
+		mocks.listTemplates.mockReset().mockResolvedValue(templateResult());
+		mocks.thumbnailURL
+			.mockReset()
+			.mockReturnValue(`data:image/svg+xml;base64,${svgBase64('Futurama Fry')}`);
+		mocks.suggest.mockReset().mockResolvedValue({ candidates: [] });
+		mocks.preview.mockReset().mockImplementation(({ captions }) =>
+			Promise.resolve({
+				mime_type: 'image/svg+xml',
+				data_base64: svgBase64(captions.join(' / '))
+			})
+		);
+		mocks.render.mockReset();
+	});
+
+	it('never probes or shows Meme when the calling surface does not enable it', async () => {
+		const screen = await renderPicker(false);
+
+		await expect.element(screen.getByRole('tab', { name: 'Library' })).toBeVisible();
+		await expect.element(screen.getByRole('tab', { name: 'Meme' })).not.toBeInTheDocument();
+		expect(mocks.listTemplates).not.toHaveBeenCalled();
+		await screen.getByRole('button', { name: 'Close' }).click();
+		await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+	});
+
+	it('keeps the picker open when the caller rejects a selection', async () => {
+		mocks.listMedia.mockResolvedValue([overlayMedia]);
+		const onConfirm = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+		const screen = await renderPicker(false, false, {}, onConfirm);
+
+		await screen.getByRole('button', { name: 'Select Team photo.png' }).click();
+		await screen.getByRole('button', { name: m.media_picker_add_media() }).click();
+
+		await expect.element(screen.getByRole('dialog')).toBeVisible();
+		await expect.element(screen.getByRole('alert')).toHaveTextContent(m.media_picker_add_failed());
+		expect(onConfirm).toHaveBeenCalledTimes(1);
+
+		await screen.getByRole('button', { name: m.media_picker_add_media() }).click();
+		await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+		expect(onConfirm).toHaveBeenCalledTimes(2);
+	});
+
+	it('keeps Meme hidden when the renderer is not configured', async () => {
+		mocks.listTemplates.mockResolvedValue(templateResult(false));
+		const screen = await renderPicker(true);
+
+		await vi.waitFor(() =>
+			expect(mocks.listTemplates).toHaveBeenCalledWith(
+				expect.objectContaining({ workspaceId: 'workspace-1', limit: 1 })
+			)
+		);
+		await expect.element(screen.getByRole('tab', { name: 'Meme' })).not.toBeInTheDocument();
+		await screen.getByRole('button', { name: 'Close' }).click();
+		await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+	});
+
+	it('opens a seeded meme recommendation after the availability check', async () => {
+		const initialCandidate = {
+			template_id: template.id,
+			caption_lines: ['The plan', 'What production did'],
+			rationale: 'The contrast carries the joke.',
+			alt_text: 'Futurama Fry meme. Text: The plan; What production did.',
+			template
+		};
+		const screen = await renderPicker(true, false, {
+			initialMode: 'meme',
+			memeInitialIdea: 'A release that ignored the plan',
+			memeInitialCandidate: initialCandidate,
+			memeInitialPreview: `data:image/svg+xml;base64,${svgBase64('The plan / What production did')}`
+		});
+
+		await expect
+			.element(screen.getByRole('tab', { name: m.media_picker_meme() }))
+			.toHaveAttribute('aria-selected', 'true');
+		await expect
+			.element(screen.getByLabelText(m.meme_generator_caption_label({ number: 1 })))
+			.toHaveValue('The plan');
+		expect(mocks.suggest).not.toHaveBeenCalled();
+		expect(mocks.preview).not.toHaveBeenCalled();
+	});
+});

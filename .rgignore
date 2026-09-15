@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.bun-cache/
+
+# Build and cache
+.turbo/
+apps/web/.svelte-kit/
+apps/web/build/
+apps/web/.vite/
+apps/server/cmd/openpost/public/
+apps/docs/.vitepress/dist/
+apps/docs/.vitepress/cache/
+apps/marketing/dist/
+apps/marketing/.svelte-kit/
+apps/marketing/.vite/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+coverage.out
+*.test
+
+# Lock files
+go.sum
+bun.lock
+
+# External references
+docs/references/
+
+# Agent state
+.codex/
+.impeccable/
+.pi/
+
+# Environment
+.devenv/

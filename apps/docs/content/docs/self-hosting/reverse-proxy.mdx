@@ -1,0 +1,38 @@
+---
+title: Reverse proxy and public access
+description: Put OpenPost behind HTTPS so sign-in, callbacks, and media fetching work.
+icon: Globe
+---
+
+Run OpenPost behind HTTPS on a stable public origin. Social sign-in, passkeys, MCP, webhooks, and provider media downloads depend on that origin.
+
+## The three URLs
+
+| Setting               | What to enter                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `OPENPOST_APP_URL`    | The public origin users open, such as `https://post.example.com`. Callbacks derive from it. |
+| `OPENPOST_PUBLIC_URL` | The public origin used for server links and the Telegram webhook. Usually the same.         |
+| `OPENPOST_MEDIA_URL`  | A public media URL, such as `https://post.example.com/media`. Providers fetch from here.    |
+
+Set all three before registering provider callbacks. If the origin changes, update each provider app and reconnect its accounts. OpenPost does not support subpath hosting such as `https://example.com/openpost/`; use a subdomain.
+
+## What must be reachable
+
+- **OAuth callbacks** must match the provider portal exactly, including the scheme, host, path, and trailing slash. The [proxy reference](https://github.com/getopenpost/openpost/blob/main/docs/reference/installation/reverse-proxy.md#social-network-callback-urls) lists every callback.
+- **Media URLs** must return the file without sign-in or an expiring link. Threads, Facebook, Instagram, and TikTok fetch media from `OPENPOST_MEDIA_URL`. TikTok also requires ownership proof for the domain or URL prefix.
+- **Webhooks and MCP** must remain reachable at their documented paths when those features are enabled.
+
+## Proxy setup
+
+Use the [Caddy and Nginx examples](https://github.com/getopenpost/openpost/blob/main/docs/reference/installation/reverse-proxy.md). Forward the original host and scheme, the app, `/api/v1/`, and `/media/`. Allow the largest upload you plan to accept and disable request buffering for large video uploads.
+
+Before connecting an account, confirm that `https://your-domain.example/api/v1/ready` returns `"status":"ready"`. Test an uploaded media URL from outside your network too.
+
+## Tunnels and existing Traefik setups
+
+A tunnel can provide the public origin for a trial. Set all three URLs to its stable HTTPS address and confirm it accepts the required upload size. For Traefik, route a dedicated subdomain to port `8080` and preserve the original host and scheme.
+
+## Next steps
+
+- [Fix a connection](/self-hosting/integrations/troubleshooting) when a callback, account, or media fetch fails.
+- [Back up your instance](/self-hosting/maintenance) before relying on it for scheduled posts.

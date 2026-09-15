@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "owner": "OpenPost public-surface operators",
+  "rule_ref_prefix": "openpost:markdown:",
+  "api_base_url": "https://api.cloudflare.com/client/v4",
+  "limits": {
+    "expression_characters": 4096,
+    "pages_header_rules": 100,
+    "pages_header_line_characters": 2000,
+    "single_redirect_rules": 10,
+    "transform_rules": 10,
+    "cache_rules": 10
+  },
+  "phases": [
+    "http_request_dynamic_redirect",
+    "http_request_transform",
+    "http_request_cache_settings",
+    "http_response_headers_transform"
+  ],
+  "zones": [
+    {
+      "key": "canonical",
+      "hostname": "openpo.st",
+      "zone_id_env": "OPENPOST_CLOUDFLARE_CANONICAL_ZONE_ID",
+      "surfaces": [
+        {
+          "key": "marketing",
+          "hostname": "openpo.st",
+          "pages_base_header_rules": 2,
+          "route_source": "marketingRouteManifest"
+        },
+        {
+          "key": "documentation",
+          "hostname": "docs.openpo.st",
+          "pages_base_header_rules": 3,
+          "route_source": "docsPageCatalog"
+        }
+      ]
+    },
+    {
+      "key": "legacy",
+      "hostname": "openpost.social",
+      "zone_id_env": "OPENPOST_CLOUDFLARE_PUBLIC_ZONE_ID",
+      "redirects": [
+        {
+          "key": "legacy-marketing",
+          "hostname": "openpost.social",
+          "target_hostname": "openpo.st",
+          "surface": "marketing"
+        },
+        {
+          "key": "legacy-documentation",
+          "hostname": "docs.openpost.social",
+          "target_hostname": "docs.openpo.st",
+          "surface": "documentation"
+        },
+        {
+          "key": "legacy-application",
+          "hostname": "app.openpost.social",
+          "target_hostname": "app.openpo.st",
+          "surface": "application"
+        },
+        {
+          "key": "legacy-media",
+          "hostname": "media.openpost.social",
+          "target_hostname": "media.openpo.st",
+          "surface": "media"
+        },
+        {
+          "key": "legacy-telemetry",
+          "hostname": "cool.openpost.social",
+          "target_hostname": "cool.openpo.st",
+          "surface": "telemetry"
+        }
+      ]
+    }
+  ]
+}

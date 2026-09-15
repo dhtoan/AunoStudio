@@ -1,0 +1,67 @@
+name: Scooby Doo Reveal
+source: https://knowyourmeme.com/memes/lets-see-who-this-really-is
+keywords:
+  -
+text:
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.04
+    anchor_y: 0.26
+    angle: 0.0
+    scale_x: 0.3
+    scale_y: 0.1
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: upper
+    color: khaki
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.36
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.15
+    align: center
+    start: 0.2
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.04
+    anchor_y: 0.8
+    angle: 0.0
+    scale_x: 0.3
+    scale_y: 0.1
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: upper
+    color: khaki
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.9
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.1
+    align: center
+    start: 0.6
+    stop: 1.0
+example:
+  - Villain
+  - Let's see who you really are...
+  - Protagonist
+  - I knew it!
+overlay:
+  - center_x: 0.21
+    center_y: 0.215
+    angle: 0.0
+    scale: 0.27
+    start: 0.0
+    stop: 1.0
+  - center_x: 0.23
+    center_y: 0.69
+    angle: 0.0
+    scale: 0.27
+    start: 0.0
+    stop: 1.0

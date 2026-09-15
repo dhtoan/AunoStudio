@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "ignorePatterns": [
+    ".agents/",
+    ".commandcode/",
+    ".impeccable/",
+    "**/.svelte-kit/",
+    "apps/server/internal/memes/catalog/",
+    "docs/launch-kit/",
+    "packages/api-contract/src/schema.d.ts",
+    "config/provider-certification/",
+    "docs/references/",
+    "assets/social/"
+  ]
+}

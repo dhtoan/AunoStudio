@@ -1,0 +1,61 @@
+name: Galaxy Brain
+source: https://knowyourmeme.com/memes/galaxy-brain
+keywords:
+  -
+text:
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.0
+    anchor_y: 0.0
+    angle: 0.0
+    scale_x: 0.49
+    scale_y: 0.245
+    align: center
+    start: 0.1
+    stop: 1.0
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.0
+    anchor_y: 0.255
+    angle: 0.0
+    scale_x: 0.49
+    scale_y: 0.246
+    align: center
+    start: 0.3
+    stop: 1.0
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.0
+    anchor_y: 0.51
+    angle: 0.0
+    scale_x: 0.489
+    scale_y: 0.224
+    align: center
+    start: 0.5
+    stop: 1.0
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.0
+    anchor_y: 0.746
+    angle: 0.0
+    scale_x: 0.49
+    scale_y: 0.255
+    align: center
+    start: 0.7
+    stop: 1.0
+example:
+  - Who
+  - Whom
+  - Whom'st
+  - Whomst'd
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

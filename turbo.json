@@ -1,0 +1,41 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["package.json", "bun.lock", "bunfig.toml"],
+  "globalPassThroughEnv": [
+    "OPENPOST_ROOT_TASK_LOCKED",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH",
+    "VITEST_MAX_WORKERS"
+  ],
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["^check"],
+      "outputs": []
+    },
+    "check": {
+      "dependsOn": ["^check"],
+      "outputs": [],
+      "env": ["OPENPOST_CHECK_PREPARED"]
+    },
+    "//#_policy": {
+      "outputs": []
+    },
+    "lint:oxlint": {
+      "outputs": []
+    },
+    "lint:svelte": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^check"],
+      "outputs": []
+    },
+    "test:server": {
+      "dependsOn": ["^check"],
+      "outputs": []
+    }
+  }
+}

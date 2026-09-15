@@ -1,0 +1,153 @@
+---
+title: AI assistants
+description: Connect ChatGPT, Claude, Cursor, or another MCP client to OpenPost.
+icon: Bot
+---
+
+Connect an AI assistant to review a schedule or prepare a publication without leaving the conversation. OpenPost uses [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) to let the assistant access only the work your account permits. Hosted clients connect to:
+
+```text
+https://app.openpo.st/mcp
+```
+
+Choose `mcp:read` to review accounts and scheduled posts. Choose `mcp:full` only when the assistant needs to create, edit, schedule, or publish. OpenPost checks your workspace access on each request.
+
+## Choose a setup
+
+Choose its guide below. Each guide shows where to enter the server URL, how to sign in, and a first read request. Start with "List my OpenPost workspaces" so you know which workspace the assistant can see.
+
+<div className="mcp-clients not-prose">
+  <a href="/mcp/chatgpt">
+    <img
+      src="/clients/chatgpt.svg"
+      alt=""
+      width={24}
+      height={24}
+      className="docs-client-monochrome"
+    />
+    <span>ChatGPT</span>
+  </a>
+  <a href="/mcp/claude">
+    <img src="/clients/claude.svg" alt="" width={24} height={24} />
+    <span>Claude web</span>
+  </a>
+  <a href="/mcp/claude-desktop">
+    <img src="/clients/claude.svg" alt="" width={24} height={24} />
+    <span>Claude Desktop</span>
+  </a>
+  <a href="/mcp/claude-code">
+    <img src="/clients/claude.svg" alt="" width={24} height={24} />
+    <span>Claude Code</span>
+  </a>
+  <a href="/mcp/cursor">
+    <img
+      src="/clients/cursor.svg"
+      alt=""
+      width={24}
+      height={24}
+      className="docs-client-monochrome"
+    />
+    <span>Cursor</span>
+  </a>
+  <a href="/mcp/codex">
+    <img src="/clients/codex.svg" alt="" width={24} height={24} />
+    <span>Codex</span>
+  </a>
+  <a href="/mcp/grok">
+    <img src="/clients/grok.svg" alt="" width={24} height={24} className="docs-client-monochrome" />
+    <span>Grok</span>
+  </a>
+  <a href="/mcp/devin">
+    <img
+      src="/clients/devin.svg"
+      alt=""
+      width={24}
+      height={24}
+      className="docs-client-monochrome"
+    />
+    <span>Devin</span>
+  </a>
+  <a href="/mcp/perplexity">
+    <img src="/clients/perplexity.svg" alt="" width={24} height={24} />
+    <span>Perplexity</span>
+  </a>
+  <a href="/mcp/gemini-cli">
+    <img src="/clients/gemini.svg" alt="" width={24} height={24} />
+    <span>Gemini CLI</span>
+  </a>
+  <a href="/mcp/github-copilot">
+    <img
+      src="/clients/github-copilot.svg"
+      alt=""
+      width={24}
+      height={24}
+      className="docs-client-monochrome"
+    />
+    <span>GitHub Copilot</span>
+  </a>
+  <a href="/mcp/vs-code">
+    <img src="/clients/vscode.svg" alt="" width={24} height={24} />
+    <span>VS Code</span>
+  </a>
+  <a href="/mcp/antigravity">
+    <img src="/clients/antigravity.svg" alt="" width={24} height={24} />
+    <span>Antigravity</span>
+  </a>
+  <a href="/mcp/opencode">
+    <img
+      src="/clients/opencode.svg"
+      alt=""
+      width={24}
+      height={24}
+      className="docs-client-monochrome"
+    />
+    <span>OpenCode</span>
+  </a>
+  <a href="/mcp/openclaw">
+    <img src="/clients/openclaw.svg" alt="" width={24} height={24} />
+    <span>OpenClaw</span>
+  </a>
+  <a href="/mcp/hermes">
+    <img src="/clients/hermes.png" alt="" width={24} height={24} />
+    <span>Hermes Agent</span>
+  </a>
+</div>
+
+For a client not listed here, use the endpoint and authentication rules in [Tools and permissions](/mcp/tools).
+
+Remote clients can use browser sign-in. OpenPost asks you to choose `mcp:read` or `mcp:full` and, optionally, bind access to one workspace. If your client cannot use OAuth, create a developer token in **Settings → Personal → Developer** and pass it in a bearer header. Do not put a token in a chat message or a committed config file.
+
+## Self-hosted connections
+
+For a public HTTPS instance, replace `https://app.openpo.st` with your own origin and keep the `/mcp` path. Use that URL in the client guide above.
+
+Cloud clients cannot reach a private LAN address or `localhost`. If the server is private but reachable from your computer, a desktop client can use OpenPost's local bridge. Install the CLI and bridge together:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/getopenpost/openpost/main/scripts/install-cli.sh | sh -s -- --with-mcp
+```
+
+Sign in using a named profile:
+
+```sh
+openpost --profile local auth login https://your-openpost-host.example
+```
+
+Configure your desktop MCP client to launch the bridge with the same profile:
+
+```json
+{
+  "mcpServers": {
+    "openpost": {
+      "command": "openpost-mcp",
+      "args": ["--profile", "local"]
+    }
+  }
+}
+```
+
+The client launches `openpost-mcp`; you do not need to keep a separate terminal running. If it cannot find the command, use the full path printed by `command -v openpost-mcp`.
+
+## Check what the assistant can do
+
+Ask, "List my OpenPost workspaces," then name the workspace you want to use. Next ask, "Review this week's schedule without changing anything." If that succeeds and you granted `mcp:full`, try an unpublished draft before asking the assistant to schedule or publish. Inspect the result in **Publications**. If a request fails, use the troubleshooting steps in your client guide.

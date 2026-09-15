@@ -1,0 +1,29 @@
+{
+  "title": "Guides",
+  "icon": "BookOpen",
+  "root": true,
+  "pages": [
+    "---Start here---",
+    "quickstart",
+    "accounts",
+    "workspaces",
+    "---Write and publish---",
+    "publishing",
+    "scheduling",
+    "---Create images and video---",
+    "media",
+    "media-library",
+    "image-editor",
+    "video-editor",
+    "quick-cut",
+    "recording",
+    "media-limits",
+    "---After publishing---",
+    "results",
+    "analytics",
+    "inbox",
+    "---Automate and troubleshoot---",
+    "automation",
+    "troubleshooting"
+  ]
+}

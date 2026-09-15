@@ -1,0 +1,61 @@
+name: You Guys Are Getting Paid?
+source: https://knowyourmeme.com/photos/1712302-you-guys-are-getting-paid
+keywords:
+  -
+text:
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.35
+    angle: 0.0
+    scale_x: 0.5
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.5
+    anchor_y: 0.35
+    angle: 0.0
+    scale_x: 0.5
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.85
+    angle: 0.0
+    scale_x: 0.5
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.5
+    anchor_y: 0.85
+    angle: 0.0
+    scale_x: 0.5
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - ''
+  - You are making 500 thousand dollars and you were only gonna pay me 30?
+  - You're getting 30 grand? I'm getting a thousand!
+  - You guys are getting paid?
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

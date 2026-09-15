@@ -1,0 +1,1242 @@
+import { constants } from "node:fs";
+import { access, readFile, realpath, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { load as parseYaml } from "js-yaml";
+import { parse, parseFragment } from "parse5";
+import {
+  docsSiteUrl,
+  docsSocialEntries,
+  docsRouteFromPage,
+  marketingAgentMarkdownUrl,
+  marketingRouteManifest,
+  marketingSiteUrl,
+} from "../packages/social-images/src/index.js";
+import { generateMarketingDiscoveryArtifacts } from "./public-agent-discovery.mjs";
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const generatedNotice =
+  "<!-- Generated from the canonical OpenPost public page. Do not edit this build artifact. -->";
+const maximumRepresentationBytes = 256 * 1024;
+const corpusWarningBytes = 1024 * 1024;
+const maximumCorpusBytes = 2 * 1024 * 1024;
+const maximumPagesHeaderRules = 100;
+const maximumPagesHeaderLineCharacters = 2000;
+const generatedVaryHeaderMarker = "# OpenPost canonical Vary rules (generated)";
+const privateRoutePattern =
+  /^\/(?:login|register|onboarding|checkout|organizations|workspaces|publications|renditions|media|settings|billing|oauth|api)(?:[/.?#]|$)/iu;
+const privateApplicationOrigins = new Set(["https://app.openpo.st"]);
+const publicContentOrigins = new Set(["https://openpo.st", "https://docs.openpo.st"]);
+const productionArtifactURLs = new Set([
+  "https://openpo.st/index.md",
+  "https://docs.openpo.st/index.md",
+]);
+const ignoredMarketingTags = new Set([
+  "audio",
+  "button",
+  "form",
+  "input",
+  "label",
+  "nav",
+  "noscript",
+  "option",
+  "script",
+  "select",
+  "source",
+  "style",
+  "svg",
+  "template",
+  "textarea",
+  "video",
+]);
+
+function headerRuleCount(contents) {
+  return contents.split("\n").filter((line) => line && !/^\s/u.test(line) && !line.startsWith("#"))
+    .length;
+}
+
+function headerPatternMatches(pattern, pathname) {
+  const wildcard = pattern.indexOf("*");
+  if (wildcard === -1) return pattern === pathname;
+  if (pattern.indexOf("*", wildcard + 1) !== -1) return false;
+  const prefix = pattern.slice(0, wildcard);
+  const suffix = pattern.slice(wildcard + 1);
+  return (
+    pathname.startsWith(prefix) &&
+    pathname.endsWith(suffix) &&
+    pathname.length >= prefix.length + suffix.length
+  );
+}
+
+function hasOriginVaryRule(contents, pathname) {
+  const lines = contents.split("\n");
+  for (let ruleIndex = 0; ruleIndex < lines.length; ruleIndex += 1) {
+    if (!headerPatternMatches(lines[ruleIndex], pathname)) continue;
+    for (let index = ruleIndex + 1; index < lines.length && /^\s/u.test(lines[index]); index += 1) {
+      if (lines[index].trim() === "Vary: Accept") return true;
+    }
+  }
+  return false;
+}
+
+function compactHeaderPatterns(pathnames, maximumPatterns) {
+  const patterns = new Set(pathnames);
+  if (patterns.size <= maximumPatterns) return [...patterns].sort();
+
+  const namespaces = new Map();
+  for (const pathname of pathnames) {
+    const match = /^\/([^/]+)\//u.exec(pathname);
+    if (!match) continue;
+    const pattern = `/${match[1]}/*`;
+    const members = namespaces.get(pattern) ?? [];
+    members.push(pathname);
+    namespaces.set(pattern, members);
+  }
+
+  const candidates = [...namespaces]
+    .filter(([, members]) => members.length > 1)
+    .sort(
+      ([leftPattern, leftMembers], [rightPattern, rightMembers]) =>
+        rightMembers.length - leftMembers.length || leftPattern.localeCompare(rightPattern),
+    );
+  for (const [pattern, members] of candidates) {
+    if (patterns.size <= maximumPatterns) break;
+    for (const member of members) patterns.delete(member);
+    patterns.add(pattern);
+  }
+
+  return [...patterns].sort();
+}
+
+export function renderOriginVaryHeaders(baseHeaders, pages) {
+  const [operatorHeaders] = baseHeaders.split(`\n${generatedVaryHeaderMarker}\n`, 1);
+  const canonicalPaths = [...new Set(pages.map((page) => new URL(page.canonical).pathname))].sort(
+    (left, right) => (left < right ? -1 : left > right ? 1 : 0),
+  );
+  const uncoveredPaths = canonicalPaths.filter(
+    (pathname) => !hasOriginVaryRule(operatorHeaders, pathname),
+  );
+  const availablePatterns = maximumPagesHeaderRules - headerRuleCount(operatorHeaders);
+  const generatedPatterns = compactHeaderPatterns(uncoveredPaths, availablePatterns);
+  const blocks = generatedPatterns.map((pattern) => `${pattern}\n  Vary: Accept`).join("\n");
+  const rendered = `${operatorHeaders.trimEnd()}\n${generatedVaryHeaderMarker}\n${blocks}\n`;
+  const count = headerRuleCount(rendered);
+  if (count > maximumPagesHeaderRules) {
+    throw new Error(
+      `Cloudflare Pages _headers uses ${count} rules; Free limit is ${maximumPagesHeaderRules}`,
+    );
+  }
+  for (const line of rendered.split("\n")) {
+    if (line.length > maximumPagesHeaderLineCharacters) {
+      throw new Error(
+        `Cloudflare Pages _headers line uses ${line.length} characters; limit is ${maximumPagesHeaderLineCharacters}`,
+      );
+    }
+  }
+  return rendered;
+}
+const transparentMarketingTags = new Set([
+  "abbr",
+  "address",
+  "article",
+  "aside",
+  "dd",
+  "del",
+  "details",
+  "div",
+  "dl",
+  "dt",
+  "figcaption",
+  "figure",
+  "footer",
+  "header",
+  "hr",
+  "ins",
+  "kbd",
+  "main",
+  "mark",
+  "picture",
+  "s",
+  "samp",
+  "section",
+  "small",
+  "span",
+  "sub",
+  "sup",
+  "time",
+  "u",
+  "var",
+]);
+
+function marketingHTMLArtifact(routePath) {
+  return routePath === "/" ? "index.html" : `${routePath.slice(1)}.html`;
+}
+
+function marketingMarkdownArtifact(routePath) {
+  return routePath === "/" ? "index.md" : `${routePath.slice(1)}.md`;
+}
+
+function documentationHTMLArtifact(page) {
+  const route = docsRouteFromPage(page);
+  return route === "/" ? "index.html" : `${route.replace(/^\//u, "")}.html`;
+}
+
+const documentationDiscoverySections = [
+  ["mcp", "AI assistants", "Connect an AI assistant to your OpenPost workspace."],
+  ["user-guide", "User guide", "Create, schedule, publish, and review work in the OpenPost app."],
+  ["self-hosting", "Self-hosting", "Run and maintain the complete OpenPost service."],
+  ["api", "API", "Read the API guide and follow its authoritative OpenAPI JSON contract."],
+];
+const documentationSectionTitles = new Map(
+  documentationDiscoverySections.map(([key, title]) => [key, title]),
+);
+
+function attribute(node, name) {
+  return node.attrs?.find((candidate) => candidate.name === name)?.value;
+}
+
+function children(node) {
+  return node?.childNodes ?? [];
+}
+
+function descendants(node) {
+  return [node, ...children(node).flatMap(descendants)];
+}
+
+function element(root, tagName) {
+  return descendants(root).find((node) => node.tagName === tagName);
+}
+
+function headMetadata(document) {
+  const head = element(document, "head");
+  const title = element(head, "title")
+    ?.childNodes?.map((node) => node.value ?? "")
+    .join("")
+    .trim();
+  const description = descendants(head).find(
+    (node) => node.tagName === "meta" && attribute(node, "name") === "description",
+  );
+  const canonical = descendants(head).find(
+    (node) => node.tagName === "link" && attribute(node, "rel") === "canonical",
+  );
+  return {
+    title,
+    description: attribute(description, "content"),
+    canonical: attribute(canonical, "href"),
+  };
+}
+
+function absoluteUrl(value, canonical) {
+  if (!value || value.startsWith("#")) return `${canonical.replace(/\/$/u, "")}${value ?? ""}`;
+  if (/^(?:mailto:|tel:)/u.test(value)) return value;
+  return new URL(value, canonical).href;
+}
+
+function textContent(node) {
+  if (node.nodeName === "#text") return node.value ?? "";
+  return children(node).map(textContent).join("");
+}
+
+function renderTable(node, canonical) {
+  const caption = children(node).find((candidate) => candidate.tagName === "caption");
+  const rows = descendants(node)
+    .filter((candidate) => candidate.tagName === "tr")
+    .map((row) =>
+      children(row)
+        .filter((cell) => cell.tagName === "th" || cell.tagName === "td")
+        .map((cell) => renderNodes(children(cell), canonical).replace(/\s+/gu, " ").trim()),
+    )
+    .filter((row) => row.length > 0);
+  if (rows.length === 0) return "";
+  const width = Math.max(...rows.map((row) => row.length));
+  const normalized = rows.map((row) => [...row, ...Array(width - row.length).fill("")]);
+  const [header, ...body] = normalized;
+  const lines = [
+    `| ${header.join(" | ")} |`,
+    `| ${Array(width).fill("---").join(" | ")} |`,
+    ...body.map((row) => `| ${row.join(" | ")} |`),
+  ];
+  const captionText = caption ? `${renderNodes(children(caption), canonical).trim()}\n\n` : "";
+  return `\n\n${captionText}${lines.join("\n")}\n\n`;
+}
+
+function renderNode(node, canonical, listDepth = 0) {
+  if (node.nodeName === "#text") return (node.value ?? "").replace(/\s+/gu, " ");
+  const tag = node.tagName;
+  if (!tag) return renderNodes(children(node), canonical, listDepth);
+  if (
+    attribute(node, "data-agent-exclude") !== undefined ||
+    attribute(node, "hidden") !== undefined ||
+    attribute(node, "aria-hidden") === "true"
+  )
+    return "";
+  if (ignoredMarketingTags.has(tag)) return "";
+  if (/^h[1-6]$/u.test(tag)) {
+    return `\n\n${"#".repeat(Number(tag[1]))} ${renderNodes(children(node), canonical).trim()}\n\n`;
+  }
+  if (tag === "p") return `\n\n${renderNodes(children(node), canonical, listDepth).trim()}\n\n`;
+  if (tag === "br") return "\n";
+  if (tag === "strong" || tag === "b")
+    return `**${renderNodes(children(node), canonical).trim()}**`;
+  if (tag === "em" || tag === "i") return `*${renderNodes(children(node), canonical).trim()}*`;
+  if (tag === "code" && node.parentNode?.tagName !== "pre") {
+    return `\`${textContent(node).trim()}\``;
+  }
+  if (tag === "pre") return `\n\n\`\`\`\n${textContent(node).trim()}\n\`\`\`\n\n`;
+  if (tag === "a") {
+    const label = renderNodes(children(node), canonical).trim();
+    const href = attribute(node, "href");
+    const resolved = href ? absoluteUrl(href, canonical) : undefined;
+    if (resolved && privateApplicationOrigins.has(new URL(resolved).origin)) return label;
+    return label && resolved ? `[${label}](${resolved})` : label;
+  }
+  if (tag === "img") {
+    const alt = attribute(node, "alt")?.trim();
+    const source = attribute(node, "src");
+    return alt && source ? `![${alt}](${absoluteUrl(source, canonical)})` : "";
+  }
+  if (tag === "li") {
+    const marker = node.parentNode?.tagName === "ol" ? "1." : "-";
+    return `${"  ".repeat(listDepth)}${marker} ${renderNodes(children(node), canonical, listDepth + 1).trim()}\n`;
+  }
+  if (tag === "ul" || tag === "ol") {
+    return `\n${children(node)
+      .filter((child) => child.tagName === "li")
+      .map((child) => renderNode(child, canonical, listDepth))
+      .join("")}\n`;
+  }
+  if (tag === "blockquote") {
+    return `\n\n${renderNodes(children(node), canonical)
+      .trim()
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n")}\n\n`;
+  }
+  if (tag === "table") return renderTable(node, canonical);
+  if (tag === "summary") return `\n\n**${renderNodes(children(node), canonical).trim()}**\n\n`;
+  if (transparentMarketingTags.has(tag)) return renderNodes(children(node), canonical, listDepth);
+  throw new Error(`${canonical}: unsupported meaning-bearing <${tag}>`);
+}
+
+function renderNodes(nodes, canonical, listDepth = 0) {
+  return nodes.map((node) => renderNode(node, canonical, listDepth)).join("");
+}
+
+function cleanMarkdown(markdown) {
+  return `${markdown
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim()}\n`;
+}
+
+function representation({ title, description, canonical, body }) {
+  if (!title || !description || !canonical) {
+    throw new Error(`page metadata requires title, description, and canonical URL`);
+  }
+  const cleanedBody = cleanMarkdown(body);
+  const h1Count = withoutFencedContent(cleanedBody)
+    .split("\n")
+    .filter((line) => /^# /u.test(line)).length;
+  if (h1Count !== 1) {
+    throw new Error(`${canonical}: generated representation must contain exactly one H1`);
+  }
+  return cleanMarkdown(`${generatedNotice}
+
+Title: ${title}
+Description: ${description}
+Canonical: ${canonical}
+Source: [${canonical}](${canonical})
+
+${cleanedBody}`);
+}
+
+function marketingRepresentation(source, page) {
+  const document = parse(source);
+  const metadata = headMetadata(document);
+  if (metadata.canonical) metadata.canonical = new URL(metadata.canonical).href;
+  if (page.route) {
+    const routeCanonical = new URL(page.route.canonical).href;
+    for (const field of ["title", "description"]) {
+      if (metadata[field] !== page.route[field]) {
+        throw new Error(
+          `${routeCanonical}: rendered ${field} does not match canonical route metadata`,
+        );
+      }
+    }
+    if (metadata.canonical !== routeCanonical) {
+      throw new Error(`${routeCanonical}: rendered canonical URL does not match route metadata`);
+    }
+  }
+  const main = element(document, "main");
+  if (!main)
+    throw new Error(`${metadata.canonical ?? "marketing page"}: missing semantic main content`);
+  return {
+    ...metadata,
+    markdown: representation({
+      ...metadata,
+      body: renderNodes(children(main), metadata.canonical),
+    }),
+  };
+}
+
+function parseFrontmatter(source) {
+  const match = source.match(/^---\n([\s\S]*?)\n---\n?/u);
+  if (!match) return { data: {}, body: source };
+  return {
+    data: parseYaml(match[1]) ?? {},
+    body: source.slice(match[0].length),
+  };
+}
+
+function mapFenceAwareLines(source, transform) {
+  let fenced = false;
+  return source
+    .split("\n")
+    .map((line) => {
+      const fenceDelimiter = /^\s*(?:```|~~~)/u.test(line);
+      if (fenceDelimiter) {
+        fenced = !fenced;
+      }
+      return transform(line, fenced, fenceDelimiter);
+    })
+    .join("\n");
+}
+
+function mapOutsideFences(source, transform) {
+  return mapFenceAwareLines(source, (line, fenced, fenceDelimiter) =>
+    fenced || fenceDelimiter ? line : transform(line),
+  );
+}
+
+function withoutFencedContent(source) {
+  return mapFenceAwareLines(source, (line, fenced, fenceDelimiter) =>
+    fenced || fenceDelimiter ? "" : line,
+  );
+}
+
+function validateRepresentationSafety(markdown, canonical) {
+  const exposed = withoutFencedContent(markdown);
+  if (/\b(?:data-sveltekit(?:-[\w-]+)?|__sveltekit(?:_[\w-]+)?|__NEXT_DATA__)\b/iu.test(exposed)) {
+    throw new Error(`${canonical}: generated representation contains serialized application state`);
+  }
+  if (/<script\b|<!--@include:|^:::[ \t]/imu.test(exposed)) {
+    throw new Error(
+      `${canonical}: generated representation contains an unresolved source construct`,
+    );
+  }
+}
+
+function rewriteMarkdownLinks(source, canonical) {
+  return mapOutsideFences(source, (line) =>
+    line.replace(/(!?\[[^\]]*\])\(([^)\s]+)([^)]*)\)/gu, (_match, label, target, suffix) => {
+      if (target.startsWith("#") || /^(?:mailto:|tel:)/u.test(target))
+        return `${label}(${target}${suffix})`;
+      const resolved = absoluteUrl(target, canonical);
+      if (privateApplicationOrigins.has(new URL(resolved).origin)) {
+        return label.replace(/^!?\[|\]$/gu, "");
+      }
+      return `${label}(${resolved}${suffix})`;
+    }),
+  );
+}
+
+function normalizeContainers(source, sourcePath) {
+  const defaultLabels = {
+    danger: "Danger",
+    details: "Details",
+    info: "Info",
+    tip: "Tip",
+    warning: "Warning",
+  };
+  return transformOutsideFencedBlocks(source, (plainSource) => {
+    const normalized = plainSource.replace(
+      /^:::[ \t]*(info|tip|warning|danger|details)(?:[ \t]+([^\n]*?))?[ \t]*\r?\n([\s\S]*?)^:::[ \t]*$/gimu,
+      (_all, type, label, body) => {
+        const lines = body.trim().split("\n");
+        const title = label?.trim() || defaultLabels[type.toLowerCase()];
+        return [`> **${title}**`, ">", ...lines.map((line) => `> ${line}`)].join("\n");
+      },
+    );
+    const unsupported = normalized.match(/^:::[ \t]*([^\s\n]+)?[^\n]*$/mu);
+    if (unsupported) {
+      throw new Error(
+        `${sourcePath}: unsupported VitePress container ::: ${unsupported[1] ?? "(unclosed directive)"}`,
+      );
+    }
+    return normalized;
+  });
+}
+
+function normalizeMaintainedClientOnly(source) {
+  return source.replace(/<ClientOnly>\s*<OASpec\s+hideBranding\s*\/>\s*<\/ClientOnly>/gu, "");
+}
+
+function transformOutsideFencedBlocks(source, transform) {
+  const lines = source.split("\n");
+  const output = [];
+  let plain = [];
+  let fenced = false;
+  const flush = () => {
+    if (plain.length > 0) output.push(transform(plain.join("\n")));
+    plain = [];
+  };
+  for (const line of lines) {
+    if (/^\s*(?:```|~~~)/u.test(line)) {
+      if (!fenced) flush();
+      output.push(line);
+      fenced = !fenced;
+    } else if (fenced) {
+      output.push(line);
+    } else {
+      plain.push(line);
+    }
+  }
+  flush();
+  return output.join("\n");
+}
+
+function normalizeRawHtml(source, canonical, sourcePath) {
+  return transformOutsideFencedBlocks(source, (plainSource) => {
+    let markerPrefix = "\u{e000}OPENPOST_INLINE_CODE_";
+    while (plainSource.includes(markerPrefix)) markerPrefix = `\u{e000}${markerPrefix}`;
+    const inlineCode = [];
+    let normalized = plainSource.replace(/`[^`\n]+`/gu, (code) => {
+      inlineCode.push(code);
+      return `${markerPrefix}${inlineCode.length - 1}\u{e001}`;
+    });
+    normalized = normalized.replace(/<!--[\s\S]*?-->/gu, "");
+    normalized = normalized.replace(
+      /^import \{ SetupScreenshot \} from ["']@\/components\/setup-screenshot["'];?\s*$/gmu,
+      "",
+    );
+    normalized = normalized.replace(/<SetupScreenshot\b[^>]*\/>/gu, (component) => {
+      const node = element(parseFragment(component), "setupscreenshot");
+      const src = attribute(node, "src");
+      const alt = attribute(node, "alt");
+      const caption = attribute(node, "caption");
+      if (!src || !alt || !caption) {
+        throw new Error(`${sourcePath}: SetupScreenshot requires src, alt, and caption`);
+      }
+      const sourceUrl = attribute(node, "sourceurl");
+      const attribution = sourceUrl
+        ? ` [Screenshot from Postiz's guide](${absoluteUrl(sourceUrl, canonical)}).${attribute(node, "edited") !== undefined ? " Example values edited with AI." : ""} Portal layouts may change.`
+        : "";
+      return `![${alt}](${absoluteUrl(src, canonical)})\n\n${caption}${attribution}`;
+    });
+    const supportedBlock =
+      /<(p|section|div|aside|details|table|ul|ol|blockquote|figure)(?:\s[^>]*)?>[\s\S]*?<\/\1>/giu;
+    let previous;
+    do {
+      previous = normalized;
+      normalized = normalized.replace(supportedBlock, (html) =>
+        renderNodes(children(parseFragment(html)), canonical).trim(),
+      );
+    } while (normalized !== previous);
+    normalized = normalized.replace(/<(?:img|br)\b[^>]*>/giu, (html) =>
+      renderNodes(children(parseFragment(html)), canonical).trim(),
+    );
+    const unsupported = normalized.match(/<\/?([A-Za-z][\w-]*)\b[^>]*>/u);
+    if (unsupported) {
+      throw new Error(
+        `${sourcePath}: unsupported meaning-bearing <${unsupported[1].toLowerCase()}>`,
+      );
+    }
+    for (const [index, code] of inlineCode.entries()) {
+      normalized = normalized.replaceAll(`${markerPrefix}${index}\u{e001}`, code);
+    }
+    return normalized;
+  });
+}
+
+async function expandControlledIncludes(source, sourcePath, sourceRoot, stack = []) {
+  const includePattern = /<!--@include:\s+([^\s{}]+)\s*-->/gu;
+  let expanded = "";
+  let cursor = 0;
+  for (const match of source.matchAll(includePattern)) {
+    expanded += source.slice(cursor, match.index);
+    const includeReference = match[1];
+    const includePath = path.resolve(path.dirname(sourcePath), includeReference);
+    const resolvedRoot = await realpath(sourceRoot);
+    const resolvedInclude = await realpath(includePath).catch(() => includePath);
+    if (
+      resolvedInclude !== resolvedRoot &&
+      !resolvedInclude.startsWith(`${resolvedRoot}${path.sep}`)
+    ) {
+      throw new Error(
+        `${sourcePath}: controlled include escapes the documentation root: ${includeReference}`,
+      );
+    }
+    if (stack.includes(resolvedInclude)) {
+      throw new Error(`${sourcePath}: controlled include cycle: ${includeReference}`);
+    }
+    await requireSource(resolvedInclude);
+    const included = await readFile(resolvedInclude, "utf8");
+    expanded += await expandControlledIncludes(included, resolvedInclude, sourceRoot, [
+      ...stack,
+      resolvedInclude,
+    ]);
+    cursor = match.index + match[0].length;
+  }
+  expanded += source.slice(cursor);
+  if (/<!--@include:/u.test(expanded)) {
+    throw new Error(`${sourcePath}: unsupported controlled include directive`);
+  }
+  return expanded;
+}
+
+async function documentationRepresentation(source, page, sourceRoot) {
+  source = await expandControlledIncludes(source, page.sourcePath, sourceRoot);
+  const { data, body: maintainedBody } = parseFrontmatter(source);
+  const hero = data.hero ?? {};
+  const sections = [`# ${hero.name ?? page.title}`];
+  if (hero.text) sections.push(String(hero.text));
+  if (hero.tagline) sections.push(String(hero.tagline));
+  if (Array.isArray(hero.actions)) {
+    sections.push(
+      hero.actions
+        .filter(
+          (action) =>
+            action?.text &&
+            action?.link &&
+            !privateApplicationOrigins.has(new URL(action.link, page.canonical).origin),
+        )
+        .map((action) => `- [${action.text}](${absoluteUrl(action.link, page.canonical)})`)
+        .join("\n"),
+    );
+  }
+  if (Array.isArray(data.features)) {
+    for (const feature of data.features) {
+      if (feature?.title) sections.push(`## ${feature.title}\n\n${feature.details ?? ""}`);
+    }
+  }
+  const bodyWithoutSourceHeading = maintainedBody.replace(/^\s*#\s+.+(?:\n+|$)/u, "");
+  const normalizedBody = rewriteMarkdownLinks(
+    normalizeRawHtml(
+      normalizeContainers(normalizeMaintainedClientOnly(bodyWithoutSourceHeading), page.sourcePath),
+      page.canonical,
+      page.sourcePath,
+    ),
+    page.canonical,
+  );
+  sections.push(normalizedBody);
+  return {
+    title: page.title,
+    description: page.description,
+    canonical: page.canonical,
+    markdown: representation({
+      ...page,
+      body: sections.filter(Boolean).join("\n\n"),
+    }),
+  };
+}
+
+export function discoveryDocument(discovery) {
+  const renderLinks = (links) =>
+    links.map((link) => `- [${link.title}](${link.url}): ${link.description}`).join("\n");
+  const renderGuidance = (title, items) =>
+    items?.length ? `## ${title}\n\n${items.map((item) => `- ${item}`).join("\n")}` : "";
+  const primary = discovery.links.filter(
+    (link) => (link.classification ?? "primary") === "primary",
+  );
+  const optional = discovery.links.filter((link) => link.classification === "optional");
+  const sections = (discovery.sections ?? [])
+    .map(
+      (section) =>
+        `## ${section.title}\n\n${section.description ? `> ${section.description}\n\n` : ""}${renderLinks(section.links)}`,
+    )
+    .join("\n\n");
+  const guidance = [
+    renderGuidance("When to use OpenPost", discovery.whenToUse),
+    renderGuidance("When OpenPost is not a fit", discovery.whenNotToUse),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  return cleanMarkdown(
+    `# ${discovery.title}\n\n> ${discovery.description}${guidance ? `\n\n${guidance}` : ""}\n\n${renderLinks(primary)}${optional.length ? `\n\n## Optional\n\n${renderLinks(optional)}` : ""}${sections ? `\n\n${sections}` : ""}`,
+  );
+}
+
+function demoteCorpusHeadings(source) {
+  return mapOutsideFences(source, (line) =>
+    line.replace(
+      /^(#{1,6})\s+/u,
+      (_match, markers) => `${"#".repeat(Math.min(6, markers.length + 2))} `,
+    ),
+  );
+}
+
+function corpusArtifactURL(page) {
+  return new URL(page.outputPath, new URL(page.canonical).origin + "/").href;
+}
+
+function corpusLinks(markdown, page, artifactsByCanonical) {
+  return mapOutsideFences(markdown, (line) =>
+    line.replace(
+      /(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+[^)]*)?\)/gu,
+      (_match, imageMarker, label, target) => {
+        const url = new URL(target, page.canonical);
+        const artifact = artifactsByCanonical.get(normalizedPublicURL(url.href));
+        if (artifact) return `${imageMarker}[${label}](${artifact}${url.hash})`;
+        const intentionalNative =
+          publicContentOrigins.has(url.origin) &&
+          (url.pathname.startsWith("/assets/") || url.pathname === "/openapi.json");
+        if (intentionalNative) return `${imageMarker}[${label}](${url.href})`;
+        return label;
+      },
+    ),
+  );
+}
+
+function corpusPageBody(page, artifactsByCanonical) {
+  const headingStart = page.markdown.search(/^# /mu);
+  if (headingStart < 0) throw new Error(`${page.canonical}: corpus source has no page heading`);
+  const body = page.markdown.slice(headingStart).replace(/^# .+(?:\n+|$)/u, "");
+  return corpusLinks(demoteCorpusHeadings(body), page, artifactsByCanonical).trim();
+}
+
+function corpusDocument(corpus, generatedPages) {
+  const artifactsByCanonical = new Map(
+    generatedPages.map((page) => [normalizedPublicURL(page.canonical), corpusArtifactURL(page)]),
+  );
+  const includedBySection = new Map();
+  for (const page of generatedPages) {
+    const policy = page.catalog?.agentCorpus;
+    if (!policy) throw new Error(`${page.canonical}: missing canonical corpus metadata`);
+    if (policy.membership === "excluded") {
+      if (!policy.reason?.trim()) {
+        throw new Error(`${page.canonical}: corpus exclusion requires a reason`);
+      }
+      continue;
+    }
+    if (policy.membership !== "included" || !documentationSectionTitles.has(policy.section)) {
+      throw new Error(`${page.canonical}: invalid canonical corpus metadata`);
+    }
+    const pages = includedBySection.get(policy.section) ?? [];
+    pages.push(page);
+    includedBySection.set(policy.section, pages);
+  }
+
+  const sections = documentationDiscoverySections.flatMap(([key, title]) => {
+    const pages = includedBySection.get(key) ?? [];
+    if (pages.length === 0) return [];
+    return [
+      `## ${title}\n\n${pages
+        .map((page) => {
+          const body = corpusPageBody(page, artifactsByCanonical);
+          const source = corpusArtifactURL(page);
+          return `### ${page.title}\n\nSource: [${source}](${source})${body ? `\n\n${body}` : ""}`;
+        })
+        .join("\n\n")}`,
+    ];
+  });
+  return cleanMarkdown(`# ${corpus.title}
+
+> This documentation-only file is an OpenPost convenience artifact for reading the selected public documentation as one bounded corpus.
+>
+> It is not part of the llms.txt v2 proposal. Use llms.txt for the discovery index and each page's canonical URL for current source provenance.
+
+${sections.join("\n\n")}`);
+}
+
+async function requireSource(sourcePath) {
+  try {
+    await access(sourcePath, constants.R_OK);
+  } catch {
+    throw new Error(`missing canonical source: ${sourcePath}`);
+  }
+}
+
+function validateDiscovery(projection, generatedPages) {
+  const outputPaths = new Set(generatedPages.map((page) => page.outputPath));
+  if (outputPaths.size !== generatedPages.length) {
+    const duplicate = generatedPages.find(
+      (page, index) =>
+        generatedPages.findIndex((candidate) => candidate.outputPath === page.outputPath) !== index,
+    );
+    throw new Error(`duplicate output path: ${duplicate.outputPath}`);
+  }
+  const canonicalRoutes = new Set(
+    generatedPages.map((page) => normalizedPublicURL(page.canonical)),
+  );
+  if (canonicalRoutes.size !== generatedPages.length) {
+    const duplicate = generatedPages.find(
+      (page, index) =>
+        generatedPages.findIndex(
+          (candidate) =>
+            normalizedPublicURL(candidate.canonical) === normalizedPublicURL(page.canonical),
+        ) !== index,
+    );
+    throw new Error(`duplicate canonical route: ${duplicate.canonical}`);
+  }
+  const artifactURLs = new Set(
+    generatedPages.map(
+      (page) => new URL(page.outputPath, new URL(page.canonical).origin + "/").href,
+    ),
+  );
+  const discoveryLinks = [
+    ...projection.discovery.links,
+    ...(projection.discovery.sections ?? []).flatMap((section) => section.links),
+  ];
+  for (const link of projection.discovery.links) {
+    if (!new Set(["primary", "optional"]).has(link.classification ?? "primary")) {
+      throw new Error(`invalid discovery classification for ${link.url}`);
+    }
+  }
+  for (const link of discoveryLinks) {
+    const url = new URL(link.url);
+    if (privateApplicationOrigins.has(url.origin) || privateRoutePattern.test(url.pathname)) {
+      throw new Error(`discovery link exposes a private application route: ${link.url}`);
+    }
+    const knownArtifacts = new Set([
+      ...artifactURLs,
+      ...(projection.knownArtifactURLs ?? productionArtifactURLs),
+    ]);
+    if (publicContentOrigins.has(url.origin) && !knownArtifacts.has(url.href)) {
+      throw new Error(`discovery link has no generated artifact: ${link.url}`);
+    }
+  }
+}
+
+function normalizedPublicURL(value) {
+  const url = new URL(value);
+  url.hash = "";
+  url.search = "";
+  if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/$/u, "");
+  return url.href;
+}
+
+function markdownLinks(markdown) {
+  return withoutFencedContent(markdown).matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/gu);
+}
+
+function validateRepresentationLinks(
+  markdown,
+  canonical,
+  knownCanonicalURLs = [],
+  knownFragmentsByCanonical = new Map(),
+) {
+  const known = new Set(knownCanonicalURLs.map(normalizedPublicURL));
+  for (const match of markdownLinks(markdown)) {
+    const url = new URL(match[1], canonical);
+    if (privateApplicationOrigins.has(url.origin)) {
+      throw new Error(`${canonical}: generated representation exposes private link ${url.href}`);
+    }
+    if (!publicContentOrigins.has(url.origin)) continue;
+    if (url.pathname.startsWith("/assets/")) continue;
+    if (knownCanonicalURLs.length === 0) continue;
+    if (!known.has(normalizedPublicURL(url.href))) {
+      throw new Error(`${canonical}: broken internal link ${url.href}`);
+    }
+    const targetFragments = knownFragmentsByCanonical.get(normalizedPublicURL(url.href));
+    if (
+      url.hash &&
+      targetFragments &&
+      !targetFragments.has(decodeURIComponent(url.hash.slice(1)))
+    ) {
+      throw new Error(`${canonical}: broken internal fragment ${url.hash}`);
+    }
+  }
+}
+
+function htmlFragments(source) {
+  return new Set(
+    descendants(parse(source))
+      .map((node) => attribute(node, "id"))
+      .filter(Boolean),
+  );
+}
+
+async function verifyWrittenArtifacts(projection, generatedPages, corpus) {
+  for (const page of generatedPages) {
+    const output = await readFile(path.join(projection.outputDirectory, page.outputPath), "utf8");
+    if (output !== page.markdown) {
+      throw new Error(`generated artifact does not match its canonical source: ${page.outputPath}`);
+    }
+  }
+  const discovery = await readFile(path.join(projection.outputDirectory, "llms.txt"), "utf8");
+  if (discovery !== discoveryDocument(projection.discovery)) {
+    throw new Error("generated llms.txt does not match its canonical discovery metadata");
+  }
+  if (corpus !== undefined) {
+    const writtenCorpus = await readFile(
+      path.join(projection.outputDirectory, "llms-full.txt"),
+      "utf8",
+    );
+    if (writtenCorpus !== corpus) {
+      throw new Error("generated llms-full.txt does not match its canonical corpus metadata");
+    }
+  }
+}
+
+function validateHTMLDiscovery(source, page) {
+  const document = parse(source);
+  const head = element(document, "head");
+  const links = descendants(head).filter((node) => node.tagName === "link");
+  const markdownURL = new URL(page.outputPath, new URL(page.canonical).origin + "/").href;
+  const hasMarkdown = links.some(
+    (link) =>
+      attribute(link, "rel") === "alternate" &&
+      attribute(link, "type") === "text/markdown" &&
+      absoluteUrl(attribute(link, "href"), page.canonical) === markdownURL,
+  );
+  const hasDiscovery = links.some(
+    (link) =>
+      attribute(link, "rel") === "alternate" &&
+      attribute(link, "type") === "text/plain" &&
+      new URL(attribute(link, "href"), page.canonical).pathname === "/llms.txt",
+  );
+  if (!hasMarkdown || !hasDiscovery) {
+    throw new Error(`${page.canonical}: canonical HTML is missing Agent-readable discovery links`);
+  }
+}
+
+export async function generateAgentSurface(projection) {
+  const generatedPages = [];
+  const knownFragmentsByCanonical = new Map();
+  for (const target of projection.fragmentSources ?? []) {
+    await requireSource(target.sourcePath);
+    knownFragmentsByCanonical.set(
+      normalizedPublicURL(target.canonical),
+      htmlFragments(await readFile(target.sourcePath, "utf8")),
+    );
+  }
+  for (const page of projection.pages) {
+    await requireSource(page.sourcePath);
+    const source = await readFile(page.sourcePath, "utf8");
+    const rendered =
+      projection.surface === "marketing"
+        ? marketingRepresentation(source, page)
+        : await documentationRepresentation(
+            source,
+            page,
+            projection.sourceRoot ?? path.dirname(page.sourcePath),
+          );
+    const generated = { ...page, ...rendered };
+    if (privateRoutePattern.test(new URL(generated.canonical).pathname)) {
+      throw new Error(`generated page exposes a private application route: ${generated.canonical}`);
+    }
+    validateRepresentationSafety(generated.markdown, generated.canonical);
+    if (Buffer.byteLength(generated.markdown, "utf8") > maximumRepresentationBytes) {
+      const exception = page.catalog?.agentRepresentation?.sizeException;
+      if (exception?.reviewed !== true || !exception.reason?.trim()) {
+        throw new Error(
+          `${generated.canonical}: representation exceeds 256 KiB without a reviewed exception`,
+        );
+      }
+    }
+    if (page.discoveryHTMLPath) {
+      await requireSource(page.discoveryHTMLPath);
+      validateHTMLDiscovery(await readFile(page.discoveryHTMLPath, "utf8"), generated);
+    } else if (projection.surface === "marketing") {
+      validateHTMLDiscovery(source, generated);
+    }
+    if (projection.surface === "marketing") {
+      knownFragmentsByCanonical.set(
+        normalizedPublicURL(generated.canonical),
+        htmlFragments(source),
+      );
+    }
+    validateRepresentationLinks(
+      generated.markdown,
+      generated.canonical,
+      projection.knownCanonicalURLs,
+      knownFragmentsByCanonical,
+    );
+    generatedPages.push(generated);
+  }
+  validateDiscovery(projection, generatedPages);
+
+  for (const page of generatedPages) {
+    await writeFile(path.join(projection.outputDirectory, page.outputPath), page.markdown, "utf8");
+  }
+  await writeFile(
+    path.join(projection.outputDirectory, "llms.txt"),
+    discoveryDocument(projection.discovery),
+    "utf8",
+  );
+  let corpus;
+  if (projection.corpus) {
+    corpus = corpusDocument(projection.corpus, generatedPages);
+    const corpusBytes = Buffer.byteLength(corpus, "utf8");
+    if (corpusBytes >= maximumCorpusBytes) {
+      throw new Error(`documentation llms-full.txt reaches or exceeds 2 MiB`);
+    }
+    if (corpusBytes > corpusWarningBytes) {
+      (projection.warn ?? console.warn)(
+        `documentation llms-full.txt exceeds 1 MiB (${corpusBytes} bytes)`,
+      );
+    }
+    await writeFile(path.join(projection.outputDirectory, "llms-full.txt"), corpus, "utf8");
+  }
+  const headersPath = path.join(projection.outputDirectory, "_headers");
+  try {
+    await writeFile(
+      headersPath,
+      renderOriginVaryHeaders(await readFile(headersPath, "utf8"), generatedPages),
+      "utf8",
+    );
+  } catch (error) {
+    if (error.code !== "ENOENT" || projection.originHeadersRequired) throw error;
+  }
+  await verifyWrittenArtifacts(projection, generatedPages, corpus);
+  return generatedPages;
+}
+
+export const productionProjections = {
+  marketing: {
+    surface: "marketing",
+    originHeadersRequired: true,
+    outputDirectory: path.join(repositoryRoot, "apps/marketing/dist"),
+    pages: marketingRouteManifest
+      .filter((route) => ["static", "platform", "tool"].includes(route.agentRepresentation))
+      .map((route) => ({
+        sourcePath: path.join(
+          repositoryRoot,
+          "apps/marketing/dist",
+          marketingHTMLArtifact(route.path),
+        ),
+        outputPath: marketingMarkdownArtifact(route.path),
+        route,
+      })),
+    knownCanonicalURLs: [
+      ...marketingRouteManifest.map((entry) => entry.canonical),
+      ...docsSocialEntries.map((entry) => entry.canonical),
+      "https://docs.openpo.st/openapi.json",
+    ],
+    knownArtifactURLs: [
+      "https://docs.openpo.st/index.md",
+      "https://docs.openpo.st/openapi.json",
+      "https://docs.openpo.st/guides/publishing.md",
+      "https://docs.openpo.st/guides/automation.md",
+    ],
+    fragmentSources: marketingRouteManifest.map((route) => ({
+      canonical: route.canonical,
+      sourcePath: path.join(
+        repositoryRoot,
+        "apps/marketing/dist",
+        marketingHTMLArtifact(route.path),
+      ),
+    })),
+    discovery: {
+      title: "OpenPost",
+      description: "Create, adapt, schedule, and track social content from one workspace.",
+      whenToUse: [
+        "Use OpenPost to turn product work, launches, updates, lessons, and ideas into destination-specific social content.",
+        "Use it to draft, schedule, publish, and track work across supported social networks from one workspace.",
+        "Use its HTTP API, CLI, or MCP server when software or an AI assistant needs scoped access to the same publishing system.",
+        "Use the complete open-source service when you need to run the application on infrastructure you control.",
+      ],
+      whenNotToUse: [
+        "OpenPost is not a social network, public feed, social-listening service, or general search index of social posts.",
+        "It does not bypass social-network approval, permissions, formats, limits, outages, or account readiness.",
+        "It is not a substitute for human review of facts, rights, account selection, media, alt text, timing, or an agent's proposed change.",
+      ],
+      links: [
+        ...marketingRouteManifest
+          .filter(
+            (route) =>
+              route.agentRepresentation === "static" &&
+              route.agentDiscovery.membership !== "unlisted",
+          )
+          .map((route) => ({
+            title: route.path === "/" ? "OpenPost overview" : route.title,
+            description: route.description,
+            url: new URL(marketingMarkdownArtifact(route.path), `${marketingSiteUrl}/`).href,
+            classification: route.agentDiscovery.membership,
+          })),
+        {
+          title: "OpenPost documentation",
+          description: "Read the user, self-hosting, and API documentation.",
+          url: "https://docs.openpo.st/index.md",
+          classification: "primary",
+        },
+      ],
+      sections: [
+        {
+          title: "Developer and agent interfaces",
+          description:
+            "Choose the maintained interface that matches the client, then follow its token and workspace boundaries.",
+          links: [
+            {
+              title: "OpenPost developer entry point",
+              description: "Choose the HTTP API, CLI, or MCP server for the job.",
+              url: "https://docs.openpo.st/guides/automation.md",
+            },
+            {
+              title: "OpenAPI JSON",
+              description: "Use the authoritative OpenAPI 3.1 HTTP API contract.",
+              url: "https://docs.openpo.st/openapi.json",
+            },
+            {
+              title: "OpenPost CLI",
+              description: "Use a terminal, script, CI job, cron job, or deploy process.",
+              url: "https://docs.openpo.st/guides/automation.md",
+            },
+            {
+              title: "OpenPost MCP server",
+              description: "Connect an AI assistant with explicit read and change scopes.",
+              url: "https://docs.openpo.st/guides/automation.md",
+            },
+            {
+              title: "Agent-assisted publishing",
+              description: "Follow the human-reviewed workflow for agent-prepared publishing work.",
+              url: "https://docs.openpo.st/guides/publishing.md",
+            },
+          ],
+        },
+        {
+          title: "Optional platforms",
+          description: "Destination-specific formats, setup needs, limits, and readiness notes.",
+          links: marketingRouteManifest
+            .filter((entry) => entry.agentDiscovery?.section === "platforms")
+            .map((entry) => ({
+              title: entry.title,
+              description: entry.description,
+              url: marketingAgentMarkdownUrl(entry),
+            })),
+        },
+        {
+          title: "Optional browser tools",
+          description:
+            "Browser-only tools for preparing content. These pages describe local interactive behavior, not a public machine API.",
+          links: marketingRouteManifest
+            .filter((entry) => entry.agentDiscovery?.section === "tools")
+            .map((entry) => ({
+              title: entry.title,
+              description: entry.description,
+              url: marketingAgentMarkdownUrl(entry),
+            })),
+        },
+      ],
+    },
+  },
+  documentation: {
+    surface: "documentation",
+    originHeadersRequired: true,
+    sourceRoot: path.join(repositoryRoot, "apps/docs/content/docs"),
+    corpus: { title: "OpenPost Documentation Full Corpus" },
+    outputDirectory: path.join(repositoryRoot, "apps/docs/out"),
+    pages: docsSocialEntries
+      .filter((entry) => entry.agentRepresentation.membership === "ordinary")
+      .map((entry) => ({
+        sourcePath: path.join(repositoryRoot, "apps/docs/content/docs", entry.page),
+        discoveryHTMLPath: path.join(
+          repositoryRoot,
+          "apps/docs/out",
+          documentationHTMLArtifact(entry.page),
+        ),
+        outputPath: entry.page.replace(/\.mdx?$/u, ".md"),
+        page: entry.page,
+        route: entry.route,
+        catalog: entry,
+        canonical: entry.canonical,
+        title: entry.socialTitle,
+        description: entry.description,
+      })),
+    knownCanonicalURLs: [
+      ...docsSocialEntries.map((entry) => entry.canonical),
+      ...marketingRouteManifest.map((entry) => entry.canonical),
+      "https://docs.openpo.st/openapi.json",
+    ],
+    knownArtifactURLs: [
+      "https://openpo.st/index.md",
+      "https://docs.openpo.st/openapi.json",
+      "https://docs.openpo.st/llms-full.txt",
+    ],
+    fragmentSources: docsSocialEntries.map((entry) => ({
+      canonical: entry.canonical,
+      sourcePath: path.join(repositoryRoot, "apps/docs/out", documentationHTMLArtifact(entry.page)),
+    })),
+    discovery: {
+      title: "OpenPost Documentation",
+      description: "Guides to publishing, automation, self-hosting, and the OpenPost API.",
+      whenToUse: [
+        "Use the user guide for work in the OpenPost web or mobile app.",
+        "Use the API reference and authoritative OpenAPI JSON contract for automation and agent access.",
+        "Use the self-hosting guide to install, configure, back up, and upgrade an OpenPost instance.",
+      ],
+      whenNotToUse: [
+        "Do not treat documentation as proof that a social provider or exact account can publish a format today; check current readiness and run the documented live test.",
+        "Do not use public docs to infer private workspace data, tokens, connected accounts, drafts, schedules, or publishing results.",
+      ],
+      links: [
+        ...docsSocialEntries
+          .filter(
+            (entry) => entry.page === "index.mdx" && entry.agentDiscovery.membership === "primary",
+          )
+          .map((entry) => ({
+            title: "OpenPost documentation home",
+            description: entry.description,
+            url: new URL(entry.page.replace(/\.mdx?$/u, ".md"), `${docsSiteUrl}/`).href,
+            classification: entry.agentDiscovery.membership,
+          })),
+        {
+          title: "OpenPost product overview",
+          description: "See the public product overview and Hosted service path.",
+          url: "https://openpo.st/index.md",
+          classification: "optional",
+        },
+        {
+          title: "OpenPost documentation full corpus",
+          description:
+            "Read the selected public documentation as one bounded OpenPost convenience artifact.",
+          url: "https://docs.openpo.st/llms-full.txt",
+          classification: "optional",
+        },
+      ],
+      sections: documentationDiscoverySections.map(([key, title, description]) => ({
+        title,
+        description,
+        links: [
+          ...docsSocialEntries
+            .filter(
+              (entry) =>
+                entry.agentDiscovery.membership === "primary" &&
+                entry.agentDiscovery.section === key,
+            )
+            .map((entry) => ({
+              title: entry.socialTitle,
+              description: entry.description,
+              url: new URL(entry.page.replace(/\.mdx?$/u, ".md"), `${docsSiteUrl}/`).href,
+            })),
+          ...(key === "api"
+            ? [
+                {
+                  title: "OpenAPI JSON",
+                  description: "Use the authoritative machine-readable HTTP API contract.",
+                  url: "https://docs.openpo.st/openapi.json",
+                },
+              ]
+            : []),
+        ],
+      })),
+    },
+  },
+};
+
+async function main() {
+  const surface = process.argv[2] === "--surface" ? process.argv[3] : undefined;
+  if (!surface || !(surface in productionProjections)) {
+    throw new Error(
+      "Usage: bun scripts/generate-agent-surfaces.mjs --surface marketing|documentation",
+    );
+  }
+  const projection = productionProjections[surface];
+  if (surface === "documentation") {
+    const sitemap = await readFile(path.join(projection.outputDirectory, "sitemap.xml"), "utf8");
+    projection.knownCanonicalURLs = [
+      ...projection.knownCanonicalURLs,
+      ...[...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]),
+    ];
+  }
+  await generateAgentSurface(projection);
+  if (surface === "marketing") {
+    await generateMarketingDiscoveryArtifacts({
+      outputDirectory: productionProjections.marketing.outputDirectory,
+    });
+  }
+  console.log(`Generated ${surface} Agent-readable pages and llms.txt.`);
+}
+
+if (import.meta.main) await main();

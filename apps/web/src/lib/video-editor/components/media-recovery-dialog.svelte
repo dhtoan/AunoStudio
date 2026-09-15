@@ -1,0 +1,549 @@
+<script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { m } from '$lib/paraglide/messages';
+	import { showToast } from '$lib/toast';
+	import {
+		applyMediaDirectoryRecovery,
+		planMediaDirectoryRecovery,
+		scanMediaRecoveryDirectory,
+		type MediaDirectoryRecoveryPlan
+	} from '$lib/video-editor/media/media-directory-recovery';
+	import { mediaRecovery } from '$lib/video-editor/media/media-recovery.svelte';
+	import {
+		automaticOrphanMatches,
+		compatibleRecoveryMedia,
+		type MediaSourceIssue,
+		type OrphanedTimelineClip
+	} from '$lib/video-editor/media/media-recovery';
+	import { formatMediaListSummary } from '$lib/video-editor/media/library-view';
+	import {
+		relinkMediaSource,
+		requestMediaSourceAccess
+	} from '$lib/video-editor/media/media-source-recovery';
+	import { mediaPool } from '$lib/video-editor/media/pool.svelte';
+	import type { MediaMetadata } from '$lib/video-editor/media/types';
+	import { removeItems } from '$lib/video-editor/timeline/actions/items';
+	import {
+		relinkOrphanedClip,
+		relinkOrphanedClips
+	} from '$lib/video-editor/timeline/actions/media-recovery';
+	import { ProtectedIcon, ThemeIcon } from '$lib/themes/icons';
+
+	let { onedit = () => undefined }: { onedit?: () => void } = $props();
+
+	let busyId = $state<string | null>(null);
+	let error = $state('');
+	let replacementFor = $state<OrphanedTimelineClip | null>(null);
+	let directoryPlan = $state<MediaDirectoryRecoveryPlan | null>(null);
+	const replacementOptions = $derived(
+		replacementFor ? compatibleRecoveryMedia(replacementFor, mediaPool.mediaList) : []
+	);
+	const automaticMatches = $derived(
+		automaticOrphanMatches(mediaRecovery.orphanedClips, mediaPool.mediaList)
+	);
+	const exactDirectoryMatches = $derived(
+		directoryPlan?.entries.filter((entry) => entry.status === 'exact') ?? []
+	);
+	const directoryConflicts = $derived(
+		directoryPlan?.entries.filter((entry) => entry.status === 'conflict') ?? []
+	);
+	const unmatchedDirectoryFiles = $derived(
+		directoryPlan?.entries.filter((entry) => entry.status === 'unmatched') ?? []
+	);
+
+	function issueText(issue: MediaSourceIssue): string {
+		switch (issue.kind) {
+			case 'permission':
+				return m.video_editor_media_recovery_permission();
+			case 'changed':
+				return m.video_editor_media_recovery_changed();
+			default:
+				return m.video_editor_media_recovery_missing();
+		}
+	}
+
+	function close(): void {
+		mediaRecovery.open = false;
+		replacementFor = null;
+		directoryPlan = null;
+		error = '';
+	}
+
+	async function scanFolder(): Promise<void> {
+		busyId = 'folder-scan';
+		error = '';
+		try {
+			const directory = await window.showDirectoryPicker?.({
+				id: 'video-media-recovery',
+				mode: 'read'
+			});
+			if (!directory) return;
+			const candidates = await scanMediaRecoveryDirectory(directory);
+			directoryPlan = planMediaDirectoryRecovery(
+				mediaRecovery.sourceIssues,
+				mediaPool.mediaList,
+				candidates,
+				directory.name
+			);
+		} catch (reason) {
+			if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+				error = reason instanceof Error ? reason.message : String(reason);
+			}
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function applyFolderMatches(): Promise<void> {
+		const plan = directoryPlan;
+		if (!plan || exactDirectoryMatches.length === 0) return;
+		busyId = 'folder-apply';
+		error = '';
+		try {
+			const result = await applyMediaDirectoryRecovery(plan, (media, handle, sourcePath) =>
+				relinkMediaSource(media, handle, sourcePath)
+			);
+			const failedIds = new Set(result.failures.map((failure) => failure.mediaId));
+			directoryPlan = {
+				...plan,
+				entries: plan.entries.filter(
+					(entry) => entry.status !== 'exact' || failedIds.has(entry.mediaId)
+				)
+			};
+			await mediaRecovery.refresh();
+			if (result.failures.length > 0) {
+				error = m.video_editor_media_recovery_folder_partial({
+					restored: result.restoredMediaIds.length,
+					failed: result.failures.length
+				});
+				return;
+			}
+			showToast(
+				m.video_editor_media_recovery_folder_restored({ count: result.restoredMediaIds.length }),
+				'success'
+			);
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function grantAccess(issue: MediaSourceIssue): Promise<void> {
+		const media = mediaPool.get(issue.mediaId);
+		if (!media) return;
+		busyId = issue.mediaId;
+		error = '';
+		try {
+			if (!(await requestMediaSourceAccess(media))) {
+				error = m.video_editor_media_recovery_access_denied();
+				return;
+			}
+			await mediaRecovery.refresh();
+		} catch (reason) {
+			error = reason instanceof Error ? reason.message : String(reason);
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function locateFile(issue: MediaSourceIssue): Promise<void> {
+		const media = mediaPool.get(issue.mediaId);
+		if (!media) return;
+		busyId = issue.mediaId;
+		error = '';
+		try {
+			const handles = await window.showOpenFilePicker?.({ multiple: false });
+			const handle = handles?.[0];
+			if (!handle) return;
+			const restored = await relinkMediaSource(media, handle);
+			await mediaRecovery.refresh();
+			showToast(m.video_editor_media_recovery_restored({ name: restored.fileName }), 'success');
+		} catch (reason) {
+			if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+				error = reason instanceof Error ? reason.message : String(reason);
+			}
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function replaceOrphan(orphan: OrphanedTimelineClip, mediaId: string): Promise<void> {
+		const replacement = mediaPool.get(mediaId);
+		if (!replacement) return;
+		busyId = orphan.itemId;
+		error = '';
+		try {
+			const result = relinkOrphanedClip(orphan.itemId, replacement);
+			if (!result.ok) {
+				error =
+					result.reason === 'locked'
+						? m.video_editor_media_recovery_locked()
+						: m.video_editor_media_recovery_no_replacements();
+				return;
+			}
+			replacementFor = null;
+			onedit();
+			await mediaRecovery.refresh();
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function autoMatch(): Promise<void> {
+		const seenMissingIds = new Set<string>();
+		const requests: Array<{ itemId: string; replacement: MediaMetadata }> = [];
+		for (const orphan of mediaRecovery.orphanedClips) {
+			if (seenMissingIds.has(orphan.mediaId)) continue;
+			const mediaId = automaticMatches.get(orphan.itemId);
+			const replacement = mediaId ? mediaPool.get(mediaId) : undefined;
+			if (!replacement) continue;
+			seenMissingIds.add(orphan.mediaId);
+			requests.push({ itemId: orphan.itemId, replacement });
+		}
+		if (requests.length === 0) return;
+		busyId = 'auto-match';
+		error = '';
+		try {
+			const result = relinkOrphanedClips(requests);
+			if (!result.ok) {
+				error =
+					result.reason === 'locked'
+						? m.video_editor_media_recovery_locked()
+						: m.video_editor_media_recovery_no_replacements();
+				return;
+			}
+			onedit();
+			await mediaRecovery.refresh();
+			showToast(m.video_editor_media_recovery_matched({ count: result.itemIds.length }), 'success');
+		} finally {
+			busyId = null;
+		}
+	}
+
+	async function removeOrphans(itemIds: string[]): Promise<void> {
+		error = '';
+		const removed = removeItems(itemIds, true);
+		if (removed.length === 0) {
+			error = m.video_editor_media_recovery_locked();
+			return;
+		}
+		replacementFor = null;
+		onedit();
+		await mediaRecovery.refresh();
+	}
+
+	function chooseReplacement(mediaId: string): void {
+		const orphan = replacementFor;
+		if (orphan) void replaceOrphan(orphan, mediaId);
+	}
+</script>
+
+<Dialog.Root
+	open={mediaRecovery.open}
+	onOpenChange={(open) => {
+		if (!open && busyId !== null) return;
+		mediaRecovery.open = open;
+		if (!open) {
+			replacementFor = null;
+			directoryPlan = null;
+		}
+	}}
+>
+	<Dialog.Content
+		class="video-editor-theme max-h-[min(88dvh,46rem)] w-[calc(100%_-_1rem)] max-w-3xl overflow-y-auto border-border bg-popover text-popover-foreground sm:max-w-3xl"
+		showCloseButton={busyId === null}
+	>
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-base">
+				<ProtectedIcon icon="warning" class="size-4 text-warning-foreground" />
+				{replacementFor
+					? m.video_editor_media_recovery_replacement_title({ name: replacementFor.label })
+					: m.video_editor_media_recovery_title()}
+			</Dialog.Title>
+			<Dialog.Description class="text-xs text-[var(--video-editor-muted)]">
+				{replacementFor
+					? m.video_editor_media_recovery_orphans_description()
+					: m.video_editor_media_recovery_description()}
+			</Dialog.Description>
+		</Dialog.Header>
+
+		{#if error}
+			<p
+				class="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+				role="alert"
+			>
+				{error}
+			</p>
+		{/if}
+
+		{#if replacementFor}
+			<div class="mt-4 space-y-3">
+				<Button type="button" variant="ghost" size="sm" onclick={() => (replacementFor = null)}>
+					<ThemeIcon role="arrow-left" class="size-3.5" />
+					{m.common_back()}
+				</Button>
+				{#if replacementOptions.length === 0}
+					<p
+						class="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground"
+					>
+						{m.video_editor_media_recovery_no_replacements()}
+					</p>
+				{:else}
+					<ul class="space-y-1.5">
+						{#each replacementOptions as media (media.id)}
+							<li class="flex items-center gap-3 rounded-md border border-border bg-muted p-2">
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-xs font-medium">{media.fileName}</p>
+									<p class="text-xs text-[var(--video-editor-muted)]">
+										{formatMediaListSummary(media)}
+									</p>
+								</div>
+								<Button
+									size="sm"
+									disabled={busyId !== null}
+									onclick={() => chooseReplacement(media.id)}
+								>
+									{m.video_editor_media_recovery_choose()}
+								</Button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{:else}
+			<div class="mt-4 space-y-5">
+				{#if mediaRecovery.sourceIssues.length > 0}
+					<section aria-labelledby="media-recovery-sources">
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+							<div>
+								<h3 id="media-recovery-sources" class="text-xs font-semibold">
+									{m.video_editor_media_recovery_sources()}
+								</h3>
+								<p class="mt-0.5 max-w-xl text-xs text-[var(--video-editor-muted)]">
+									{m.video_editor_media_recovery_scan_folder_description()}
+								</p>
+							</div>
+							{#if typeof window !== 'undefined' && window.showDirectoryPicker}
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={busyId !== null}
+									onclick={() => void scanFolder()}
+								>
+									{#if busyId === 'folder-scan'}
+										<ProtectedIcon
+											icon="loading"
+											class="size-3.5 animate-spin motion-reduce:animate-none"
+										/>
+									{:else}
+										<ThemeIcon role="folder" class="size-3.5" />
+									{/if}
+									{m.video_editor_media_recovery_scan_folder()}
+								</Button>
+							{/if}
+						</div>
+
+						{#if directoryPlan}
+							<div
+								class="mt-3 rounded-lg border border-border bg-background/45 p-3"
+								aria-live="polite"
+							>
+								<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+									<div class="min-w-0">
+										<p class="truncate text-xs font-semibold">{directoryPlan.directoryName}</p>
+										<p class="mt-0.5 text-xs text-[var(--video-editor-muted)]">
+											{m.video_editor_media_recovery_folder_summary({
+												matches: exactDirectoryMatches.length,
+												conflicts: directoryConflicts.length,
+												unmatched: unmatchedDirectoryFiles.length
+											})}
+										</p>
+									</div>
+									{#if exactDirectoryMatches.length > 0}
+										<Button
+											size="sm"
+											disabled={busyId !== null}
+											onclick={() => void applyFolderMatches()}
+										>
+											{#if busyId === 'folder-apply'}
+												<ProtectedIcon
+													icon="loading"
+													class="size-3.5 animate-spin motion-reduce:animate-none"
+												/>
+											{/if}
+											{m.video_editor_media_recovery_folder_apply({
+												count: exactDirectoryMatches.length
+											})}
+										</Button>
+									{/if}
+								</div>
+
+								<ul class="mt-3 max-h-56 space-y-1.5 overflow-y-auto pr-1">
+									{#each directoryPlan.entries as entry (entry.mediaId)}
+										<li class="rounded-md border border-border bg-muted p-2.5">
+											<div class="flex items-start justify-between gap-3">
+												<div class="min-w-0">
+													<p class="truncate text-xs font-medium">{entry.fileName}</p>
+													{#if entry.status === 'exact'}
+														<p class="mt-0.5 text-xs break-all text-[var(--video-editor-muted)]">
+															{entry.candidatePath}
+														</p>
+													{:else if entry.status === 'conflict'}
+														<p class="mt-0.5 text-xs text-[var(--video-editor-muted)]">
+															{m.video_editor_media_recovery_folder_conflict_description()}
+														</p>
+														<ul class="mt-1 space-y-0.5">
+															{#each entry.candidatePaths as path (path)}
+																<li class="text-xs break-all text-[var(--video-editor-muted)]">
+																	{path}
+																</li>
+															{/each}
+														</ul>
+													{/if}
+												</div>
+												<span
+													class:text-success-foreground={entry.status === 'exact'}
+													class:text-warning-foreground={entry.status === 'conflict'}
+													class:text-[var(--video-editor-muted)]={entry.status === 'unmatched'}
+													class="shrink-0 text-xs font-medium"
+												>
+													{entry.status === 'exact'
+														? m.video_editor_media_recovery_folder_ready()
+														: entry.status === 'conflict'
+															? m.video_editor_media_recovery_folder_conflict()
+															: m.video_editor_media_recovery_folder_unmatched()}
+												</span>
+											</div>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						<ul class="mt-2 space-y-1.5">
+							{#each mediaRecovery.sourceIssues as issue (issue.mediaId)}
+								<li
+									class="flex flex-col gap-2 rounded-md border border-border bg-muted p-2.5 sm:flex-row sm:items-center"
+								>
+									<div class="min-w-0 flex-1">
+										<p class="truncate text-xs font-medium">{issue.fileName}</p>
+										<p class="text-xs text-warning-foreground">{issueText(issue)}</p>
+									</div>
+									<div class="flex flex-wrap gap-1.5">
+										{#if issue.kind === 'permission'}
+											<Button
+												size="sm"
+												disabled={busyId !== null}
+												onclick={() => void grantAccess(issue)}
+											>
+												{#if busyId === issue.mediaId}<ProtectedIcon
+														icon="loading"
+														class="size-3.5 animate-spin motion-reduce:animate-none"
+													/>{/if}
+												{m.video_editor_media_recovery_grant()}
+											</Button>
+										{/if}
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={busyId !== null}
+											onclick={() => void locateFile(issue)}
+										>
+											<ThemeIcon role="search" class="size-3.5" />
+											{m.video_editor_media_recovery_locate()}
+										</Button>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+
+				{#if mediaRecovery.orphanedClips.length > 0}
+					<section aria-labelledby="media-recovery-orphans">
+						<div class="flex flex-wrap items-start justify-between gap-2">
+							<div>
+								<h3 id="media-recovery-orphans" class="text-xs font-semibold">
+									{m.video_editor_media_recovery_orphans()}
+								</h3>
+								<p class="mt-0.5 text-xs text-[var(--video-editor-muted)]">
+									{m.video_editor_media_recovery_orphans_description()}
+								</p>
+							</div>
+							{#if automaticMatches.size > 0}
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={busyId !== null}
+									onclick={() => void autoMatch()}
+								>
+									{#if busyId === 'auto-match'}<ProtectedIcon
+											icon="loading"
+											class="size-3.5 animate-spin motion-reduce:animate-none"
+										/>{:else}<ThemeIcon role="sparkles" class="size-3.5" />{/if}
+									{m.video_editor_media_recovery_auto_match()}
+								</Button>
+							{/if}
+						</div>
+						<ul class="mt-2 max-h-64 space-y-1.5 overflow-y-auto pr-1">
+							{#each mediaRecovery.orphanedClips as orphan (orphan.itemId)}
+								<li
+									class="flex flex-col gap-2 rounded-md border border-border bg-muted p-2.5 sm:flex-row sm:items-center"
+								>
+									<div class="min-w-0 flex-1">
+										<p class="truncate text-xs font-medium">{orphan.label}</p>
+										<p class="text-xs text-[var(--video-editor-muted)]">{orphan.itemType}</p>
+									</div>
+									<div class="flex flex-wrap gap-1.5">
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={busyId !== null}
+											onclick={() => (replacementFor = orphan)}
+										>
+											<ThemeIcon role="search" class="size-3.5" />
+											{m.video_editor_media_recovery_choose()}
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											disabled={busyId !== null}
+											onclick={() => void removeOrphans([orphan.itemId])}
+										>
+											<ThemeIcon role="delete" class="size-3.5" />
+											{m.video_editor_media_recovery_remove()}
+										</Button>
+									</div>
+								</li>
+							{/each}
+						</ul>
+						<Button
+							class="mt-2"
+							variant="ghost"
+							size="sm"
+							disabled={busyId !== null}
+							onclick={() =>
+								void removeOrphans(mediaRecovery.orphanedClips.map((orphan) => orphan.itemId))}
+						>
+							<ThemeIcon role="delete" class="size-3.5" />
+							{m.video_editor_media_recovery_remove_all()}
+						</Button>
+					</section>
+				{/if}
+			</div>
+		{/if}
+
+		<Dialog.Footer class="mt-5">
+			<Button
+				type="button"
+				variant="ghost"
+				disabled={busyId !== null}
+				onclick={() => mediaRecovery.workOffline()}
+			>
+				{m.video_editor_media_recovery_work_offline()}
+			</Button>
+			<Button type="button" variant="outline" disabled={busyId !== null} onclick={close}>
+				{m.common_close()}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

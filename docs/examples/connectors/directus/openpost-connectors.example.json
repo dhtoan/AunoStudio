@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "installations": [
+    {
+      "id": "directus-main",
+      "required": false,
+      "workspace_allowlist": [],
+      "endpoint": {
+        "mode": "private_allowlist",
+        "base_url": "http://directus-connector:8787",
+        "allowed_hosts": ["directus-connector"],
+        "allowed_cidrs": ["172.16.0.0/12"],
+        "allowed_ports": [8787]
+      },
+      "auth": {
+        "bearer_token_file": "/run/secrets/openpost-connector-token"
+      }
+    }
+  ]
+}

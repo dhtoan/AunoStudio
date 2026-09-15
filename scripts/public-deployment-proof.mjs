@@ -1,0 +1,808 @@
+#!/usr/bin/env bun
+
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+
+import { docsPageCatalog } from "../packages/social-images/src/docs-catalog.js";
+import { marketingRouteManifest } from "../packages/social-images/src/index.js";
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
+
+const sampleRoutes = Object.freeze({
+  marketing: [
+    { category: "core", route: "/pricing" },
+    { category: "legal", route: "/privacy" },
+    { category: "platform", route: "/platforms/x" },
+    { category: "guide", route: "/guides" },
+    { category: "tool", route: "/tools/multi-platform-character-counter" },
+  ],
+  documentation: [
+    { category: "root", route: "/" },
+    { category: "guide", route: "/guides/quickstart" },
+    { category: "self-hosting", route: "/self-hosting" },
+    { category: "API reference", route: "/api-reference" },
+  ],
+});
+
+const nativeBoundaries = Object.freeze([
+  {
+    label: "OpenAPI",
+    name: "OpenAPI JSON",
+    canonicalURL: "https://docs.openpo.st/openapi.json",
+    contentType: "application/json",
+    deployment: "documentation",
+    localPath: "openapi.json",
+    queryIsolation: true,
+  },
+  {
+    label: "app OpenAPI",
+    name: "app OpenAPI JSON",
+    canonicalURL: "https://app.openpo.st/openapi.json",
+    contentType: "application/json",
+  },
+  {
+    label: "marketing API catalog",
+    name: "marketing RFC 9727 API catalog",
+    canonicalURL: "https://openpo.st/.well-known/api-catalog",
+    contentType: 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    deployment: "marketing",
+    localPath: ".well-known/api-catalog",
+    responseHeaders: { link: '</.well-known/api-catalog>; rel="api-catalog"' },
+    bodyIncludes: ["https://app.openpo.st/api/v1", "https://app.openpo.st/mcp"],
+  },
+  {
+    label: "app API catalog",
+    name: "app RFC 9727 API catalog",
+    canonicalURL: "https://app.openpo.st/.well-known/api-catalog",
+    contentType: 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    responseHeaders: { link: '</.well-known/api-catalog>; rel="api-catalog"' },
+    bodyIncludes: ["https://app.openpo.st/api/v1", "https://app.openpo.st/mcp"],
+  },
+  {
+    label: "MCP authorization metadata",
+    name: "MCP RFC 9728 challenged resource metadata",
+    canonicalURL: "https://app.openpo.st/.well-known/oauth-protected-resource",
+    contentType: "application/json",
+    bodyIncludes: ['"resource":"https://app.openpo.st/mcp"'],
+  },
+  {
+    label: "MCP deterministic authorization metadata",
+    name: "MCP RFC 9728 deterministic resource metadata",
+    canonicalURL: "https://app.openpo.st/.well-known/oauth-protected-resource/mcp",
+    contentType: "application/json",
+    bodyIncludes: ['"resource":"https://app.openpo.st/mcp"'],
+  },
+  {
+    label: "marketing MCP card",
+    name: "marketing MCP Server Card",
+    canonicalURL: "https://openpo.st/.well-known/mcp/server-card.json",
+    contentType: "application/json; charset=utf-8",
+    deployment: "marketing",
+    localPath: ".well-known/mcp/server-card.json",
+    bodyIncludes: ['"url": "https://app.openpo.st/mcp"'],
+  },
+  {
+    label: "app MCP card",
+    name: "app MCP Server Card",
+    canonicalURL: "https://app.openpo.st/.well-known/mcp/server-card.json",
+    contentType: "application/json",
+    bodyIncludes: ['"url":"https://app.openpo.st/mcp"'],
+  },
+  {
+    label: "ARD",
+    name: "Agent Resource Discovery manifest",
+    canonicalURL: "https://openpo.st/.well-known/ard.json",
+    contentType: "application/json; charset=utf-8",
+    deployment: "marketing",
+    localPath: ".well-known/ard.json",
+    bodyIncludes: ["urn:air:openpo.st:api:openpost", "urn:air:openpo.st:skill:openpost-cli"],
+  },
+  {
+    label: "Agent Skills index",
+    name: "Agent Skills discovery index",
+    canonicalURL: "https://openpo.st/.well-known/agent-skills/index.json",
+    contentType: "application/json; charset=utf-8",
+    deployment: "marketing",
+    localPath: ".well-known/agent-skills/index.json",
+    bodyIncludes: ["/.well-known/agent-skills/openpost-cli.tar.gz", "sha256:"],
+  },
+  {
+    label: "Agent Skill",
+    name: "OpenPost CLI Agent Skill archive",
+    canonicalURL: "https://openpo.st/.well-known/agent-skills/openpost-cli.tar.gz",
+    contentType: "application/gzip",
+    deployment: "marketing",
+    localPath: ".well-known/agent-skills/openpost-cli.tar.gz",
+    binary: true,
+  },
+  {
+    label: "marketing robots",
+    name: "marketing crawler policy",
+    canonicalURL: "https://openpo.st/robots.txt",
+    contentType: "text/plain; charset=utf-8",
+    deployment: "marketing",
+    localPath: "robots.txt",
+    responseHeaders: {
+      "content-signal": "search=yes, ai-input=yes, ai-train=yes",
+    },
+  },
+  {
+    label: "documentation robots",
+    name: "documentation crawler policy",
+    canonicalURL: "https://docs.openpo.st/robots.txt",
+    contentType: "text/plain; charset=utf-8",
+    deployment: "documentation",
+    localPath: "robots.txt",
+    responseHeaders: {
+      "content-signal": "search=yes, ai-input=yes, ai-train=yes",
+    },
+  },
+  {
+    label: "app robots",
+    name: "app crawler policy",
+    canonicalURL: "https://app.openpo.st/robots.txt",
+    contentType: "text/plain; charset=UTF-8",
+    bodyIncludes: ["Allow: /", "Disallow: /api/"],
+  },
+  {
+    label: "marketing favicon",
+    name: "marketing domain favicon",
+    canonicalURL: "https://openpo.st/favicon.ico",
+    contentType: "image/x-icon",
+    deployment: "marketing",
+    localPath: "favicon.ico",
+    binary: true,
+  },
+  {
+    label: "MCP",
+    name: "MCP native JSON-RPC boundary",
+    canonicalURL: "https://app.openpo.st/mcp",
+    contentType: "application/json",
+    status: 401,
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    requestBody: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    }),
+  },
+  {
+    label: "marketing asset",
+    name: "marketing SVG asset",
+    canonicalURL: "https://openpo.st/assets/brand/logo.svg",
+    contentType: "image/svg+xml",
+  },
+  {
+    label: "marketing social image",
+    name: "marketing social preview image",
+    canonicalURL: "https://openpo.st/og/home.png",
+    contentType: "image/png",
+    deployment: "marketing",
+    localPath: "og/home.png",
+    binary: true,
+  },
+  {
+    label: "documentation social image",
+    name: "documentation social preview image",
+    canonicalURL: "https://docs.openpo.st/og/home.png",
+    contentType: "image/png",
+    deployment: "documentation",
+    localPath: "og/home.png",
+    binary: true,
+  },
+  {
+    label: "documentation asset",
+    name: "documentation PNG asset",
+    canonicalURL: "https://docs.openpo.st/assets/screenshots/integrations/google-enable-api.png",
+    contentType: "image/png",
+    deployment: "documentation",
+    localPath: "assets/screenshots/integrations/google-enable-api.png",
+    binary: true,
+  },
+]);
+
+export function publicSurfaceSamples() {
+  for (const sample of sampleRoutes.marketing) {
+    if (!marketingRouteManifest.some(({ path }) => path === sample.route)) {
+      throw new Error(`unknown marketing proof route ${sample.route}`);
+    }
+  }
+  for (const sample of sampleRoutes.documentation) {
+    if (!docsPageCatalog.some(({ route }) => route === sample.route)) {
+      throw new Error(`unknown documentation proof route ${sample.route}`);
+    }
+  }
+  return {
+    marketing: sampleRoutes.marketing.map((sample) => ({ ...sample })),
+    documentation: sampleRoutes.documentation.map((sample) => ({ ...sample })),
+    native: nativeBoundaries.map(({ label, canonicalURL, contentType }) => [
+      label,
+      canonicalURL,
+      contentType,
+    ]),
+  };
+}
+
+export function deploymentForRevision(deployments, revision) {
+  if (!/^[0-9a-f]{40}$/u.test(revision)) {
+    throw new Error(`reviewed revision must be a full lowercase commit SHA: ${revision}`);
+  }
+  const records = Array.isArray(deployments) ? deployments : [deployments.result ?? deployments];
+  const deployment = records.find(
+    (candidate) =>
+      candidate.environment === "production" &&
+      candidate.deployment_trigger?.metadata?.branch === "main" &&
+      candidate.deployment_trigger.metadata.commit_hash === revision &&
+      candidate.deployment_trigger.metadata.commit_dirty === false &&
+      candidate.latest_stage?.status === "success",
+  );
+  if (!deployment) {
+    throw new Error(`no successful clean main production deployment matches ${revision}`);
+  }
+  return {
+    Id: deployment.id,
+    Branch: deployment.deployment_trigger.metadata.branch,
+    SourceRevision: deployment.deployment_trigger.metadata.commit_hash,
+    Deployment: deployment.url,
+    Status: deployment.latest_stage.status,
+  };
+}
+
+export function assertLocalRevision({ head, status }, revision) {
+  assertEqual(head, revision, "local HEAD differs from reviewed revision");
+  assertEqual(status, "", "local tracked tree must be clean before proof");
+}
+
+export function assertCanonicalProvenance(markdown, canonical, relativePath) {
+  const provenanceLines = markdown.split("\n").filter((line) => line.startsWith("Canonical: "));
+  const provenance = provenanceLines[0];
+  const actualCanonical = provenance?.slice("Canonical: ".length);
+  const bareOrigin = canonical.match(/^(https?:\/\/[^/?#]+)\/?$/u)?.[1];
+  const matchesCanonical =
+    actualCanonical === canonical ||
+    (bareOrigin !== undefined &&
+      (actualCanonical === bareOrigin || actualCanonical === `${bareOrigin}/`));
+  if (provenanceLines.length !== 1 || !matchesCanonical) {
+    throw new Error(`${relativePath} does not name its exact canonical URL ${canonical}`);
+  }
+  return provenance;
+}
+
+function assertCountMap(value, name) {
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    throw new Error(`${name} must be an object of non-negative integer counts`);
+  }
+  for (const [key, count] of Object.entries(value)) {
+    if (!key || !Number.isInteger(count) || count < 0) {
+      throw new Error(`${name} must contain non-negative integer counts`);
+    }
+  }
+}
+
+export function validateAICrawlSnapshot(snapshot) {
+  const requiredText = [
+    "observed_at",
+    "window_start",
+    "window_end",
+    "source",
+    "method",
+    "next_review_owner",
+    "next_review",
+  ];
+  for (const field of requiredText) {
+    if (typeof snapshot?.[field] !== "string" || !snapshot[field].trim()) {
+      throw new Error(`AI Crawl Control snapshot requires ${field}`);
+    }
+  }
+  const start = Date.parse(snapshot.window_start);
+  const end = Date.parse(snapshot.window_end);
+  const observed = Date.parse(snapshot.observed_at);
+  if (![start, end, observed].every(Number.isFinite)) {
+    throw new Error("AI Crawl Control snapshot timestamps must be valid ISO dates");
+  }
+  if (snapshot.window_hours !== 24 || end - start !== 24 * 60 * 60 * 1000) {
+    throw new Error("AI Crawl Control snapshot must cover exactly 24 hours");
+  }
+  if (observed < end) {
+    throw new Error("AI Crawl Control snapshot cannot be observed before its window ends");
+  }
+  const expectedHosts = ["docs.openpo.st", "openpo.st"];
+  if (
+    !Array.isArray(snapshot.scope) ||
+    JSON.stringify([...snapshot.scope].sort()) !== JSON.stringify(expectedHosts)
+  ) {
+    throw new Error("AI Crawl Control snapshot must cover both public hosts exactly");
+  }
+  if (!Number.isInteger(snapshot.requests) || snapshot.requests < 0) {
+    throw new Error("AI Crawl Control snapshot requests must be a non-negative integer");
+  }
+  assertCountMap(snapshot.response_statuses, "response_statuses");
+  assertCountMap(snapshot.requests_by_host, "requests_by_host");
+  if (
+    JSON.stringify(Object.keys(snapshot.requests_by_host).sort()) !== JSON.stringify(expectedHosts)
+  ) {
+    throw new Error("AI Crawl Control snapshot host counts must cover both public hosts exactly");
+  }
+  for (const [name, counts] of [
+    ["response_statuses", snapshot.response_statuses],
+    ["requests_by_host", snapshot.requests_by_host],
+  ]) {
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    if (total !== snapshot.requests) {
+      throw new Error(`AI Crawl Control snapshot ${name} total must equal requests`);
+    }
+  }
+  if (
+    snapshot.user_agent_matching_spoofable !== true ||
+    snapshot.crawler_identity_proven !== false
+  ) {
+    throw new Error("AI Crawl Control snapshot must label user-agent identity limits");
+  }
+  if (snapshot.release_kpi !== false) {
+    throw new Error("AI Crawl Control snapshot must remain an observation, not a release KPI");
+  }
+  return snapshot;
+}
+
+export function linksFromMarkdown(markdown) {
+  return [...markdown.matchAll(/\[[^\]]+\]\(([^\s)]+)(?:\s+"[^"]*")?\)/gu)].map(
+    ([, target]) => target,
+  );
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function fetchResponse(fetchImpl, url, request = {}, binary = false) {
+  const response = await fetchImpl(url, { redirect: "follow", ...request });
+  return {
+    response,
+    body: binary ? Buffer.from(await response.arrayBuffer()) : await response.text(),
+    contentType: response.headers.get("content-type") ?? "",
+  };
+}
+
+function assertEqual(actual, expected, message) {
+  if (actual !== expected) {
+    throw new Error(
+      `${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+function assertBodyEqual(actual, expected, message) {
+  if (Buffer.isBuffer(actual) && Buffer.isBuffer(expected) && actual.equals(expected)) return;
+  if (!Buffer.isBuffer(actual) && !Buffer.isBuffer(expected) && actual === expected) return;
+  throw new Error(
+    `${message}: expected sha256:${sha256(expected)} (${Buffer.byteLength(expected)} bytes), received sha256:${sha256(actual)} (${Buffer.byteLength(actual)} bytes)`,
+  );
+}
+
+async function proveArtifact(fetchImpl, check) {
+  const canonical = await fetchResponse(
+    fetchImpl,
+    check.canonicalURL,
+    {
+      method: check.method ?? "GET",
+      headers: check.headers,
+      body: check.requestBody,
+    },
+    check.binary,
+  );
+  assertEqual(canonical.response.status, check.status ?? 200, `${check.name} status`);
+  assertEqual(canonical.contentType, check.contentType, `${check.name} content type`);
+  for (const [header, expected] of Object.entries(check.responseHeaders ?? {})) {
+    assertEqual(canonical.response.headers.get(header), expected, `${check.name} ${header} header`);
+  }
+  let localMatches;
+  if (check.expectedBody !== undefined) {
+    assertBodyEqual(
+      canonical.body,
+      check.expectedBody,
+      `${check.name} body differs from local build`,
+    );
+    localMatches = true;
+  }
+  for (const fragment of check.bodyIncludes ?? []) {
+    if (!canonical.body.includes(fragment)) {
+      throw new Error(`${check.name} body is missing ${JSON.stringify(fragment)}`);
+    }
+  }
+  for (const fragment of check.bodyExcludes ?? []) {
+    if (canonical.body.includes(fragment)) {
+      throw new Error(`${check.name} body contains ${JSON.stringify(fragment)}`);
+    }
+  }
+
+  let deploymentMatches;
+  if (check.deploymentURL) {
+    const deployment = await fetchResponse(fetchImpl, check.deploymentURL, {}, check.binary);
+    assertEqual(deployment.response.status, check.status ?? 200, `${check.name} deployment status`);
+    assertEqual(deployment.contentType, check.contentType, `${check.name} deployment content type`);
+    for (const [header, expected] of Object.entries(check.responseHeaders ?? {})) {
+      assertEqual(
+        deployment.response.headers.get(header),
+        expected,
+        `${check.name} deployment ${header} header`,
+      );
+    }
+    assertBodyEqual(
+      deployment.body,
+      canonical.body,
+      `${check.name} canonical host differs from deployment`,
+    );
+    deploymentMatches = true;
+  }
+
+  let queryIsolated;
+  if (check.queryIsolation) {
+    const queryURL = new URL(check.canonicalURL);
+    queryURL.searchParams.set("openpost_proof", "query-isolation");
+    const query = await fetchResponse(fetchImpl, queryURL, {}, check.binary);
+    assertEqual(query.response.status, check.status ?? 200, `${check.name} query status`);
+    assertEqual(query.contentType, check.contentType, `${check.name} query content type`);
+    assertBodyEqual(query.body, canonical.body, `${check.name} query changed the response body`);
+    queryIsolated = true;
+  }
+
+  return {
+    name: check.name,
+    kind: check.kind,
+    url: check.canonicalURL,
+    status: canonical.response.status,
+    content_type: canonical.contentType,
+    bytes: Buffer.byteLength(canonical.body),
+    sha256: sha256(canonical.body),
+    ...(localMatches === undefined ? {} : { local_matches: localMatches }),
+    ...(deploymentMatches === undefined ? {} : { deployment_matches: deploymentMatches }),
+    ...(queryIsolated === undefined ? {} : { query_isolated: queryIsolated }),
+  };
+}
+
+async function proveRedirect(fetchImpl, check) {
+  const { response, contentType } = await fetchResponse(fetchImpl, check.url, {
+    redirect: "manual",
+  });
+  assertEqual(response.status, check.status, `${check.name} status`);
+  const location = response.headers.get("location");
+  assertEqual(
+    location === null ? location : new URL(location, check.url).href,
+    new URL(check.location, check.url).href,
+    `${check.name} location`,
+  );
+  return {
+    name: check.name,
+    kind: check.kind,
+    url: check.url,
+    status: response.status,
+    content_type: contentType,
+    location,
+  };
+}
+
+export async function proveHTTPContract({ checks, fetchImpl = fetch }) {
+  const results = [];
+  for (const check of checks) {
+    results.push(
+      check.kind === "redirect"
+        ? await proveRedirect(fetchImpl, check)
+        : await proveArtifact(fetchImpl, check),
+    );
+  }
+  return results;
+}
+
+export function markdownOutputForRoute(route, surface) {
+  if (surface === "documentation") {
+    const page = docsPageCatalog.find((page) => page.route === route);
+    if (!page) throw new Error(`unknown documentation route: ${route}`);
+    return page.page.replace(/\.mdx$/u, ".md");
+  }
+  if (route === "/") return "index.md";
+  if (route.endsWith("/")) return `${route.slice(1)}index.md`;
+  return `${route.slice(1)}.md`;
+}
+
+function deploymentURL(deployment, pathname) {
+  return new URL(pathname, `${deployment.Deployment}/`).href;
+}
+
+async function localArtifact(directory, relativePath, binary = false) {
+  return readFile(path.join(directory, relativePath), binary ? undefined : "utf8");
+}
+
+function sampleByRoute(samples, route) {
+  return samples.find((sample) => sample.route === route);
+}
+
+export function validateMachineLinks(indexName, markdown, knownMarkdownURLs) {
+  for (const target of linksFromMarkdown(markdown)) {
+    const url = new URL(target);
+    if (url.search) {
+      throw new Error(`${indexName} contains a query-bearing machine link ${target}`);
+    }
+    url.hash = "";
+    const intentionalNative =
+      target === "https://docs.openpo.st/openapi.json" ||
+      (["https://openpo.st", "https://docs.openpo.st"].includes(url.origin) &&
+        url.pathname.startsWith("/assets/"));
+    if (intentionalNative) continue;
+    if (!knownMarkdownURLs.has(url.href)) {
+      throw new Error(`${indexName} contains a non-resolving or non-machine link ${target}`);
+    }
+  }
+}
+
+export async function buildPublicProofChecks({
+  rootDirectory = repositoryRoot,
+  revision,
+  marketingDeployments,
+  documentationDeployments,
+}) {
+  const marketingDeployment = deploymentForRevision(marketingDeployments, revision);
+  const documentationDeployment = deploymentForRevision(documentationDeployments, revision);
+  const samples = publicSurfaceSamples();
+  const marketingDirectory = path.join(rootDirectory, "apps/marketing/dist");
+  const documentationDirectory = path.join(rootDirectory, "apps/docs/out");
+  const checks = [];
+  const knownMarkdownURLs = new Set();
+
+  const surfaces = [
+    {
+      key: "marketing",
+      origin: "https://openpo.st",
+      directory: marketingDirectory,
+      deployment: marketingDeployment,
+      routes: marketingRouteManifest
+        .filter(({ agentRepresentation }) => Boolean(agentRepresentation))
+        .map(({ path: route, canonical }) => ({ route, canonical })),
+      samples: samples.marketing,
+    },
+    {
+      key: "documentation",
+      origin: "https://docs.openpo.st",
+      directory: documentationDirectory,
+      deployment: documentationDeployment,
+      routes: docsPageCatalog
+        .filter(({ agentRepresentation }) => agentRepresentation.membership === "ordinary")
+        .map(({ route }) => ({
+          route,
+          canonical: route === "/" ? "https://docs.openpo.st" : `https://docs.openpo.st${route}`,
+        })),
+      samples: samples.documentation,
+    },
+  ];
+
+  for (const surface of surfaces) {
+    for (const { route, canonical } of surface.routes) {
+      const relativePath = markdownOutputForRoute(route, surface.key);
+      const canonicalURL = `${surface.origin}/${relativePath}`;
+      const expectedBody = await localArtifact(surface.directory, relativePath);
+      const provenance = assertCanonicalProvenance(expectedBody, canonical, relativePath);
+      knownMarkdownURLs.add(canonicalURL);
+      const sample = sampleByRoute(surface.samples, route);
+      checks.push({
+        kind: "artifact",
+        name: sample ? `${surface.key} ${sample.category} Markdown` : `${surface.key} Markdown`,
+        canonicalURL,
+        deploymentURL: deploymentURL(surface.deployment, relativePath),
+        contentType: "text/markdown; charset=utf-8",
+        expectedBody,
+        queryIsolation: Boolean(sample),
+        bodyIncludes: ["Generated from the canonical OpenPost public page", provenance],
+      });
+    }
+  }
+
+  const marketingIndex = await localArtifact(marketingDirectory, "llms.txt");
+  const documentationIndex = await localArtifact(documentationDirectory, "llms.txt");
+  knownMarkdownURLs.add("https://docs.openpo.st/llms-full.txt");
+  validateMachineLinks("marketing llms.txt", marketingIndex, knownMarkdownURLs);
+  validateMachineLinks("documentation llms.txt", documentationIndex, knownMarkdownURLs);
+  const documentationCorpus = await localArtifact(documentationDirectory, "llms-full.txt");
+  validateMachineLinks("documentation llms-full.txt", documentationCorpus, knownMarkdownURLs);
+
+  for (const [surface, relativePath, contentType, expectedBody] of [
+    [surfaces[0], "llms.txt", "text/plain; charset=utf-8", marketingIndex],
+    [surfaces[1], "llms.txt", "text/plain; charset=utf-8", documentationIndex],
+    [surfaces[1], "llms-full.txt", "text/plain; charset=utf-8", documentationCorpus],
+  ]) {
+    checks.push({
+      kind: "artifact",
+      name: `${surface.key} ${relativePath}`,
+      canonicalURL: `${surface.origin}/${relativePath}`,
+      deploymentURL: deploymentURL(surface.deployment, relativePath),
+      contentType,
+      expectedBody,
+      queryIsolation: true,
+    });
+  }
+
+  for (const surface of surfaces) {
+    for (const sample of surface.samples) {
+      const markdownPath = markdownOutputForRoute(sample.route, surface.key);
+      checks.push({
+        kind: "artifact",
+        name: `${surface.key} ${sample.category} HTML discovery`,
+        canonicalURL: `${surface.origin}${sample.route}`,
+        contentType: "text/html; charset=utf-8",
+        bodyIncludes: [
+          `rel="alternate" type="text/markdown" href="${surface.origin}/${markdownPath}"`,
+          `href="${surface.origin}/llms.txt"`,
+          ...(surface.key === "documentation"
+            ? [`href="https://docs.openpo.st/llms-full.txt"`]
+            : []),
+        ],
+      });
+    }
+  }
+
+  for (const surface of surfaces) {
+    checks.push({
+      kind: "artifact",
+      name: `${surface.key} HTML-only sitemap`,
+      canonicalURL: `${surface.origin}/sitemap.xml`,
+      contentType: "application/xml",
+      bodyExcludes: [".md</loc>"],
+    });
+  }
+
+  for (const boundary of nativeBoundaries) {
+    const deployment =
+      boundary.deployment === "marketing"
+        ? marketingDeployment
+        : boundary.deployment === "documentation"
+          ? documentationDeployment
+          : undefined;
+    const directory =
+      boundary.deployment === "marketing"
+        ? marketingDirectory
+        : boundary.deployment === "documentation"
+          ? documentationDirectory
+          : undefined;
+    checks.push({
+      kind: "artifact",
+      ...boundary,
+      ...(deployment ? { deploymentURL: deploymentURL(deployment, boundary.localPath) } : {}),
+      ...(boundary.localPath
+        ? {
+            expectedBody: await localArtifact(directory, boundary.localPath, boundary.binary),
+          }
+        : {}),
+    });
+  }
+
+  for (const surface of surfaces) {
+    checks.push(
+      {
+        kind: "artifact",
+        name: `${surface.key} unknown HTML 404`,
+        canonicalURL: `${surface.origin}/openpost-proof-unknown-90`,
+        contentType: "text/html; charset=utf-8",
+        status: 404,
+      },
+      {
+        kind: "artifact",
+        name: `${surface.key} unknown Markdown 404`,
+        canonicalURL: `${surface.origin}/openpost-proof-unknown-90.md`,
+        contentType: "text/markdown; charset=utf-8",
+        status: 404,
+      },
+    );
+  }
+
+  checks.push(
+    {
+      kind: "redirect",
+      name: "marketing canonical redirect",
+      url: "https://openpo.st/pricing/?openpost_proof=redirect",
+      status: 308,
+      location: "/pricing?openpost_proof=redirect",
+    },
+    {
+      kind: "redirect",
+      name: "documentation canonical redirect",
+      url: "https://docs.openpo.st/mcp/cursor/?openpost_proof=redirect",
+      status: 308,
+      location: "/mcp/cursor?openpost_proof=redirect",
+    },
+  );
+
+  return { checks, marketingDeployment, documentationDeployment };
+}
+
+function requiredOption(name) {
+  const index = process.argv.indexOf(name);
+  const value = index === -1 ? undefined : process.argv[index + 1];
+  if (!value) throw new Error(`missing ${name}`);
+  return value;
+}
+
+function deploymentEvidence(deployment) {
+  return {
+    id: deployment.Id,
+    branch: deployment.Branch,
+    source_revision: deployment.SourceRevision,
+    deployment_url: deployment.Deployment,
+    build_url: deployment.Build,
+  };
+}
+
+async function main() {
+  if (process.argv[2] !== "prove") {
+    throw new Error(
+      "usage: public-deployment-proof.mjs prove --revision SHA --marketing-deployment FILE --documentation-deployment FILE --ai-crawl-snapshot FILE --output FILE",
+    );
+  }
+  const revision = requiredOption("--revision");
+  const [{ stdout: headOutput }, { stdout: statusOutput }] = await Promise.all([
+    execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot }),
+    execFileAsync("git", ["status", "--porcelain", "--untracked-files=no"], {
+      cwd: repositoryRoot,
+    }),
+  ]);
+  const localRevision = {
+    head: headOutput.trim(),
+    status: statusOutput.trim(),
+  };
+  assertLocalRevision(localRevision, revision);
+  const [marketingDeployments, documentationDeployments, aiCrawlSnapshot] = await Promise.all(
+    [
+      requiredOption("--marketing-deployment"),
+      requiredOption("--documentation-deployment"),
+      requiredOption("--ai-crawl-snapshot"),
+    ].map(async (file) => JSON.parse(await readFile(path.resolve(file), "utf8"))),
+  );
+  validateAICrawlSnapshot(aiCrawlSnapshot);
+  const { checks, marketingDeployment, documentationDeployment } = await buildPublicProofChecks({
+    revision,
+    marketingDeployments,
+    documentationDeployments,
+  });
+  const results = await proveHTTPContract({ checks });
+  const exactArtifacts = results.filter(
+    ({ local_matches, deployment_matches }) => local_matches && deployment_matches,
+  ).length;
+  const report = {
+    schema_version: 1,
+    reviewed_revision: revision,
+    generated_at: new Date().toISOString(),
+    local_build: {
+      marketing: "bun run build -- marketing",
+      documentation: "bun run build -- docs",
+      head_revision: localRevision.head,
+      tracked_tree_clean: true,
+      generated_artifacts_verified: true,
+    },
+    deployment_artifact_acceptance: {
+      marketing: deploymentEvidence(marketingDeployment),
+      documentation: deploymentEvidence(documentationDeployment),
+      exact_local_deployment_canonical_artifacts: exactArtifacts,
+    },
+    live_response_behavior: {
+      checks: results,
+      passed: results.length,
+    },
+    ai_crawl_control_observation: aiCrawlSnapshot,
+  };
+  await writeFile(path.resolve(requiredOption("--output")), `${JSON.stringify(report, null, 2)}\n`);
+  console.log(
+    `Proved ${results.length} live responses and ${exactArtifacts} exact deployed artifacts for ${revision}.`,
+  );
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(`public-deployment-proof: ${error.message}`);
+    process.exitCode = 1;
+  }
+}

@@ -1,0 +1,1268 @@
+import { planCatalog, purchaseTerms, selfHostedDeployment } from '@openpost/plan-catalog';
+import { PLATFORM_LIMITS } from '../../../web/src/lib/platform-limits';
+import publicClaimManifest from '../../../../config/provider-certification/public-claims.json';
+
+type PublicProviderClaim = {
+	subject: {
+		provider: string;
+		output_profile: string;
+	};
+};
+
+export const appUrl = 'https://app.openpo.st';
+export const managedSignupUrl = `${appUrl}/register?plan=founder&billing_period=monthly`;
+export const billingSettingsUrl = `${appUrl}/settings?tab=billing#billing`;
+export const userDocsUrl = 'https://docs.openpo.st/guides/quickstart';
+export const selfHostingDocsUrl = 'https://docs.openpo.st/self-hosting/';
+export const developerDocsUrl =
+	'https://github.com/getopenpost/openpost/blob/main/docs/development/index.md';
+export const apiGuideUrl = 'https://docs.openpo.st/api-reference';
+export const openApiUrl = 'https://docs.openpo.st/openapi.json';
+export const cliDocsUrl = 'https://docs.openpo.st/guides/automation';
+export const mcpDocsUrl = 'https://docs.openpo.st/guides/automation';
+export const apiTokenDocsUrl = 'https://docs.openpo.st/api-reference';
+export const agentPublishingDocsUrl = 'https://docs.openpo.st/guides/automation';
+export const docsUrl = userDocsUrl;
+export const githubUrl = 'https://github.com/getopenpost/openpost';
+export const siteUrl = 'https://openpo.st';
+export const discordCommunityUrl = 'https://discord.com/invite/u2QwukmY4W';
+export const supportEmail = 'openpost@rgo.pt';
+export const supportMailUrl = `mailto:${supportEmail}`;
+export const demoVideoUrl = 'https://www.youtube.com/watch?v=_mZf3HzQaN8';
+export const demoVideoEmbedUrl =
+	'https://www.youtube-nocookie.com/embed/_mZf3HzQaN8?autoplay=1&rel=0';
+
+type NavigationSurface = 'primary' | 'resources' | 'mobile' | 'footer';
+type ResourceGroup = 'Learn' | 'OpenPost';
+type FooterGroup = 'Product' | 'Resources' | 'More';
+type MarketingNavigationItem = {
+	label: string;
+	href: string;
+	group?: ResourceGroup;
+	footerGroup: FooterGroup;
+	surfaces: readonly NavigationSurface[];
+};
+const navigationRegistry: readonly MarketingNavigationItem[] = [
+	{
+		label: 'Features',
+		href: '/#features',
+		footerGroup: 'Product',
+		surfaces: ['primary', 'mobile', 'footer']
+	},
+	{
+		label: 'Channels',
+		href: '/platforms',
+		footerGroup: 'Product',
+		surfaces: ['primary', 'mobile', 'footer']
+	},
+	{
+		label: 'Free tools',
+		href: '/tools',
+		footerGroup: 'Product',
+		surfaces: ['primary', 'mobile', 'footer']
+	},
+	{
+		label: 'Pricing',
+		href: '/pricing',
+		footerGroup: 'Product',
+		surfaces: ['primary', 'mobile', 'footer']
+	},
+	{
+		label: 'Image editor',
+		href: '/tools/social-media-image-editor',
+		footerGroup: 'Product',
+		surfaces: ['footer']
+	},
+	{
+		label: 'Video editor',
+		href: '/tools/social-media-video-editor',
+		footerGroup: 'Product',
+		surfaces: ['footer']
+	},
+	{
+		label: 'Help centre',
+		href: docsUrl,
+		group: 'Learn',
+		footerGroup: 'Resources',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'Publishing guides',
+		href: '/guides',
+		group: 'Learn',
+		footerGroup: 'Resources',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'FAQ',
+		href: '/faq',
+		group: 'Learn',
+		footerGroup: 'Resources',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'Changelog',
+		href: '/changelog',
+		group: 'Learn',
+		footerGroup: 'Resources',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'Contact',
+		href: '/contact',
+		group: 'OpenPost',
+		footerGroup: 'Resources',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'About',
+		href: '/about',
+		group: 'OpenPost',
+		footerGroup: 'More',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{
+		label: 'Security',
+		href: '/security',
+		group: 'OpenPost',
+		footerGroup: 'More',
+		surfaces: ['resources', 'mobile', 'footer']
+	},
+	{ label: 'Your data', href: '/trust', footerGroup: 'More', surfaces: ['footer'] },
+	{
+		label: 'Discord community',
+		href: discordCommunityUrl,
+		footerGroup: 'More',
+		surfaces: ['footer']
+	},
+	{ label: 'GitHub source', href: githubUrl, footerGroup: 'More', surfaces: ['footer'] },
+	{
+		label: 'Self-hosting guide',
+		href: selfHostingDocsUrl,
+		footerGroup: 'More',
+		surfaces: ['footer']
+	}
+];
+const navigationFor = (surface: NavigationSurface) =>
+	navigationRegistry.filter((item) => item.surfaces.includes(surface));
+export const marketingNavigation = {
+	primary: navigationFor('primary'),
+	resourceGroups: (['Learn', 'OpenPost'] as const).map((label) => ({
+		label,
+		items: navigationRegistry.filter(
+			(item) => item.group === label && item.surfaces.includes('resources')
+		)
+	})),
+	mobile: navigationFor('mobile'),
+	footerGroups: (['Product', 'Resources', 'More'] as const).map((title) => ({
+		title,
+		links: navigationRegistry.filter(
+			(item) => item.footerGroup === title && item.surfaces.includes('footer')
+		)
+	}))
+} as const;
+
+export const selfHostedDeploymentSummary = {
+	softwareFee: `$${selfHostedDeployment.software_fee_usd}`,
+	docsUrl: selfHostedDeployment.documentation_url,
+	productionChecklistUrl: selfHostedDeployment.production_checklist_url,
+	sourceUrl: selfHostedDeployment.source_url
+} as const;
+
+const dueToday = `$${purchaseTerms.due_today_usd.toLocaleString('en-US')}`;
+export const managedCardRequirement = purchaseTerms.card_required
+	? 'A card is required'
+	: 'No card is required';
+export const managedPaymentExpectation = purchaseTerms.card_required
+	? `${dueToday} is due today. A card is required at checkout.`
+	: `${dueToday} is due today. No card is required at checkout.`;
+export const managedAccessSummary = `Start with a ${purchaseTerms.trial_days}-day free trial. ${managedCardRequirement}, and you can cancel before the first charge.`;
+export const managedTrialNote = `${purchaseTerms.trial_days} days free. ${dueToday} today. ${purchaseTerms.card_required ? 'Card required.' : 'No card required.'}`;
+
+export const publicProviderCertification = {
+	currentClaimCount: publicClaimManifest.claims.length,
+	summary:
+		publicClaimManifest.claims.length === 0
+			? 'No exact Hosted service provider-format certification claim is current.'
+			: `${publicClaimManifest.claims.length} exact Hosted service provider-format certification claim${publicClaimManifest.claims.length === 1 ? ' is' : 's are'} current.`
+} as const;
+
+const formatUSD = (value: number) => `$${value.toLocaleString('en-US')}`;
+const formatLimit = (count: number, singular: string, plural = `${singular}s`) =>
+	`${count.toLocaleString('en-US')} ${count === 1 ? singular : plural}`;
+
+export const plans = planCatalog.plans.map((plan) => ({
+	id: plan.id,
+	name: plan.name,
+	price: formatUSD(plan.monthly_price_usd),
+	annualPrice: formatUSD(plan.annual_price_usd),
+	description: plan.description,
+	bestFor: plan.best_for,
+	workspaces: plan.limits.workspaces.toLocaleString('en-US'),
+	accounts: plan.limits.social_accounts.toLocaleString('en-US'),
+	posts: plan.limits.scheduled_posts_monthly.toLocaleString('en-US'),
+	storage: `${plan.limits.media_bytes_stored / 1_000_000_000} GB`,
+	seats: plan.limits.team_members.toLocaleString('en-US'),
+	limits: [
+		formatLimit(plan.limits.workspaces, 'workspace'),
+		formatLimit(plan.limits.social_accounts, 'social account'),
+		`${plan.limits.scheduled_posts_monthly.toLocaleString('en-US')} scheduled publications/month`,
+		`${plan.limits.media_bytes_stored / 1_000_000_000} GB media`,
+		plan.limits.team_members === 1
+			? '1 seat'
+			: `${plan.limits.team_members.toLocaleString('en-US')} included seats`
+	],
+	featured: plan.featured
+}));
+
+const platformImplementations = [
+	{
+		slug: 'x',
+		name: 'X',
+		short: 'x',
+		tag: 'Posts, threads, media',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Draft, preview, and schedule X posts, links, media, and reply threads. OpenPost checks the limit for each connected account.',
+		heroTitle: 'Build an X reply chain with the right limit for each account.',
+		preview: {
+			label: 'Reply chain',
+			headline: 'Three connected posts',
+			body: 'Each part is reviewed and scheduled as its own X post.',
+			detail: '280 standard · up to 25,000 subscribed',
+			chips: ['Post 1', 'Reply 2', 'Reply 3']
+		},
+		accountRequirement: 'An X developer app with OAuth 1.0a user authentication enabled.',
+		auth: 'OAuth 1.0a',
+		setup: [
+			'Configure the X client ID, secret, and the exact OpenPost callback URL.',
+			'Enable OAuth 1.0a user authentication in the X developer portal.',
+			'Connect the X account from Social accounts, then publish a small test post.'
+		],
+		formats: [
+			{
+				name: 'Post, thread, or link',
+				text: '280 standard · up to 25,000 subscribed',
+				media: 'Text only'
+			},
+			{
+				name: 'Image post',
+				text: '280 standard · up to 25,000 subscribed',
+				media: '1-4 JPEG, PNG, WebP, or GIF images'
+			},
+			{
+				name: 'Video',
+				text: '280 standard · up to 25,000 subscribed',
+				media: '1 MP4 or QuickTime video'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.x.charLimit} weighted characters for standard accounts`,
+			'Up to 25,000 weighted characters for verified Basic, Premium, or Premium+ accounts',
+			'Video: 140 seconds and 512 MiB standard; up to 4 hours and 16 GiB subscribed',
+			PLATFORM_LIMITS.x.media,
+			'Your X API plan and limits still apply'
+		],
+		limitations: [
+			'OpenPost uses standard limits when X cannot verify a connected account subscription tier.',
+			'Media publishing needs OAuth 1.0a access-token and secret pairs.',
+			'Polls, quote posts, and other format settings remain subject to the account API tier.'
+		],
+		verification: 'Check OAuth, account limits, and each post type you plan to use.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'mastodon',
+		name: 'Mastodon',
+		short: 'mastodon',
+		tag: 'Custom servers, posts, threads',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect a public Mastodon server, then schedule posts, media, links, and reply threads.',
+		heroTitle: 'Publish to the Mastodon server your community already uses.',
+		preview: {
+			label: 'mastodon.social',
+			headline: 'Public post with a content warning option',
+			body: 'Each account keeps its visibility, language, sensitive media, and server rules.',
+			detail: '500 characters by default',
+			chips: ['Public', 'English', 'Instance-aware']
+		},
+		accountRequirement: 'An account on a public HTTPS Mastodon instance that allows app access.',
+		auth: 'OAuth 2.0 per instance',
+		setup: [
+			'Choose Mastodon in Social accounts and enter the public server address.',
+			'Approve the dynamically registered or operator-configured app on that server.',
+			'Confirm the instance-specific text and media rules before scheduling.'
+		],
+		formats: [
+			{
+				name: 'Post, thread, or link',
+				text: '500 characters by default',
+				media: 'Text only'
+			},
+			{
+				name: 'Media post',
+				text: '500 characters by default',
+				media: 'Up to 4 images, GIFs, or MP4 attachments'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.mastodon.charLimit} characters by default`,
+			PLATFORM_LIMITS.mastodon.media,
+			'Reply threads and OpenPost scheduling',
+			'Instance rules can override the defaults'
+		],
+		limitations: [
+			'Character, attachment, and video limits can differ by server.',
+			'Custom instances must be public HTTPS and allow app registration.',
+			'One adapter registration is maintained per Mastodon instance.'
+		],
+		verification:
+			'Check the server rules and publish one media test before you rely on a new server.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'pixelfed',
+		name: 'Pixelfed',
+		short: 'pixelfed',
+		tag: 'Photos, albums, alt text',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect a public Pixelfed instance, then schedule photo posts and albums with captions and alt text.',
+		heroTitle: 'Publish photos where your Fediverse audience already follows you.',
+		preview: {
+			label: 'pixelfed.social',
+			headline: 'A photo post with alt text',
+			body: 'Each account keeps its visibility, language, sensitive media, and server rules.',
+			detail: 'Up to 4 photos by default',
+			chips: ['Public', 'Alt text', 'Instance-aware']
+		},
+		accountRequirement: 'An account on a public HTTPS Pixelfed instance that allows app access.',
+		auth: 'OAuth 2.0 per instance',
+		setup: [
+			'Choose Pixelfed in Social accounts and enter the public server address.',
+			'Approve the dynamically registered or operator-configured app on that server.',
+			'Confirm the instance-specific photo and album rules before scheduling.'
+		],
+		formats: [
+			{
+				name: 'Photo post',
+				text: '500 characters by default',
+				media: '1-4 JPEG, PNG, or WebP photos'
+			},
+			{
+				name: 'Album',
+				text: '500 characters by default',
+				media: '2-4 photos with per-image alt text'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.pixelfed.charLimit} characters by default`,
+			PLATFORM_LIMITS.pixelfed.media,
+			'Photo-first: video support depends on the instance',
+			'Instance rules can override the defaults'
+		],
+		limitations: [
+			'Photo and album limits can differ by server.',
+			'Custom instances must be public HTTPS and allow app registration.',
+			'Quote posts and interaction policies are not advertised for Pixelfed accounts.'
+		],
+		verification:
+			'Check the server rules and publish one photo test before you rely on a new server.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'peertube',
+		name: 'PeerTube',
+		short: 'peertube',
+		tag: 'Channels, video uploads',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect a PeerTube account, pick a channel, then publish videos with titles, descriptions, and captions.',
+		heroTitle: 'Publish videos to the channel your audience subscribes to.',
+		preview: {
+			label: 'Channel video',
+			headline: 'A video with title and description',
+			body: 'Each upload targets one channel and reports transcoding before delivery.',
+			detail: 'One video per post',
+			chips: ['Channel', 'Captions', 'Processing state']
+		},
+		accountRequirement: 'A PeerTube account with at least one channel on a reachable instance.',
+		auth: 'Instance username and password',
+		setup: [
+			'Choose PeerTube in Social accounts and enter the instance address, username, and password.',
+			'Pick the channel to connect when the account owns several.',
+			'Upload a short test video and follow its processing state.'
+		],
+		formats: [
+			{
+				name: 'Video',
+				text: 'Title required, description optional',
+				media: 'One MP4, QuickTime, WebM, or Matroska video'
+			}
+		],
+		limits: [
+			'A title and channel are required for every upload',
+			PLATFORM_LIMITS.peertube.media,
+			'Instance quota and transcoding policy apply',
+			'Thumbnails and caption files are applied after upload'
+		],
+		limitations: [
+			'Uploads wait for instance transcoding before delivery is reported.',
+			'Password-protected videos need their password in OpenPost for inbox reads.',
+			'One adapter registration is maintained per PeerTube instance.'
+		],
+		verification: 'Upload one test video and confirm it finishes transcoding before scheduling.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'lemmy',
+		name: 'Lemmy',
+		short: 'lemmy',
+		tag: 'Communities, discussions, links',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect a Lemmy account, choose a community, then publish discussions and links with replies from one inbox.',
+		heroTitle: 'Join the community discussion instead of just dropping a link.',
+		preview: {
+			label: 'Community post',
+			headline: 'A discussion with title and body',
+			body: 'Each rendition targets one community with its own title, body, and validation.',
+			detail: 'Community and title required',
+			chips: ['Community', 'Replies', 'Moderation-aware']
+		},
+		accountRequirement: 'A Lemmy account on a reachable instance (0.19 series).',
+		auth: 'Instance username and password',
+		setup: [
+			'Choose Lemmy in Social accounts and enter the home instance address, username, and password.',
+			'Search for a community or paste its address, then review its rules next to the editor.',
+			'Publish a test discussion and read its replies from the inbox.'
+		],
+		formats: [
+			{
+				name: 'Discussion',
+				text: 'Title required, Markdown body',
+				media: 'Text only'
+			},
+			{
+				name: 'Link or image post',
+				text: 'Title required',
+				media: 'One link or one uploaded image'
+			}
+		],
+		limits: [
+			'A community and title are required for every post',
+			PLATFORM_LIMITS.lemmy.media,
+			'Communities can restrict posting to moderators',
+			'A publication with an unresolved community cannot be scheduled'
+		],
+		limitations: [
+			'Publishing uses the Lemmy v3 API; 1.x instances on API v4 are refused explicitly.',
+			'Remote visibility depends on federation and instance moderation.',
+			'Removed remote posts are reported, never reposted automatically.'
+		],
+		verification: 'Post one test discussion and confirm it is visible in the target community.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'piefed',
+		name: 'PieFed',
+		short: 'piefed',
+		tag: 'Communities, discussions, links',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect a PieFed account, choose a community, then publish discussions and links through its native API.',
+		heroTitle: 'Publish to PieFed communities with the same care as Lemmy.',
+		preview: {
+			label: 'Community post',
+			headline: 'A discussion with title and body',
+			body: 'Each rendition targets one community with its own title, body, and validation.',
+			detail: 'Community and title required',
+			chips: ['Community', 'Replies', 'Native API']
+		},
+		accountRequirement: 'A PieFed account on a reachable instance.',
+		auth: 'Instance username and password',
+		setup: [
+			'Choose PieFed in Social accounts and enter the home instance address, username, and password.',
+			'Search for a community or paste its address, then review its rules next to the editor.',
+			'Publish a test discussion and read its replies from the inbox.'
+		],
+		formats: [
+			{
+				name: 'Discussion',
+				text: 'Title required, Markdown body',
+				media: 'Text only'
+			},
+			{
+				name: 'Link or image post',
+				text: 'Title required',
+				media: 'One link or one uploaded image'
+			}
+		],
+		limits: [
+			'A community and title are required for every post',
+			PLATFORM_LIMITS.piefed.media,
+			'Communities can restrict posting to moderators',
+			'A publication with an unresolved community cannot be scheduled'
+		],
+		limitations: [
+			'Publishing uses the native PieFed alpha API through its own adapter.',
+			'Remote visibility depends on federation and instance moderation.',
+			'Removed remote posts are reported, never reposted automatically.'
+		],
+		verification: 'Post one test discussion and confirm it is visible in the target community.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'bluesky',
+		name: 'Bluesky',
+		short: 'bluesky',
+		tag: 'Posts, threads, images, video',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Connect with a handle and app password, then schedule posts, links, media, and reply threads.',
+		heroTitle: 'Keep a Bluesky post concise while preserving links and rich text.',
+		preview: {
+			label: '@openpo.st',
+			headline: 'A short post with a rich link card',
+			body: "Rich text, link cards, replies, labels, and media use Bluesky's AT Protocol format.",
+			detail: '300 characters',
+			chips: ['Rich text', 'Link card', 'AT Protocol']
+		},
+		accountRequirement: 'A Bluesky handle and a dedicated app password.',
+		auth: 'Handle and app password',
+		setup: [
+			'Create an app password in Bluesky account settings.',
+			'Connect with your handle and that app password, not your main password.',
+			'Publish a test if you plan to use video or rich links.'
+		],
+		formats: [
+			{
+				name: 'Post, thread, or link',
+				text: '300 characters',
+				media: 'Text or a rich link card'
+			},
+			{
+				name: 'Image post',
+				text: '300 characters',
+				media: '1-4 JPEG, PNG, or WebP images'
+			},
+			{
+				name: 'Video',
+				text: '300 characters',
+				media: '1 MP4 video, up to 100 MB'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.bluesky.charLimit} characters`,
+			PLATFORM_LIMITS.bluesky.media,
+			'AT Protocol replies',
+			'Video cannot be mixed with images'
+		],
+		limitations: [
+			'Video must be MP4 and cannot be combined with images.',
+			'App passwords can be revoked independently from the main account password.',
+			'Bluesky may need time to process a video after upload.'
+		],
+		verification:
+			'Text and image posts work in OpenPost. Test video with the account before a scheduled campaign.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'linkedin',
+		name: 'LinkedIn',
+		short: 'linkedin',
+		tag: 'Posts, documents, video',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Schedule LinkedIn posts, links, images, documents, videos, and comment-style thread continuations.',
+		heroTitle: 'Turn a LinkedIn update into a document post or comment thread.',
+		preview: {
+			label: 'Professional update',
+			headline: 'Quarterly field guide.pdf',
+			body: 'The document title, post text, and follow-up comments each have their own limit.',
+			detail: '3,000 post · 1,250 comment',
+			chips: ['PDF document', 'Comment child', 'Organization-ready']
+		},
+		accountRequirement:
+			'A LinkedIn developer app with the publishing products and scopes your account needs.',
+		auth: 'OAuth 2.0',
+		setup: [
+			'Configure the LinkedIn client ID, secret, and callback URL.',
+			'Confirm the app has the publishing products and permissions you need.',
+			'Connect the member or organization account and test each approved media type.'
+		],
+		formats: [
+			{
+				name: 'Post or link',
+				text: '3,000 characters',
+				media: 'Text or a link card'
+			},
+			{
+				name: 'Comment thread',
+				text: '1,250 characters per child',
+				media: 'Text only'
+			},
+			{
+				name: 'Image, document, or video',
+				text: '3,000 characters',
+				media: 'One image, PDF document, or video per account version'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.linkedin.charLimit} characters for posts`,
+			'1,250 characters for thread comments',
+			PLATFORM_LIMITS.linkedin.media,
+			'Thread children publish as comments'
+		],
+		limitations: [
+			'Publishing and comment permissions depend on LinkedIn products, scopes, and app review.',
+			'Documents use the LinkedIn Documents API and require a title.',
+			'Organization posting depends on the connected member role and granted access.'
+		],
+		verification:
+			'OAuth success alone does not prove every publishing permission; test the formats your team will schedule.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'threads',
+		name: 'Threads',
+		short: 'threads',
+		tag: 'Posts, replies, carousels',
+		requiresProviderApproval: false,
+		implementationDetail: 'Publishing is implemented',
+		description:
+			'Schedule text, image, video, carousel, and reply-thread posts for connected Threads accounts.',
+		heroTitle: 'Arrange a Threads carousel and the replies that follow it.',
+		preview: {
+			label: 'Carousel',
+			headline: 'Four media items, one Threads post',
+			body: 'Public image and video URLs are checked before Meta fetches the carousel.',
+			detail: '2-20 public media items',
+			chips: ['Image', 'Video', 'Reply chain']
+		},
+		accountRequirement: 'An approved Meta app and public HTTPS media hosting for media posts.',
+		auth: 'Meta OAuth 2.0',
+		setup: [
+			'Configure the Threads app credentials and exact OAuth redirect URI.',
+			'Make stored media reachable through a public HTTPS URL that Meta can fetch.',
+			'Connect the account and test image, video, or carousel publishing from production-like hosting.'
+		],
+		formats: [
+			{
+				name: 'Post or reply thread',
+				text: '500 characters',
+				media: 'Text only'
+			},
+			{
+				name: 'Image or video',
+				text: '500 characters',
+				media: 'One public HTTPS media item'
+			},
+			{
+				name: 'Carousel',
+				text: '500 characters',
+				media: '2-20 public HTTPS images or videos'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.threads.charLimit} characters`,
+			PLATFORM_LIMITS.threads.media,
+			'Reply chains',
+			'Public media URL and approved Meta app access required'
+		],
+		limitations: [
+			'Meta fetches media server-side; localhost, private URLs, and inaccessible object storage will fail.',
+			'Video processing and account permissions can still fail after a successful OAuth connection.',
+			'Local development needs a public tunnel for callbacks and media.'
+		],
+		verification:
+			'Verify that Meta can fetch the exact production media URL before scheduling media-heavy work.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'facebook',
+		name: 'Facebook Pages',
+		short: 'facebook',
+		tag: 'Pages, media, Stories',
+		requiresProviderApproval: true,
+		implementationDetail: 'Meta review and Page permissions still apply',
+		description: 'OpenPost publishes text, photos, video, and Stories to selected Facebook Pages.',
+		heroTitle: 'Prepare a Facebook Page post and its media together.',
+		preview: {
+			label: 'Selected Page',
+			headline: 'Feed post or Story',
+			body: 'OpenPost checks the selected Page, post type, and public media link separately.',
+			detail: 'Pages only',
+			chips: ['Feed', 'Multi-photo', 'Story']
+		},
+		accountRequirement:
+			'A Facebook Page, eligible Meta user, configured Meta app, and the required reviewed permissions.',
+		auth: 'Meta OAuth 2.0 with Page selection',
+		setup: [
+			'Set up the Facebook app, permissions, and callback address.',
+			'Connect through Meta and choose the Page OpenPost should publish to.',
+			'Complete Meta review and test a live Page before you schedule real posts.'
+		],
+		formats: [
+			{
+				name: 'Page post or link',
+				text: '63,206 characters',
+				media: 'Text or a link card'
+			},
+			{
+				name: 'Photo or multi-photo',
+				text: '63,206 characters',
+				media: '1 image or 2-10 public HTTPS photos'
+			},
+			{
+				name: 'Video or Story',
+				text: '63,206 characters for video',
+				media: 'One public HTTPS video; Story accepts one image or video'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.facebook.charLimit.toLocaleString()} characters`,
+			PLATFORM_LIMITS.facebook.media,
+			'Multi-photo, Story, and video profiles',
+			'App permissions and a live account test are required'
+		],
+		limitations: [
+			'App review and Page permissions determine whether a Page and format work.',
+			'Media must be available at a public HTTPS URL that Meta can fetch.',
+			'This integration publishes to Pages, not personal Facebook profiles.'
+		],
+		verification:
+			'Do not plan a launch around this integration until Page selection and every required format pass a live test.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'instagram',
+		name: 'Instagram',
+		short: 'instagram',
+		tag: 'Feed, carousel, Story, Reel',
+		requiresProviderApproval: true,
+		implementationDetail: 'Business or Creator account and Meta review required',
+		description: 'OpenPost publishes Instagram feed images, carousels, Stories, and Reels.',
+		heroTitle: 'Choose the Instagram post type before you write the caption.',
+		preview: {
+			label: 'Media-first',
+			headline: 'Feed, carousel, Story, or Reel',
+			body: 'The format you choose sets the media count, caption, and checks.',
+			detail: 'No text-only posts',
+			chips: ['1:1 Feed', '9:16 Story', '9:16 Reel']
+		},
+		accountRequirement: 'An Instagram Business or Creator account connected to a Facebook Page.',
+		auth: 'Meta OAuth 2.0 with account selection',
+		setup: [
+			'Connect an eligible Instagram Business or Creator account to a Facebook Page.',
+			'Set up the Instagram app, permissions, callback address, and public media address.',
+			'Choose the Instagram account during sign-in and test each format with it.'
+		],
+		formats: [
+			{
+				name: 'Feed image',
+				text: '2,200 caption characters',
+				media: 'One public HTTPS image'
+			},
+			{
+				name: 'Carousel',
+				text: '2,200 caption characters',
+				media: '2-10 public HTTPS images or videos'
+			},
+			{
+				name: 'Story or Reel',
+				text: 'No Story caption; 2,200 for Reel',
+				media: 'Public HTTPS media required'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.instagram.charLimit.toLocaleString()} caption characters`,
+			PLATFORM_LIMITS.instagram.media,
+			'Feed, carousel, Story, and Reel profiles',
+			'Business or Creator accounts connected to a Facebook Page',
+			'No text-only posts'
+		],
+		limitations: [
+			'OpenPost does not support text-only Instagram posts.',
+			'Media must be public HTTPS and meet Meta format rules.',
+			'App access and each planned format still need a live account test.'
+		],
+		verification:
+			'Test each planned format—feed, carousel, Story, and Reel—because one successful format does not prove the others.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'tiktok',
+		name: 'TikTok',
+		short: 'tiktok',
+		tag: 'Video and photo posts',
+		requiresProviderApproval: true,
+		implementationDetail: 'App review and live test required',
+		description: 'OpenPost supports TikTok video and photo posts, each with its own caption limit.',
+		heroTitle: 'Build a TikTok video or photo post with the correct caption limit.',
+		preview: {
+			label: 'Two post types',
+			headline: 'Video or 1-35 photos',
+			body: 'Video and photo posts keep different captions, media rules, and app-review checks.',
+			detail: '2,200 video · 4,000 photo',
+			chips: ['9:16 video', 'Photo post', 'App review']
+		},
+		accountRequirement:
+			'A TikTok developer app with Content Posting API access and approved Direct Post permissions.',
+		auth: 'OAuth 2.0',
+		setup: [
+			'Set up the TikTok app, callback address, permissions, and posting access.',
+			'Verify the public media URL prefix or domain in the TikTok developer console.',
+			'Complete app review and test both video and photo posts with the real account.'
+		],
+		formats: [
+			{
+				name: 'Video',
+				text: '2,200 caption characters',
+				media: 'One public HTTPS MP4 or QuickTime video'
+			},
+			{
+				name: 'Photo post',
+				text: '4,000 caption characters',
+				media: '1-35 public HTTPS JPEG or WebP images'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.tiktok.charLimit.toLocaleString()} characters for video captions`,
+			'4,000 characters for photo-post captions',
+			PLATFORM_LIMITS.tiktok.media,
+			'Photo posts support 1-35 JPEG or WebP images',
+			'App review and a live test are required'
+		],
+		limitations: [
+			'TikTok blocks publishing until the app passes review and a live post test.',
+			'Pull-from-URL media must use a verified public HTTPS prefix or domain.',
+			'Video and photo posts use different caption and media rules.'
+		],
+		verification:
+			'Do not use it for real posts until TikTok approves the app and your posting test works.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'youtube',
+		name: 'YouTube',
+		short: 'youtube',
+		tag: 'Shorts and long video',
+		requiresProviderApproval: true,
+		implementationDetail: 'App review required',
+		description: 'OpenPost uploads Shorts and videos to a selected YouTube channel.',
+		heroTitle: 'Schedule the YouTube video with its title, privacy, and channel details.',
+		preview: {
+			label: 'Video upload',
+			headline: 'Release walkthrough · 08:42',
+			body: 'Title, description, privacy, thumbnail, playlist, and processing state stay with the upload.',
+			detail: 'One video per account version',
+			chips: ['Private by default', 'Thumbnail', 'Playlist']
+		},
+		accountRequirement:
+			'A Google Cloud OAuth app with YouTube Data API v3 and an eligible YouTube channel.',
+		auth: 'Google OAuth 2.0 with channel selection',
+		setup: [
+			'Enable YouTube Data API v3 and configure the Google OAuth app and callback URI.',
+			'Request the required profile, channel-read, and upload scopes.',
+			'Choose a channel during connection and test a real video upload.'
+		],
+		formats: [
+			{
+				name: 'Short',
+				text: 'Required title; up to 5,000 description characters',
+				media: 'Exactly one short video'
+			},
+			{
+				name: 'Video',
+				text: 'Required title; up to 5,000 description characters',
+				media: 'Exactly one video, up to the long-video profile limit'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.youtube.charLimit.toLocaleString()} description characters`,
+			PLATFORM_LIMITS.youtube.media,
+			'Title required',
+			'Unaudited Google projects can force uploads private'
+		],
+		limitations: [
+			'Test the Google project with a live channel before you use it for real posts.',
+			'Unaudited Google projects can force uploads to private visibility.',
+			'Each account version accepts one video. OpenPost does not support text-only YouTube posts.'
+		],
+		verification:
+			'Confirm upload, processing completion, thumbnail, playlist, and final privacy on the production channel.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'pinterest',
+		name: 'Pinterest',
+		short: 'pinterest',
+		tag: 'Unavailable pending certification',
+		requiresProviderApproval: true,
+		implementationDetail: 'Adapter code exists; public connections are intentionally unavailable',
+		description:
+			'Pinterest is not publicly available in OpenPost. Standard API access and current live certification are required before connection or publishing can be claimed.',
+		heroTitle: 'Pinterest remains behind the provider readiness gate.',
+		preview: {
+			label: 'No public connection',
+			headline: 'Certification required',
+			body: 'Mocked tests and adapter code do not make Pinterest available to public Hosted accounts.',
+			detail: 'Standard access plus live evidence',
+			chips: ['Unavailable', 'Provider approval', 'Live certification']
+		},
+		accountRequirement:
+			'A Pinterest app with Standard access, exact scopes, runtime controls, and current live certification.',
+		auth: 'OAuth 2.0; publicly unavailable',
+		setup: [
+			'Operators may configure a Pinterest app only for controlled development or certification work.',
+			'Keep public connection, publishing, discovery, and analytics operations disabled without current evidence.',
+			'Use the provider readiness ledger before changing any public availability statement.'
+		],
+		formats: [
+			{
+				name: 'Public availability',
+				text: 'Unavailable',
+				media: 'Unavailable'
+			}
+		],
+		limits: [
+			'Standard API access is required for production use',
+			'Public Hosted availability requires current exact-subject live evidence',
+			'No Pinterest operation is advertised as available today'
+		],
+		limitations: [
+			'Trial access is for development and certification, not public production use.',
+			'An adapter, configured credential, or mocked test is not a readiness claim.',
+			'OpenPost exposes no public Pinterest claim without a current certification projection.'
+		],
+		verification:
+			'Do not connect or publish for public accounts until Standard access and every readiness gate pass with current live evidence.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'telegram',
+		name: 'Telegram',
+		short: 'telegram',
+		tag: 'Bot mode unavailable pending certification',
+		requiresProviderApproval: false,
+		implementationDetail: 'Bot paths exist; public connections are intentionally unavailable',
+		description:
+			'Telegram bot mode is not publicly available in OpenPost. It remains blocked until the exact bot configuration and operations have current live certification.',
+		heroTitle: 'Telegram bot mode remains behind the provider readiness gate.',
+		preview: {
+			label: 'No public connection',
+			headline: 'Live bot certification required',
+			body: 'A configured bot token does not make Telegram available to public Hosted accounts.',
+			detail: 'Connect, publish, observation, and analytics gate separately',
+			chips: ['Unavailable', 'Instance bot', 'Live certification']
+		},
+		accountRequirement:
+			'An instance-owned Telegram bot with a secret webhook and current live evidence for each enabled operation.',
+		auth: 'Instance-owned bot; publicly unavailable',
+		setup: [
+			'Operators may configure the instance bot only for controlled development or certification work.',
+			'Keep public connection, publishing, observation, and analytics operations disabled without current evidence.',
+			'Use the provider readiness ledger before changing any public availability statement.'
+		],
+		formats: [
+			{
+				name: 'Public availability',
+				text: 'Unavailable',
+				media: 'Unavailable'
+			}
+		],
+		limits: [
+			'Every bot operation has an independent readiness gate',
+			'Public Hosted availability requires current exact-subject live evidence',
+			'No Telegram bot operation is advertised as available today'
+		],
+		limitations: [
+			'Bot credentials are instance-owned and never belong in workspace data.',
+			'An implementation path or configured token is not a readiness claim.',
+			'OpenPost exposes no public Telegram bot claim without a current certification projection.'
+		],
+		verification:
+			'Do not connect the bot to public accounts until every intended operation passes its readiness gate with current live evidence.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	},
+	{
+		slug: 'discord',
+		name: 'Discord',
+		short: 'discord',
+		tag: 'Messages and files',
+		requiresProviderApproval: false,
+		implementationDetail: 'Built-in webhook connection',
+		description:
+			'Connect a Discord channel webhook, then schedule text and up to 10 file attachments.',
+		heroTitle: 'Schedule a message and its files for a Discord channel.',
+		preview: {
+			label: 'Discord channel',
+			headline: 'A scheduled channel update',
+			body: 'Text, files, alt text, and reply links are sent through the channel webhook.',
+			detail: '2,000 characters',
+			chips: ['Webhook', 'Up to 10 files', 'Reply links']
+		},
+		accountRequirement:
+			'An incoming webhook URL for a Discord channel where you can manage integrations.',
+		auth: 'Incoming webhook URL',
+		setup: [
+			'Create an incoming webhook in the Discord channel settings.',
+			'Copy the webhook URL and connect it from Social accounts in OpenPost.',
+			'Publish a small test message and file, then keep the webhook URL private.'
+		],
+		formats: [
+			{
+				name: 'Message',
+				text: '2,000 characters',
+				media: 'Text only'
+			},
+			{
+				name: 'Message with files',
+				text: '2,000 characters',
+				media: 'Up to 10 images or one video in the current post formats'
+			}
+		],
+		limits: [
+			`${PLATFORM_LIMITS.discord.charLimit.toLocaleString()} characters`,
+			PLATFORM_LIMITS.discord.media,
+			'OpenPost uses a safe 10 MiB limit for each file',
+			'Scheduled messages do not notify users or roles by default'
+		],
+		limitations: [
+			'A webhook can publish and delete its own messages, but it cannot read the channel inbox.',
+			'The webhook URL acts like a password. Anyone who has it can post to the channel.',
+			'The Discord server or account may enforce a different upload limit.'
+		],
+		verification:
+			'Test the exact webhook and file type before you rely on it for scheduled messages.',
+		docsUrl: 'https://docs.openpo.st/guides/accounts'
+	}
+] as const;
+
+// SAFETY: publicClaimManifest is generated from the public provider claim schema used by PublicProviderClaim.
+const publicProviderClaims = publicClaimManifest.claims as PublicProviderClaim[];
+
+export const platforms = platformImplementations.map((platform) => {
+	const certifiedOutputProfiles = publicProviderClaims
+		.filter((claim) => claim.subject.provider === platform.slug)
+		.map((claim) => claim.subject.output_profile)
+		.sort();
+	return {
+		...platform,
+		implementationState: 'implemented' as const,
+		certifiedOutputProfiles,
+		managedCertificationState:
+			certifiedOutputProfiles.length > 0
+				? ('exact_claims_current' as const)
+				: ('no_current_claim' as const),
+		managedCertificationDetail:
+			certifiedOutputProfiles.length > 0
+				? `${certifiedOutputProfiles.length} exact provider-format certification claim${certifiedOutputProfiles.length === 1 ? ' is' : 's are'} current.`
+				: 'No Hosted service provider-format certification claim is current.'
+	};
+});
+
+const landingPlatformSlugs = [
+	'instagram',
+	'linkedin',
+	'x',
+	'bluesky',
+	'tiktok',
+	'youtube',
+	'threads',
+	'facebook',
+	'mastodon',
+	'pixelfed',
+	'peertube',
+	'lemmy',
+	'piefed',
+	'discord'
+] as const;
+
+export const landingPlatforms = landingPlatformSlugs.map((slug) => {
+	const platform = platforms.find((candidate) => candidate.slug === slug);
+	if (!platform) throw new Error(`missing landing platform ${slug}`);
+	return { slug, name: platform.name };
+});
+
+export const tools = [
+	{
+		slug: 'social-media-video-editor',
+		name: 'Social media video editor',
+		description: 'Trim clips, add captions, and export a finished video without a watermark.'
+	},
+	{
+		slug: 'social-media-image-editor',
+		name: 'Social media image editor',
+		description: 'Make a post, carousel, or thumbnail. Download it without a watermark.'
+	},
+	{
+		slug: 'multi-platform-character-counter',
+		name: 'Social media character counter',
+		description: 'Paste your post and check how it fits on each channel.'
+	},
+	{
+		slug: 'post-preview-generator',
+		name: 'Post preview generator',
+		description:
+			'Preview a post and its media on each selected social network before you schedule it.'
+	},
+	{
+		slug: 'thread-splitter',
+		name: 'Thread splitter',
+		description: 'Split long copy into a thread that fits the platform and is easy to review.'
+	},
+	{
+		slug: 'fediverse-handle-checker',
+		name: 'Social handle checker',
+		description: 'Check a Bluesky or Mastodon handle before you share it.'
+	},
+	{
+		slug: 'linkedin-text-formatter',
+		name: 'LinkedIn text formatter',
+		description: 'Tidy the spacing and style of your LinkedIn post.'
+	},
+	{
+		slug: 'best-time-to-post-calculator',
+		name: 'Timezone posting planner',
+		description: 'Turn your timezone and weekly plan into posting times you can reuse.'
+	},
+	{
+		slug: 'utm-link-builder',
+		name: 'UTM link builder',
+		description: 'Add campaign tags to a link, then copy the finished URL.'
+	}
+] as const;
+
+export type MarketingToolSlug = (typeof tools)[number]['slug'];
+
+export const faqs = [
+	{
+		id: 'free-trial',
+		category: 'billing',
+		question: 'How does the free trial work?',
+		answer: `${managedAccessSummary} Your renewal price and date are shown before you start.`,
+		learnMore: { label: 'Compare plans', href: '/pricing' }
+	},
+	{
+		id: 'choose-plan',
+		category: 'billing',
+		question: 'Which plan should I choose?',
+		answer:
+			'Choose Solo if you work on your own, Team if others help with your content, or Agency if you manage clients. Every plan includes the same tools. Team and Agency add workspaces and more people.',
+		learnMore: { label: 'Find your plan', href: '/pricing' }
+	},
+	{
+		id: 'free-editors',
+		category: 'creating',
+		question: 'Can I try the editors without signing up?',
+		answer:
+			'Yes. Create images and edit videos for free, with no account or watermark. Local projects stay on your device unless you choose to save them to OpenPost.',
+		learnMore: { label: 'Try the free tools', href: '/tools' }
+	},
+	{
+		id: 'cancel',
+		category: 'billing',
+		question: 'Can I cancel my subscription?',
+		answer:
+			'Yes. Cancel from billing settings. Cancel during the trial before the first charge, or stop your next renewal. Your checkout and billing page show the dates that apply.',
+		learnMore: { label: 'Read the refund policy', href: '/refunds' }
+	},
+	{
+		id: 'ai-writing',
+		category: 'creating',
+		question: 'Can OpenPost help me write a post?',
+		answer:
+			'Yes. Use AI to explore ideas, draft an opening, or rewrite a post for a different channel. Review the words and facts before you schedule. You can write everything yourself too.',
+		learnMore: { label: 'Explore writing tools', href: '/#features' }
+	},
+	{
+		id: 'video-editor',
+		category: 'creating',
+		question: 'Can I edit images and videos in OpenPost?',
+		answer:
+			'Yes. The Image Editor supports text, layers, color adjustments, and multi-page designs. The Video Editor adds recording, trimming, captions, and timeline editing. Video editing is in beta and works best in desktop Chrome or Edge.',
+		learnMore: { label: 'Explore the editors', href: '/tools' }
+	},
+	{
+		id: 'channels',
+		category: 'publishing',
+		question: 'Which social channels can I use?',
+		answer:
+			'OpenPost includes integrations for major social networks, but posting options depend on your account. OpenPost Cloud posting has not completed its final live checks yet. Check the channel page or contact us before relying on it for an important launch. Pinterest and Telegram are unavailable.',
+		learnMore: { label: 'Check your channels', href: '/platforms' }
+	},
+	{
+		id: 'failed-post',
+		category: 'publishing',
+		question: 'What happens if a post fails?',
+		answer:
+			'OpenPost shows which account failed and what went wrong. Review the error and retry the accounts that can be retried, without publishing the successful ones again.',
+		learnMore: {
+			label: 'Help with scheduled posts',
+			href: 'https://docs.openpo.st/guides/scheduling'
+		}
+	},
+	{
+		id: 'analytics',
+		category: 'publishing',
+		question: 'Can I see how my posts perform?',
+		answer:
+			'Yes. See account growth and post results when your social network provides them. Available numbers, comments, and replies vary by connected account.',
+		learnMore: { label: 'Learn about results', href: 'https://docs.openpo.st/guides/results' }
+	},
+	{
+		id: 'extra-charges',
+		category: 'billing',
+		question: 'Will I pay extra for people or AI?',
+		answer:
+			'Your plan includes its listed people, workspaces, and AI writing tools. There are no AI credit packs or automatic overage charges. Each workspace has its own usage allowance. Tax is calculated at checkout.',
+		learnMore: { label: 'See what is included', href: '/pricing' }
+	},
+	{
+		id: 'privacy',
+		category: 'account',
+		question: 'How are my social accounts protected?',
+		answer:
+			'OpenPost encrypts the keys used to connect your social accounts. You can protect your OpenPost sign-in with a passkey or two-factor authentication, and remove active sessions from your account settings.',
+		learnMore: { label: 'Read about security', href: '/security' }
+	},
+	{
+		id: 'support',
+		category: 'account',
+		question: 'Where can I get help?',
+		answer:
+			'Start with the help centre for walkthroughs, or email us about your account, a billing question, or something that is not working. The Discord community is open for ideas and general questions.',
+		learnMore: { label: 'Get in touch', href: '/contact' }
+	}
+] as const;
+export const faqCategories = [
+	{ id: 'creating', label: 'Creating content', description: 'Writing, images, and videos.' },
+	{ id: 'publishing', label: 'Publishing', description: 'Your channels, schedule, and results.' },
+	{
+		id: 'billing',
+		label: 'Plans and billing',
+		description: 'The trial, your plan, and cancellation.'
+	},
+	{ id: 'account', label: 'Your account', description: 'Security and getting help.' }
+] as const;
+
+export function getPlatform(slug: string) {
+	return platforms.find((platform) => platform.slug === slug);
+}
+
+export function getTool(slug: string) {
+	return tools.find((tool) => tool.slug === slug);
+}
+
+export type MarketingPlatform = (typeof platforms)[number];

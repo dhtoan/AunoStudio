@@ -1,0 +1,42 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"check": {
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/posthog-source-maps.ts"]
+		},
+		"test": {
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/posthog-source-maps.ts"]
+		},
+		"test:server": {
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/posthog-source-maps.ts"]
+		},
+		"build": {
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"!static/image-editor-models/**",
+				"$TURBO_ROOT$/assets/**",
+				"!$TURBO_ROOT$/assets/social/**",
+				"$TURBO_ROOT$/scripts/asset-surfaces.mjs",
+				"$TURBO_ROOT$/scripts/asset-surfaces.ts",
+				"$TURBO_ROOT$/scripts/sync-assets.mjs",
+				"$TURBO_ROOT$/scripts/frontend-vite-build.mjs",
+				"$TURBO_ROOT$/scripts/generate-app-route-manifest.mjs",
+				"$TURBO_ROOT$/scripts/precompress-static.mjs",
+				"$TURBO_ROOT$/scripts/posthog-source-maps.ts"
+			],
+			"passThroughEnv": ["POSTHOG_PERSONAL_API_KEY"],
+			"outputs": ["build/**", "!build/image-editor-models/**"],
+			"env": [
+				"NODE_OPTIONS",
+				"VITE_APP_MODE",
+				"POSTHOG_SOURCEMAPS_ENABLED",
+				"POSTHOG_PROJECT_ID",
+				"POSTHOG_UI_HOST",
+				"OPENPOST_RELEASE_VERSION",
+				"GITHUB_SHA",
+				"GITHUB_RUN_ID"
+			]
+		}
+	}
+}

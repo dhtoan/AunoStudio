@@ -1,0 +1,29 @@
+{
+  "title": "Self-hosting",
+  "icon": "Server",
+  "root": true,
+  "pages": [
+    "---Install and configure---",
+    "index",
+    "configuration",
+    "---Install on a platform---",
+    "zimaos",
+    "casaos",
+    "coolify",
+    "dokploy",
+    "portainer",
+    "dockge",
+    "nixos",
+    "---Other ways to install---",
+    "binary",
+    "docker-run",
+    "reverse-proxy",
+    "---Social accounts---",
+    "integrations",
+    "---Optional services---",
+    "ai",
+    "email",
+    "---Keep it running---",
+    "maintenance"
+  ]
+}

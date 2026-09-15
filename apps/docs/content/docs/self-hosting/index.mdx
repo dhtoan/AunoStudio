@@ -1,0 +1,146 @@
+---
+title: Self-host OpenPost
+description: Run OpenPost on your own server with Docker Compose.
+icon: docker
+---
+
+This guide runs one OpenPost container with SQLite and local media storage. It is the shortest path for a personal or small-team instance. OpenPost runs its web and background work in the same container, so you do not need a separate queue service.
+
+## Before you start
+
+- Install Docker with the Compose plugin. Run the commands below on the server that will host OpenPost.
+- The published image supports `linux/amd64`. Other architectures need amd64 emulation.
+- For a public instance, point a domain at the server and put an HTTPS reverse proxy in front of port `8080`. Forward all app requests, including `/api/v1/` and `/media/`. Provider callbacks and media URLs must be reachable from outside your network.
+
+You can test locally first. Set the final public URLs before connecting social accounts.
+
+## Install with Docker Compose
+
+Create the data directories first:
+
+```sh
+mkdir -p openpost/data/db openpost/data/media
+cd openpost
+```
+
+Create `.env` with fresh secrets:
+
+```sh
+cat > .env <<EOF
+OPENPOST_APP_URL=http://localhost:8080
+OPENPOST_PUBLIC_URL=http://localhost:8080
+OPENPOST_MEDIA_URL=http://localhost:8080/media
+OPENPOST_JWT_SECRET=$(openssl rand -base64 32)
+OPENPOST_ENCRYPTION_KEY=$(openssl rand -base64 32)
+EOF
+chmod 600 .env
+```
+
+For a public deployment, replace all three URLs with the real HTTPS origin before connecting providers. For example, set `OPENPOST_APP_URL=https://post.example.com`, `OPENPOST_PUBLIC_URL=https://post.example.com`, and `OPENPOST_MEDIA_URL=https://post.example.com/media`. Keep both generated secrets stable across restarts and restores.
+
+Create `docker-compose.yml`:
+
+```yaml
+services:
+  openpost:
+    image: ghcr.io/getopenpost/openpost:latest
+    platform: linux/amd64
+    container_name: openpost
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      OPENPOST_PORT: 8080
+      OPENPOST_DATABASE_PATH: /data/db/openpost.db
+      OPENPOST_MEDIA_PATH: /data/media
+```
+
+The example uses `latest`. For production, replace it with a release tag from [GitHub Releases](https://github.com/getopenpost/openpost/releases) and record that tag with your backups. Read [upgrades and backups](/self-hosting/maintenance) before changing it.
+
+Start it and check readiness:
+
+```sh
+docker compose up -d
+curl http://localhost:8080/api/v1/ready
+```
+
+The ready response should show `"status":"ready"` and `"database":"ok"`. It also reports storage when you use S3. If the request fails, inspect `docker compose logs --tail=100 openpost`. For a public server, check `https://your-domain.example/api/v1/ready` through the reverse proxy too.
+
+Open `http://localhost:8080` and create the first account. That account becomes the instance administrator. Create a workspace, then configure the [provider integrations](/self-hosting/integrations) you need. Once a provider is configured, connect your social account and follow the [first-post guide](/guides/quickstart).
+
+After setup, set `OPENPOST_DISABLE_REGISTRATIONS=true` in `.env` and run `docker compose up -d` if the instance should stop accepting new self-service registrations. Existing accounts can still sign in.
+
+## Production requirements
+
+Keep the proxy's HTTPS certificate valid and forward the original host and scheme. OAuth callback URLs must match the public origin exactly. Use a versioned image tag for upgrades, then [back up and test a restore](/self-hosting/maintenance). Back up `data/db`, `data/media`, the Compose file, and `.env` together. The `.env` file contains secrets, so protect the backup.
+
+When several people use the instance, decide who can register and set up [email delivery](/self-hosting/email) before requiring email verification. Set up each social provider in [provider integrations](/self-hosting/integrations); Bluesky and Discord webhooks need no developer app, while OAuth providers need their own credentials and often a public callback.
+
+## Choose a platform
+
+<div className="provider-directory not-prose">
+  <a href="/self-hosting/zimaos">
+    <img src="/assets/logos/zimaos.png" className="docs-service-icon" alt="" />
+    <span>
+      <strong>ZimaOS</strong>
+      <small>Import a custom app</small>
+    </span>
+  </a>
+  <a href="/self-hosting/casaos">
+    <img src="/assets/logos/casaos.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>CasaOS</strong>
+      <small>Import a customized app</small>
+    </span>
+  </a>
+  <a href="/self-hosting/coolify">
+    <img src="/assets/logos/coolify.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>Coolify</strong>
+      <small>Deploy from Git</small>
+    </span>
+  </a>
+  <a href="/self-hosting/dokploy">
+    <img src="/assets/logos/dokploy.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>Dokploy</strong>
+      <small>Deploy a Compose service</small>
+    </span>
+  </a>
+  <a href="/self-hosting/portainer">
+    <img src="/assets/logos/portainer.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>Portainer</strong>
+      <small>Create a stack</small>
+    </span>
+  </a>
+  <a href="/self-hosting/dockge">
+    <img src="/assets/logos/dockge.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>Dockge</strong>
+      <small>Create a managed stack</small>
+    </span>
+  </a>
+  <a href="/self-hosting/nixos">
+    <img src="/assets/logos/nixos.svg" className="docs-service-icon" alt="" />
+    <span>
+      <strong>NixOS</strong>
+      <small>Enable the maintained module</small>
+    </span>
+  </a>
+</div>
+
+## Other install options
+
+- [Install the binary](/self-hosting/binary) on Linux, macOS, or Windows.
+- [Try the Docker image](/self-hosting/docker-run) without creating a Compose file.
+- [Configure HTTPS and public access](/self-hosting/reverse-proxy) for any installation.
+
+## Next steps
+
+- [Configure integrations](/self-hosting/integrations) for your social platforms.
+- [Set up AI](/self-hosting/ai) to generate content, or [email](/self-hosting/email) for mail delivery.
+- [Back up your instance](/self-hosting/maintenance) before relying on it for scheduled posts.

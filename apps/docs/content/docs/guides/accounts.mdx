@@ -1,0 +1,36 @@
+---
+title: Connect accounts
+description: Add and manage social accounts in a workspace.
+icon: Link2
+---
+
+Connect a social account before creating a post for it. In the workspace you want to use, open **Settings → Workspace → Social accounts** and choose a provider. For accounts that use provider sign-in, approve access there and return to OpenPost to select the profile, Page, or channel.
+
+## Before you connect
+
+| Provider                                                   | Account or credential                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| Bluesky                                                    | Handle and app password                                              |
+| Mastodon                                                   | Public HTTPS instance, or a preconfigured instance                   |
+| Discord                                                    | Incoming webhook URL                                                 |
+| X, LinkedIn, Threads, Facebook, Instagram, TikTok, YouTube | Provider account and permission to publish to the chosen destination |
+
+On Hosted, OpenPost manages provider applications. If you run your own server, your administrator configures them under [self-hosting](/self-hosting/configuration).
+
+Instagram and Facebook require the account types and Page links set by Meta. TikTok and YouTube may require provider review before public posting. OpenPost shows the actions supported by your connected account and its granted permissions. Provider rules can change, so follow the reason shown beside an unavailable option.
+
+## Turn on optional account features
+
+Select the connected account to open its details. Turn on **Analytics**, **Comments and replies**, or **Direct messages** separately if the provider and your plan support them. Some features need another provider permission. For eligible Bluesky and Mastodon accounts, **More → Find people** is also available.
+
+## Reconnect or remove an account
+
+Use **Reconnect** if a token expired or you need to approve another permission. If several destinations share one authorization, disconnecting one leaves the others connected. Removing that authorization disconnects every destination that uses it. To revoke access at the provider too, use the provider's security settings.
+
+## Bluesky
+
+Create an app password in **Bluesky → Settings**, then enter the handle and app password in OpenPost. Use the handle, not the account email. No server-side OAuth app is required.
+
+## Mastodon
+
+Select a preconfigured server or enter a public HTTPS instance. Each Mastodon server can have its own app and limits.

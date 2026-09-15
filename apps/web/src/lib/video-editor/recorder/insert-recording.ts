@@ -1,0 +1,204 @@
+import { createLogger } from '../workspace-fs/logger';
+import { timelineStore } from '../timeline/stores/timeline-store.svelte';
+import { executeAtomic } from '../timeline/commands/command-store.svelte';
+import type { TimelineItem, TimelineTrack } from '../project/types';
+import { importGeneratedVideo, importRecordedAudio } from '../media/import.svelte';
+import { rollbackNewGeneratedMedia } from '../media/import.svelte';
+import type { CaptureArtifact, RecorderKind } from './recorder.svelte';
+import type { MediaMetadata, RecordingCaptureMetadata } from '../media/types';
+import { recordingExtension } from './record-mime';
+
+const logger = createLogger('InsertRecording');
+
+export type InsertRecordingResult = {
+	mediaIds: string[];
+	itemIds: string[];
+};
+
+export interface RecordingImportRuntime {
+	importVideo(
+		file: File,
+		options: { projectId: string; tags: string[]; capture?: RecordingCaptureMetadata }
+	): Promise<MediaMetadata>;
+	importAudio(
+		file: File,
+		options: { projectId: string; duration: number; capture?: RecordingCaptureMetadata }
+	): Promise<MediaMetadata>;
+	rollback(projectId: string, mediaId: string): Promise<void>;
+}
+
+const defaultRuntime: RecordingImportRuntime = {
+	importVideo: importGeneratedVideo,
+	importAudio: importRecordedAudio,
+	rollback: rollbackNewGeneratedMedia
+};
+
+function recorderKindToTrackName(kind: RecorderKind, index: number): string {
+	switch (kind) {
+		case 'screen':
+			return `Screen ${index + 1}`;
+		case 'camera':
+			return `Camera ${index + 1}`;
+		case 'microphone':
+			return `Mic ${index + 1}`;
+		default:
+			return `Recording ${index + 1}`;
+	}
+}
+
+function trackKindForRecorder(kind: RecorderKind): TimelineTrack['kind'] {
+	return kind === 'microphone' ? 'audio' : 'video';
+}
+
+function captureMetadataForArtifact(
+	artifact: CaptureArtifact
+): RecordingCaptureMetadata | undefined {
+	if (!artifact.capture) return undefined;
+	const truth = artifact.capture;
+	const result: RecordingCaptureMetadata = {
+		version: 1,
+		kind: artifact.kind,
+		capturedAt: truth.capturedAt
+	};
+	if (artifact.kind === 'screen') {
+		result.cursor = {
+			requested: truth.cursorRequested,
+			actual: truth.cursorActual,
+			supported: truth.cursorSupported
+		};
+		result.systemAudio = {
+			requested: truth.systemAudioRequested,
+			active: truth.systemAudioActive,
+			status: truth.systemAudioStatus
+		};
+	}
+	return result;
+}
+
+export async function insertRecordingArtifacts(
+	projectId: string,
+	artifacts: CaptureArtifact[],
+	anchorFrame: number,
+	runtime: RecordingImportRuntime = defaultRuntime,
+	{ isCurrent }: { isCurrent: () => boolean }
+): Promise<InsertRecordingResult> {
+	if (!isCurrent()) throw new Error('Recording destination changed');
+	if (artifacts.length === 0) return { mediaIds: [], itemIds: [] };
+	const fps = timelineStore.fps;
+	const baseFrame = Number.isFinite(anchorFrame) ? Math.max(0, Math.round(anchorFrame)) : 0;
+
+	// Import each artifact as media first (outside undo transaction)
+	const imported: Array<{
+		kind: RecorderKind;
+		mediaId: string;
+		duration: number;
+		fps: number;
+		fileName: string;
+	}> = [];
+	try {
+		for (const artifact of artifacts) {
+			const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+			const ext = recordingExtension(artifact.mimeType || artifact.blob.type);
+			const kindLabel = artifact.kind;
+			const fileName = `recording-${kindLabel}-${stamp}.${ext}`;
+			const file = new File([artifact.blob], fileName, {
+				type: artifact.mimeType || artifact.blob.type,
+				lastModified: Date.now()
+			});
+			const capture = captureMetadataForArtifact(artifact);
+			if (kindLabel === 'microphone') {
+				const durationSec = Math.max(0.1, artifact.durationMs / 1000);
+				const media = await runtime.importAudio(file, {
+					projectId,
+					duration: durationSec,
+					capture
+				});
+				imported.push({
+					kind: kindLabel,
+					mediaId: media.id,
+					duration: media.duration,
+					fps: media.fps,
+					fileName
+				});
+			} else {
+				const media = await runtime.importVideo(file, {
+					projectId,
+					tags: ['recorded', kindLabel],
+					capture
+				});
+				imported.push({
+					kind: kindLabel,
+					mediaId: media.id,
+					duration: media.duration,
+					fps: media.fps,
+					fileName
+				});
+			}
+		}
+	} catch (error) {
+		logger.error('insertRecordingArtifacts failed while importing capture files', error);
+		await Promise.allSettled(imported.map((entry) => runtime.rollback(projectId, entry.mediaId)));
+		throw error;
+	}
+
+	// One atomic timeline transaction for all clips/tracks
+	try {
+		if (!isCurrent()) throw new Error('Recording destination changed');
+		return executeAtomic('INSERT_RECORDING', () => {
+			const itemIds: string[] = [];
+			const mediaIds = imported.map((entry) => entry.mediaId);
+			const linkedGroupId = artifacts.length > 1 ? crypto.randomUUID() : undefined;
+			artifacts.forEach((artifact, index) => {
+				const importedEntry = imported[index];
+				if (!importedEntry) return;
+				const offsetMs = Math.max(0, artifact.startOffsetMs);
+				const from = Math.max(0, baseFrame + Math.round((offsetMs / 1000) * fps));
+				const durationInFrames = Math.max(1, Math.round(importedEntry.duration * fps));
+				const existingTracks = timelineStore.tracks;
+				const order =
+					existingTracks.length > 0
+						? Math.max(...existingTracks.map((track) => track.order)) + 1
+						: 0;
+				const trackKind = trackKindForRecorder(artifact.kind);
+				const track: TimelineTrack = {
+					id: crypto.randomUUID(),
+					name: recorderKindToTrackName(artifact.kind, index),
+					kind: trackKind,
+					height: trackKind === 'video' ? 72 : 56,
+					locked: false,
+					syncLock: true,
+					visible: true,
+					muted: false,
+					solo: false,
+					volume: 1,
+					order
+				};
+				const sourceFps = importedEntry.fps > 0 ? importedEntry.fps : fps;
+				const sourceDuration = Math.max(1, Math.round(importedEntry.duration * sourceFps));
+				const item: TimelineItem = {
+					id: crypto.randomUUID(),
+					trackId: track.id,
+					from,
+					durationInFrames,
+					label: importedEntry.fileName,
+					type: trackKind === 'audio' ? 'audio' : 'video',
+					mediaId: importedEntry.mediaId,
+					originId: crypto.randomUUID(),
+					linkedGroupId,
+					sourceStart: 0,
+					sourceEnd: sourceDuration,
+					sourceDuration,
+					sourceFps,
+					volume: 1
+				};
+				timelineStore._setTracks([...timelineStore.tracks, track]);
+				timelineStore._addItem(item);
+				itemIds.push(item.id);
+			});
+			return { mediaIds, itemIds };
+		});
+	} catch (error) {
+		await Promise.allSettled(imported.map((entry) => runtime.rollback(projectId, entry.mediaId)));
+		throw error;
+	}
+}

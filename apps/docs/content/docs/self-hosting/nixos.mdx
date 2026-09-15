@@ -1,0 +1,41 @@
+---
+title: Install on NixOS
+description: Run OpenPost on NixOS through the maintained module with sops secrets.
+icon: nixos
+---
+
+The maintained NixOS module runs OpenPost as a Podman container, stores SQLite and media under `/var/lib/openpost`, and mounts secrets from sops-nix. Add your own reverse proxy and set the public domain before connecting social accounts.
+
+## Configure
+
+Import the [module source](https://github.com/rodrgds/nix-config/blob/main/modules/services/openpost/default.nix) and its adjacent [`runtime-contract.json`](https://github.com/rodrgds/nix-config/blob/main/modules/services/openpost/runtime-contract.json) into your NixOS configuration. The [generated module reference](https://github.com/getopenpost/openpost/blob/main/docs/reference/nix-module.md) contains the complete source.
+
+Enable it with the public domain, timezone, and a pinned image:
+
+```nix
+vps.openpost = {
+  enable = true;
+  edition = "selfhost";
+  domain = "post.example.com";
+  timezone = "Europe/Lisbon";
+  image = "ghcr.io/getopenpost/openpost:4.31.1";
+};
+```
+
+Use the release you intend to run instead of copying the example tag unchanged. The module derives the public and media URLs from `domain`. `extraEnvironment`, `extraEnvironmentFiles`, and `extraOptions` cover settings not declared by the module.
+
+Define the sops placeholders referenced by the module, including the JWT secret and encryption key. It writes them as `0400` files under `/run/secrets/openpost_*` and passes the matching `*_FILE` settings to the container. Keep provider, AI, email, and storage credentials in the same secret boundary.
+
+The image supports `linux/amd64`. Other architectures need amd64 emulation.
+
+## Operate
+
+- Point the [reverse proxy](/self-hosting/reverse-proxy) at the container's published host port and preserve the original host and scheme.
+- Check `https://post.example.com/api/v1/ready` after each switch. Expect `"status":"ready"` and `"database":"ok"`.
+- Back up `/var/lib/openpost/data` with the encrypted sops source and record the image tag. Keep backups private and off the host.
+- To upgrade, change the image tag and run your normal NixOS switch. A rollback may also require the data backup made for the previous version.
+
+## Next steps
+
+- [Configure integrations](/self-hosting/integrations) for your social platforms.
+- [Back up your instance](/self-hosting/maintenance) before relying on it for scheduled posts.

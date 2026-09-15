@@ -1,0 +1,618 @@
+package api
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/openpost/backend/internal/api/handlers"
+	"github.com/openpost/backend/internal/api/middleware"
+	"github.com/openpost/backend/internal/capabilities"
+	"github.com/openpost/backend/internal/connectors"
+	"github.com/openpost/backend/internal/diagnostics"
+	"github.com/openpost/backend/internal/memes"
+	"github.com/openpost/backend/internal/platform"
+	"github.com/openpost/backend/internal/services/accountfeatures"
+	"github.com/openpost/backend/internal/services/aiprompts"
+	analyticsservice "github.com/openpost/backend/internal/services/analytics"
+	"github.com/openpost/backend/internal/services/apitokens"
+	"github.com/openpost/backend/internal/services/auth"
+	"github.com/openpost/backend/internal/services/billing"
+	"github.com/openpost/backend/internal/services/botingress"
+	cliauth "github.com/openpost/backend/internal/services/cli_auth"
+	servicecrypto "github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/emailchange"
+	"github.com/openpost/backend/internal/services/emailverification"
+	engagementservice "github.com/openpost/backend/internal/services/engagement"
+	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/externalapps"
+	"github.com/openpost/backend/internal/services/externalwebhooks"
+	"github.com/openpost/backend/internal/services/feedback"
+	growthservice "github.com/openpost/backend/internal/services/growth"
+	"github.com/openpost/backend/internal/services/identity"
+	"github.com/openpost/backend/internal/services/imagecaption"
+	"github.com/openpost/backend/internal/services/instancesettings"
+	"github.com/openpost/backend/internal/services/mastodonapps"
+	"github.com/openpost/backend/internal/services/mcpoauth"
+	"github.com/openpost/backend/internal/services/mediasigner"
+	"github.com/openpost/backend/internal/services/mediastore"
+	"github.com/openpost/backend/internal/services/memegeneration"
+	messagingservice "github.com/openpost/backend/internal/services/messaging"
+	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/notifications"
+	"github.com/openpost/backend/internal/services/organizationownership"
+	"github.com/openpost/backend/internal/services/passwordmail"
+	"github.com/openpost/backend/internal/services/postgeneration"
+	"github.com/openpost/backend/internal/services/providerapps"
+	"github.com/openpost/backend/internal/services/providerreadiness"
+	"github.com/openpost/backend/internal/services/publicationbuilder"
+	"github.com/openpost/backend/internal/services/publicationdiscovery"
+	"github.com/openpost/backend/internal/services/publicurl"
+	repostservice "github.com/openpost/backend/internal/services/reposts"
+	"github.com/openpost/backend/internal/services/sessions"
+	telegramservice "github.com/openpost/backend/internal/services/telegram"
+	"github.com/openpost/backend/internal/services/updatestatus"
+	"github.com/openpost/backend/internal/telemetry"
+	"github.com/uptrace/bun"
+)
+
+type RouteDeps struct {
+	DB                           *bun.DB
+	Readiness                    *Readiness
+	AuthService                  *auth.Service
+	Authenticator                middleware.Authenticator
+	SessionService               *sessions.Service
+	APITokenService              *apitokens.Service
+	CLIAuthService               *cliauth.Service
+	MCPOAuthService              *mcpoauth.Service
+	ExternalApps                 *externalapps.Service
+	ExternalWebhooks             *externalwebhooks.Service
+	BillingService               *billing.Service
+	BotIngressService            *botingress.Service
+	TelegramService              *telegramservice.Service
+	MediaStorage                 mediastore.BlobStorage
+	MediaSigner                  *mediasigner.Signer
+	ImageCaptioner               imagecaption.Captioner
+	MemeProvider                 memes.Provider
+	MemeSuggester                memegeneration.Suggester
+	PostBuilder                  postgeneration.Builder
+	ContentBuilderEnabled        bool
+	ContentDiscoveryEnabled      bool
+	PublicationBuilder           *publicationbuilder.Application
+	PublicationPlanner           *publicationbuilder.Service
+	PublicationDiscovery         publicationdiscovery.Discoverer
+	PublicMediaVerifier          *publicurl.MediaVerifier
+	Entitlement                  entitlements.Service
+	TokenEncryptor               *servicecrypto.TokenEncryptor
+	TokenSource                  handlers.AccessTokenSource
+	MFAService                   *mfa.Service
+	PasswordResetSender          passwordmail.PasswordResetSender
+	EmailVerificationSender      passwordmail.VerificationSender
+	IdentityEmailSender          passwordmail.IdentitySender
+	EmailVerificationService     *emailverification.Service
+	EmailChangeService           *emailchange.Service
+	EmailVerificationRequired    bool
+	PurchaseChoiceRequired       bool
+	PublicProfilesEnabled        bool
+	AccountPolicy                handlers.AccountPolicy
+	Providers                    map[string]platform.Adapter
+	ProviderApps                 []platform.AppConfig
+	ProviderRegistrars           []func(string, platform.Adapter)
+	MastodonAppService           *mastodonapps.Service
+	FrontendURL                  string
+	PublicURL                    string
+	DisableRegistrations         bool
+	DisableLinkedInThreadReplies bool
+	ImageEditorEnabled           bool
+	ImageEditorModelBaseURL      string
+	StockMediaEnabled            bool
+	PexelsAPIKey                 string
+	UnsplashAccessKey            string
+	PixabayAPIKey                string
+	FeedbackService              *feedback.Service
+	IdentityService              *identity.Service
+	InstanceSettingsService      *instancesettings.Service
+	AIPromptService              *aiprompts.Service
+	AnalyticsService             *analyticsservice.Service
+	MessagingService             *messagingservice.Service
+	EngagementService            *engagementservice.Service
+	RepostService                *repostservice.Service
+	NotificationService          *notifications.Service
+	OrganizationOwnershipService *organizationownership.Service
+	UpdateStatusService          *updatestatus.Service
+	ProviderReadinessService     *providerreadiness.Service
+	ConnectorRegistry            *connectors.Registry
+	ConnectorStore               *connectors.Store
+	GrowthService                *growthservice.Service
+	AppVersion                   string
+	AppRevision                  string
+	Edition                      string
+	Telemetry                    telemetry.Recorder
+	DiagnosticsReporter          *diagnostics.Reporter
+	// DiagnosticsIngester serves the public cross-instance receiver.
+	// Nil disables the ingest route; the Discord webhook behind it stays
+	// in server configuration and never reaches API responses.
+	DiagnosticsIngester *diagnostics.Ingester
+
+	MediaHandler    *handlers.MediaHandler
+	BillingHandler  *handlers.BillingHandler
+	MCPOAuthHandler *handlers.MCPOAuthHandler
+	MCPHandler      *handlers.MCPHandler
+	ProfileHandler  *handlers.ProfileHandler
+}
+
+func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
+	profileHandler := deps.ProfileHandler
+	if profileHandler == nil {
+		profileHandler = handlers.NewProfileHandler(deps.DB, deps.Authenticator, deps.MediaStorage)
+	}
+	profileHandler.RegisterRoutes(api)
+
+	mediaHandler := deps.MediaHandler
+	if mediaHandler == nil {
+		mediaHandler = handlers.NewMediaHandler(deps.DB, deps.MediaStorage, deps.AuthService, deps.Authenticator, deps.MediaSigner)
+		mediaHandler.SetEntitlement(deps.Entitlement)
+	}
+	mediaHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
+	mediaHandler.RegisterRoutes(api)
+	mediaHandler.RegisterImageCaptionRoutes(api, deps.ImageCaptioner)
+	handlers.NewMemeHandler(
+		deps.DB,
+		deps.Authenticator,
+		mediaHandler,
+		deps.PublicMediaVerifier,
+		deps.MemeProvider,
+		deps.MemeSuggester,
+	).RegisterRoutes(api)
+	handlers.NewImageEditorHandler(
+		deps.DB,
+		deps.Authenticator,
+		deps.ImageEditorEnabled,
+		deps.ImageEditorModelBaseURL,
+	).RegisterRoutes(api)
+	stockMediaHandler := handlers.NewStockMediaHandler(
+		deps.DB,
+		deps.StockMediaEnabled,
+		deps.PexelsAPIKey,
+		deps.UnsplashAccessKey,
+		deps.PixabayAPIKey,
+	)
+	stockMediaHandler.RegisterRoutes(api)
+
+	billingHandler := deps.BillingHandler
+	if billingHandler == nil {
+		billingHandler = handlers.NewBillingHandler(deps.BillingService, deps.DB, deps.Authenticator)
+	}
+	billingHandler.SetTelemetry(deps.Telemetry)
+	billingHandler.RegisterAPIRoutes(api)
+
+	authHandler := handlers.NewAuthHandler(
+		deps.DB,
+		deps.AuthService,
+		deps.Authenticator,
+		deps.TokenEncryptor,
+		deps.MFAService,
+		deps.DisableRegistrations,
+	)
+	authHandler.SetSessionService(deps.SessionService)
+	authHandler.SetPasswordResetSender(deps.PasswordResetSender, deps.PublicURL)
+	authHandler.SetEmailVerification(deps.EmailVerificationService, deps.EmailVerificationSender, deps.EmailVerificationRequired)
+	authHandler.SetPublicProfilesEnabled(deps.PublicProfilesEnabled)
+	authHandler.SetAccountPolicy(deps.AccountPolicy)
+	authHandler.SetIdentityService(deps.IdentityService)
+	authHandler.SetPurchaseChoices(deps.BillingService, deps.PurchaseChoiceRequired)
+	authHandler.SetTelemetry(deps.Telemetry)
+	authHandler.Configuration(api)
+	authHandler.AcceptAccountPolicy(api)
+	authHandler.Register(api)
+	authHandler.ConfirmEmailVerification(api)
+	authHandler.ResendEmailVerification(api)
+	authHandler.Login(api)
+	authHandler.Logout(api)
+	authHandler.RequestPasswordReset(api)
+	authHandler.ResetPassword(api)
+	authHandler.ChangePassword(api)
+	authHandler.VerifyTOTPLogin(api)
+	authHandler.VerifyRecoveryCodeLogin(api)
+	authHandler.BeginPasskeyLogin(api)
+	authHandler.FinishPasskeyLogin(api)
+	authHandler.BeginPasskeyReauthentication(api)
+	authHandler.FinishPasskeyReauthentication(api)
+	authHandler.SessionState(api)
+	authHandler.Me(api)
+	authHandler.UpdateProfile(api)
+	authHandler.SecurityStatus(api)
+	authHandler.ListSessions(api)
+	authHandler.RevokeSession(api)
+	authHandler.BeginTOTPSetup(api)
+	authHandler.ConfirmTOTPSetup(api)
+	authHandler.AcknowledgeTOTPSetup(api)
+	authHandler.RecoveryCodeStatus(api)
+	authHandler.BeginRecoveryCodeRegeneration(api)
+	authHandler.AcknowledgeRecoveryCodeRegeneration(api)
+	authHandler.DisableTOTP(api)
+	authHandler.BeginPasskeyRegistration(api)
+	authHandler.FinishPasskeyRegistration(api)
+	authHandler.RemovePasskey(api)
+	handlers.NewAppBootstrapHandler(
+		deps.DB,
+		deps.Authenticator,
+		deps.AccountPolicy,
+		deps.IdentityService,
+	).RegisterRoutes(api)
+	handlers.NewEmailChangeHandler(
+		deps.EmailChangeService,
+		deps.IdentityService,
+		deps.IdentityEmailSender,
+		deps.Authenticator,
+		deps.PublicURL,
+	).RegisterRoutes(api)
+	handlers.NewOIDCHandler(deps.IdentityService, authHandler, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewPublicProfileHandler(deps.DB, deps.PublicProfilesEnabled).RegisterRoutes(api)
+
+	accountLifecycleHandler := handlers.NewAccountLifecycleHandler(
+		deps.DB,
+		deps.AuthService,
+		deps.Authenticator,
+		deps.MediaStorage,
+	)
+	accountLifecycleHandler.SetIdentityService(deps.IdentityService)
+	accountLifecycleHandler.RegisterRoutes(api)
+
+	handlers.NewAPITokenHandler(deps.APITokenService, deps.Authenticator, deps.DB).RegisterRoutes(api)
+	handlers.NewExternalApplicationHandler(deps.ExternalApps, deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewExternalWebhookHandler(deps.ExternalWebhooks, deps.DB, deps.Authenticator).RegisterRoutes(api)
+	cliAuthHandler := handlers.NewCLIAuthHandler(deps.CLIAuthService, deps.Authenticator, deps.PublicURL)
+	cliAuthHandler.SetIdentityService(deps.IdentityService)
+	cliAuthHandler.RegisterRoutes(api)
+	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewProviderAppHandler(
+		providerapps.NewService(deps.DB, deps.TokenEncryptor),
+		deps.DB,
+		deps.Authenticator,
+		handlers.WithEnvironmentProviderApps(deps.ProviderApps),
+		handlers.WithProviderAppFrontendURL(deps.FrontendURL),
+	).RegisterRoutes(api)
+	handlers.NewTelegramConnectionHandler(deps.DB, deps.Authenticator, deps.BotIngressService, deps.TelegramService, deps.Entitlement).RegisterRoutes(api)
+	handlers.NewCapabilityHandler().RegisterRoutes(api)
+	capabilityResolverHandler := handlers.NewCapabilityResolverHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource)
+	capabilityResolverHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
+	capabilityResolverHandler.SetProviderReadiness(deps.ProviderReadinessService)
+	capabilityResolverHandler.SetConnectorRegistry(deps.ConnectorRegistry, deps.ConnectorStore)
+	capabilityResolverHandler.RegisterRoutes(api)
+	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator, deps.ProviderReadinessService, deps.Providers).RegisterRoutes(api)
+	handlers.NewProviderReadinessAdminHandler(deps.DB, deps.Authenticator, deps.ProviderReadinessService).RegisterRoutes(api)
+	destinationOptionsHandler := handlers.NewDestinationOptionsHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource)
+	if deps.TelegramService != nil {
+		destinationOptionsHandler.SetTelegramChatOptions(deps.TelegramService)
+	}
+	destinationOptionsHandler.RegisterRoutes(api)
+	publicationHandler := handlers.NewPublicationHandler(deps.DB, deps.Authenticator, deps.Entitlement)
+	publicationHandler.SetCapabilityDependencies(deps.Providers, deps.TokenSource)
+	publicationHandler.SetConnectorRegistry(deps.ConnectorRegistry)
+	publicationHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
+	publicationHandler.SetRepostService(deps.RepostService)
+	publicationHandler.SetProviderReadiness(deps.ProviderReadinessService)
+	publicationHandler.SetTelemetry(deps.Telemetry)
+	publicationHandler.RegisterRoutes(api)
+	publicationBuildHandler := handlers.NewPublicationBuildHandler(deps.DB, deps.Authenticator, deps.PublicationBuilder)
+	publicationBuildHandler.SetPublicationApplication(publicationHandler.BuilderApplication())
+	publicationBuildHandler.SetCapabilityResolver(capabilityResolverHandler)
+	publicationBuildHandler.SetPlanner(deps.PublicationPlanner)
+	publicationBuildHandler.RegisterRoutes(api)
+	handlers.NewPublicationDiscoveryHandler(deps.DB, deps.Authenticator, deps.PublicationDiscovery).RegisterRoutes(api)
+	handlers.NewVoiceProfileHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewThemeHandler(deps.DB, deps.Authenticator, deps.MediaStorage).RegisterRoutes(api)
+	handlers.NewPostBuilderHandler(deps.DB, deps.Authenticator, deps.PostBuilder).RegisterRoutes(api)
+	socialSetHandler := handlers.NewSocialSetHandler(deps.DB, deps.Authenticator)
+	socialSetHandler.SetCapabilityResolver(capabilityResolverHandler)
+	socialSetHandler.RegisterRoutes(api)
+	handlers.NewVideoProjectHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewRepostHandler(deps.DB, deps.RepostService, deps.Authenticator).RegisterRoutes(api)
+	commentHandler := handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor)
+	commentHandler.SetTokenSource(deps.TokenSource)
+	commentHandler.RegisterRoutes(api)
+	analyticsHandler := handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService)
+	analyticsHandler.RegisterRoutes(api)
+	engagementMessagingHandler := handlers.NewEngagementMessagingHandler(deps.Authenticator, deps.MessagingService, deps.EngagementService)
+	engagementMessagingHandler.RegisterRoutes(api)
+	handlers.NewNotificationHandler(deps.DB, deps.Authenticator, deps.NotificationService).RegisterRoutes(api)
+	growthHandler := handlers.NewGrowthHandler(deps.GrowthService, deps.Authenticator)
+	growthHandler.RegisterRoutes(api)
+	handlers.NewInstanceAdminHandler(
+		deps.DB,
+		deps.Authenticator,
+		deps.AuthService,
+		deps.SessionService,
+		deps.FrontendURL,
+	).RegisterRoutes(api)
+	handlers.NewInstanceSettingsHandler(deps.InstanceSettingsService, deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewAIPromptHandler(deps.AIPromptService, deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewUpdateStatusHandler(deps.DB, deps.Authenticator, deps.UpdateStatusService, deps.InstanceSettingsService).RegisterRoutes(api)
+
+	mcpOAuthHandler := deps.MCPOAuthHandler
+	if mcpOAuthHandler == nil {
+		mcpOAuthHandler = handlers.NewMCPOAuthHandler(deps.MCPOAuthService, deps.Authenticator, deps.PublicURL)
+	}
+	mcpOAuthHandler.SetIdentityService(deps.IdentityService)
+	mcpOAuthHandler.SetExternalApplicationService(deps.ExternalApps)
+	mcpOAuthHandler.RegisterAPIRoutes(api)
+
+	workspaceHandler := handlers.NewWorkspaceHandler(deps.DB, deps.Authenticator, deps.Entitlement)
+	workspaceHandler.SetSensitiveActionServices(deps.AuthService, deps.IdentityService, deps.TokenEncryptor)
+	workspaceHandler.SetFrontendURL(deps.FrontendURL)
+	workspaceHandler.SetNotificationService(deps.NotificationService)
+	workspaceHandler.CreateWorkspace(api)
+	workspaceHandler.ListWorkspaces(api)
+	workspaceHandler.GetWorkspaceDeletionPreview(api)
+	workspaceHandler.DeleteWorkspace(api)
+	workspaceHandler.GetOrganizationDeletionPreview(api)
+	workspaceHandler.CancelOrganizationCheckoutAttempts(api)
+	workspaceHandler.DeleteOrganization(api)
+	workspaceHandler.ListOrganizations(api)
+	workspaceHandler.ListOrganizationTeam(api)
+	workspaceHandler.ListOrganizationAudit(api)
+	workspaceHandler.ExportOrganizationAudit(api)
+	workspaceHandler.ListInstanceAudit(api)
+	workspaceHandler.ExportInstanceAudit(api)
+	workspaceHandler.ListWorkspaceTeam(api)
+	workspaceHandler.CreateWorkspaceInvitation(api)
+	workspaceHandler.ResendWorkspaceInvitation(api)
+	workspaceHandler.RevokeWorkspaceInvitation(api)
+	workspaceHandler.UpdateWorkspaceMember(api)
+	workspaceHandler.RemoveWorkspaceMember(api)
+	workspaceHandler.ListWorkspaceAccessAudit(api)
+	workspaceHandler.AcceptWorkspaceInvitation(api)
+	workspaceHandler.GetWorkspaceSetup(api)
+	workspaceHandler.StartWorkspaceComposition(api)
+	workspaceHandler.GetWorkspaceSettings(api)
+	workspaceHandler.UpdateWorkspaceSettings(api)
+	ownershipService := deps.OrganizationOwnershipService
+	if ownershipService == nil {
+		ownershipService = organizationownership.NewService(deps.DB, deps.NotificationService, deps.IdentityService)
+	}
+	handlers.NewOrganizationOwnershipHandler(ownershipService, deps.Authenticator).RegisterRoutes(api)
+
+	postingScheduleHandler := handlers.NewPostingScheduleHandler(deps.DB, deps.Authenticator)
+	postingScheduleHandler.ListSchedules(api)
+	postingScheduleHandler.CreateSchedule(api)
+	postingScheduleHandler.UpdateSchedule(api)
+	postingScheduleHandler.DeleteSchedule(api)
+	postingScheduleHandler.SuggestSchedule(api)
+	postingScheduleHandler.GetNextAvailableSlot(api)
+
+	promptHandler := handlers.NewPromptHandler(deps.DB, deps.Authenticator)
+	promptHandler.ListPrompts(api)
+	promptHandler.CreatePrompt(api)
+	promptHandler.DeletePrompt(api)
+	promptHandler.GetRandomPrompt(api)
+	promptHandler.GetCategories(api)
+
+	handlers.NewJobHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewFeedbackHandler(deps.FeedbackService, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewDiagnosticsHandler(deps.DiagnosticsReporter, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewIngestHandler(deps.DiagnosticsIngester).RegisterRoutes(api)
+
+	oauthHandler := handlers.NewOAuthHandler(
+		deps.DB,
+		deps.TokenEncryptor,
+		deps.Providers,
+		deps.Authenticator,
+		deps.DisableLinkedInThreadReplies,
+		deps.FrontendURL,
+	)
+	oauthHandler.SetEntitlement(deps.Entitlement)
+	oauthHandler.SetMastodonAppService(deps.MastodonAppService)
+	oauthHandler.SetProviderReadiness(deps.ProviderReadinessService)
+	oauthHandler.SetConnectorRegistry(deps.ConnectorRegistry, deps.ConnectorStore)
+	oauthHandler.SetProviderRegistrars(deps.ProviderRegistrars...)
+	oauthHandler.SetTelemetry(deps.Telemetry)
+	oauthHandler.SetTokenSource(deps.TokenSource)
+	oauthHandler.SetAccountAvatarStorage(deps.MediaStorage)
+	oauthHandler.ListProviders(api)
+	oauthHandler.ConnectConnector(api)
+	oauthHandler.ListMastodonServers(api)
+	oauthHandler.ListPixelfedServers(api)
+	oauthHandler.GetAuthURL(api)
+	oauthHandler.Callback(api)
+	oauthHandler.ExchangeCode(api)
+	oauthHandler.BlueskyLogin(api)
+	oauthHandler.PeerTubeLogin(api)
+	oauthHandler.LemmyLogin(api)
+	oauthHandler.PieFedLogin(api)
+	oauthHandler.DiscordWebhookLogin(api)
+	oauthHandler.GetAccountSelection(api)
+	oauthHandler.CompleteAccountSelection(api)
+	oauthHandler.ListAccounts(api)
+	oauthHandler.UpdateAccount(api)
+	oauthHandler.RefreshAccountMetadata(api)
+	oauthHandler.DisconnectAccount(api)
+	oauthHandler.RevokeAccountGrant(api)
+
+	var planPolicy accountfeatures.PlanPolicy
+	if deps.Entitlement != nil {
+		planPolicy = &accountfeatures.EntitlementPlanPolicy{Entitlements: deps.Entitlement}
+	}
+	afhService := accountfeatures.NewService(deps.DB, oauthHandler.ProviderMap(), planPolicy)
+	if deps.TelegramService != nil {
+		afhService.SetAnalyticsSource(capabilities.ProviderTelegram, deps.TelegramService)
+	}
+	if deps.MCPHandler != nil {
+		deps.MCPHandler.SetFeatureGate(afhService)
+	}
+	afhHandler := handlers.NewAccountFeaturesHandler(afhService, deps.Authenticator)
+	afhHandler.ReadFeatures(api)
+	afhHandler.SaveFeatures(api)
+	oauthHandler.SetAccountFeaturesService(afhService)
+	oauthHandler.SetProviderRegistrars(append(deps.ProviderRegistrars, afhService.SetProvider)...)
+	// Inject shared feature resolver into every feature service and handler. Avoid duplicating support/scope/plan rules.
+	if deps.AnalyticsService != nil {
+		deps.AnalyticsService.SetFeatureGate(afhService)
+		deps.AnalyticsService.SetProviderReadiness(deps.ProviderReadinessService)
+	}
+	if deps.MessagingService != nil {
+		deps.MessagingService.SetFeatureGate(afhService)
+	}
+	if deps.EngagementService != nil {
+		deps.EngagementService.SetFeatureGate(afhService)
+	}
+	if deps.GrowthService != nil {
+		deps.GrowthService.SetFeatureGate(afhService)
+	}
+	commentHandler.SetFeatureGate(afhService)
+	analyticsHandler.SetFeatureGate(afhService)
+	engagementMessagingHandler.SetFeatureGate(afhService)
+	growthHandler.SetFeatureGate(afhService)
+
+	RegisterHealth(api, deps.DB, deps.Readiness, deps.MediaStorage)
+	RegisterVersion(api, BuildInfo{
+		Version:  deps.AppVersion,
+		Revision: deps.AppRevision,
+		Edition:  deps.Edition,
+	})
+	RegisterTelemetryConfig(api, deps.Telemetry)
+	RegisterDiagnosticsConfig(api, deps.DiagnosticsReporter)
+}
+
+// RegisterDiagnosticsConfig exposes the browser-safe diagnostics switch so
+// the browser knows whether it may report through its own instance. It
+// carries no receiver URL, token, or installation identifier.
+func RegisterDiagnosticsConfig(api huma.API, reporter *diagnostics.Reporter) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-diagnostics-public-config",
+		Method:      http.MethodGet,
+		Path:        "/diagnostics/public-config",
+		Summary:     "Get maintainer diagnostics reporting switch",
+		Description: "Whether this instance sends privacy-limited diagnostic reports to OpenPost. Browser reports always go through their own instance.",
+		Tags:        []string{"Diagnostics"},
+	}, func(_ context.Context, _ *struct{}) (*handlers.DiagnosticsConfigOutput, error) {
+		config := diagnostics.Status{}
+		if reporter != nil {
+			config = reporter.PublicConfig()
+		}
+		return &handlers.DiagnosticsConfigOutput{Body: config}, nil
+	})
+}
+
+func RegisterTelemetryConfig(api huma.API, recorder telemetry.Recorder) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-telemetry-config",
+		Method:      http.MethodGet,
+		Path:        "/telemetry/config",
+		Summary:     "Get browser telemetry configuration",
+		Description: "Returns only the browser-safe project token and ingestion hosts. Self-hosted telemetry is disabled unless the operator enables it.",
+		Tags:        []string{"System"},
+	}, func(_ context.Context, _ *struct{}) (*struct {
+		Body telemetry.BrowserConfig
+	}, error) {
+		config := telemetry.BrowserConfig{}
+		if recorder != nil {
+			config = recorder.PublicConfig()
+		}
+		return &struct{ Body telemetry.BrowserConfig }{Body: config}, nil
+	})
+}
+
+type BuildInfo struct {
+	Version  string
+	Revision string
+	Edition  string
+}
+
+func RegisterVersion(api huma.API, info BuildInfo) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-running-version",
+		Method:      http.MethodGet,
+		Path:        "/version",
+		Summary:     "Running version",
+		Description: "Returns the public release and source revision currently serving requests.",
+		Tags:        []string{"System"},
+	}, func(_ context.Context, _ *struct{}) (*struct {
+		Body struct {
+			Version  string `json:"version" doc:"Release version embedded in the server"`
+			Revision string `json:"revision" doc:"Full source revision embedded in the server"`
+			Edition  string `json:"edition" doc:"Configured OpenPost edition"`
+		}
+	}, error) {
+		resp := &struct {
+			Body struct {
+				Version  string `json:"version" doc:"Release version embedded in the server"`
+				Revision string `json:"revision" doc:"Full source revision embedded in the server"`
+				Edition  string `json:"edition" doc:"Configured OpenPost edition"`
+			}
+		}{}
+		resp.Body.Version = info.Version
+		resp.Body.Revision = info.Revision
+		resp.Body.Edition = info.Edition
+		return resp, nil
+	})
+}
+
+func RegisterHealth(api huma.API, db *bun.DB, readiness *Readiness, storage mediastore.BlobStorage) {
+	huma.Register(api, huma.Operation{
+		OperationID: "health-check",
+		Method:      http.MethodGet,
+		Path:        "/health",
+		Summary:     "Health check",
+		Tags:        []string{"System"},
+	}, func(_ context.Context, _ *struct{}) (*struct {
+		Body struct {
+			Status string `json:"status" doc:"Health status"`
+		}
+	}, error) {
+		resp := &struct {
+			Body struct {
+				Status string `json:"status" doc:"Health status"`
+			}
+		}{}
+		resp.Body.Status = "ok"
+		return resp, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "readiness-check",
+		Method:      http.MethodGet,
+		Path:        "/ready",
+		Summary:     "Readiness check",
+		Tags:        []string{"System"},
+		Errors:      []int{503},
+	}, func(ctx context.Context, _ *struct{}) (*struct {
+		Body struct {
+			Status   string `json:"status" doc:"Readiness status"`
+			Database string `json:"database" doc:"Database dependency status"`
+			Storage  string `json:"storage,omitempty" doc:"Required object storage dependency status"`
+		}
+	}, error) {
+		if !readiness.IsReady() {
+			return nil, huma.NewError(http.StatusServiceUnavailable, "process is draining")
+		}
+		if db == nil {
+			return nil, huma.NewError(http.StatusServiceUnavailable, "database is not ready")
+		}
+		var one int
+		if err := db.NewSelect().ColumnExpr("1").Scan(ctx, &one); err != nil {
+			return nil, huma.NewError(http.StatusServiceUnavailable, "database is not ready")
+		}
+		remoteStorageReady := false
+		if storage != nil && storage.Driver() == "s3" {
+			checker, ok := storage.(mediastore.ReadinessStorage)
+			if !ok || checker.CheckReady(ctx) != nil {
+				return nil, huma.NewError(http.StatusServiceUnavailable, "object storage is not ready")
+			}
+			remoteStorageReady = true
+		}
+		resp := &struct {
+			Body struct {
+				Status   string `json:"status" doc:"Readiness status"`
+				Database string `json:"database" doc:"Database dependency status"`
+				Storage  string `json:"storage,omitempty" doc:"Required object storage dependency status"`
+			}
+		}{}
+		resp.Body.Status = "ready"
+		resp.Body.Database = "ok"
+		if remoteStorageReady {
+			resp.Body.Storage = "ok"
+		}
+		return resp, nil
+	})
+}

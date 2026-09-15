@@ -1,0 +1,54 @@
+<script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+	import { m } from '$lib/paraglide/messages';
+	import { ProtectedIcon, ThemeIcon } from '$lib/themes/icons';
+	import type { CreateCompositeCompositionOptions } from '$lib/video-editor/sequences/sequence-actions';
+	import MotionCompositionDialog from './motion-composition-dialog.svelte';
+
+	let {
+		width,
+		height,
+		fps,
+		defaultName,
+		oncreate
+	}: {
+		width: number;
+		height: number;
+		fps: number;
+		defaultName: string;
+		oncreate: (options: CreateCompositeCompositionOptions) => void;
+	} = $props();
+
+	let dialogOpen = $state(false);
+</script>
+
+<section
+	class="flex min-h-0 min-w-0 flex-1 items-center justify-center bg-[var(--video-editor-canvas)] p-6 text-[var(--video-editor-text)]"
+	aria-label={m.video_editor_workspace_motion()}
+	data-motion-preview-empty
+>
+	<div class="flex max-w-sm flex-col items-center text-center">
+		<div
+			class="mb-3 flex size-10 items-center justify-center rounded-lg border border-[var(--video-editor-border)] bg-[var(--video-editor-control)] text-[var(--video-editor-focus)] shadow-sm"
+		>
+			<ProtectedIcon icon="editor-animation" class="size-5" />
+		</div>
+		<h2 class="text-sm font-semibold">{m.video_editor_motion_empty_title()}</h2>
+		<p class="mt-1 max-w-xs text-xs leading-5 text-[var(--video-editor-muted)]">
+			{m.video_editor_motion_empty_description()}
+		</p>
+		<Button class="mt-4 gap-1.5" size="sm" onclick={() => (dialogOpen = true)}>
+			<ThemeIcon role="add" class="size-3.5" />
+			{m.video_editor_motion_new_composition()}
+		</Button>
+	</div>
+</section>
+
+<MotionCompositionDialog
+	bind:open={dialogOpen}
+	defaultWidth={width}
+	defaultHeight={height}
+	defaultFps={fps}
+	{defaultName}
+	{oncreate}
+/>

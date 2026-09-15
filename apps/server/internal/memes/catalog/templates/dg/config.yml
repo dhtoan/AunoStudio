@@ -1,0 +1,49 @@
+name: Distracted Girlfriend
+source: https://knowyourmeme.com/memes/distracted-boyfriend
+keywords:
+  -
+text:
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.02
+    anchor_y: 0.6
+    angle: 0.0
+    scale_x: 0.35
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.45
+    anchor_y: 0.75
+    angle: 0.0
+    scale_x: 0.25
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.75
+    anchor_y: 0.65
+    angle: 0.0
+    scale_x: 0.225
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - Socialism
+  - The Youth
+  - Capitalism
+overlay:
+  - center_x: 0.5
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.25
+    start: 0.0
+    stop: 1.0

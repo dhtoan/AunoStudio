@@ -1,0 +1,411 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { assetSurfaceManifest } from "./asset-surfaces.ts";
+
+import {
+  assertCanonicalProvenance,
+  assertLocalRevision,
+  deploymentForRevision,
+  linksFromMarkdown,
+  markdownOutputForRoute,
+  proveHTTPContract,
+  publicSurfaceSamples,
+  validateAICrawlSnapshot,
+  validateMachineLinks,
+} from "./public-deployment-proof.mjs";
+
+test("selects an active production deployment for the exact reviewed revision", () => {
+  const revision = "abcdef1234567890abcdef1234567890abcdef12";
+  const deployments = [
+    {
+      id: "wrong-branch",
+      environment: "preview",
+      url: "https://wrong.example",
+      deployment_trigger: {
+        metadata: {
+          branch: "feature",
+          commit_hash: revision,
+          commit_dirty: false,
+        },
+      },
+      latest_stage: { status: "success" },
+    },
+    {
+      id: "reviewed",
+      environment: "production",
+      url: "https://reviewed.example",
+      deployment_trigger: {
+        metadata: {
+          branch: "main",
+          commit_hash: revision,
+          commit_dirty: false,
+        },
+      },
+      latest_stage: { status: "success" },
+    },
+  ];
+
+  assert.deepEqual(deploymentForRevision(deployments, revision), {
+    Id: "reviewed",
+    Branch: "main",
+    SourceRevision: revision,
+    Deployment: "https://reviewed.example",
+    Status: "success",
+  });
+  assert.throws(
+    () => deploymentForRevision(deployments, "fedcba9876543210fedcba9876543210fedcba98"),
+    /successful clean main production deployment.*fedcba/u,
+  );
+  assert.throws(() => deploymentForRevision(deployments, "abcdef1"), /full lowercase commit SHA/u);
+});
+
+test("binds proof to the exact clean local revision", () => {
+  const revision = "abcdef1234567890abcdef1234567890abcdef12";
+  assert.doesNotThrow(() => assertLocalRevision({ head: revision, status: "" }, revision));
+  assert.throws(
+    () => assertLocalRevision({ head: revision, status: " M tracked" }, revision),
+    /tracked tree must be clean/u,
+  );
+  assert.throws(
+    () =>
+      assertLocalRevision(
+        { head: "fedcba9876543210fedcba9876543210fedcba98", status: "" },
+        revision,
+      ),
+    /local HEAD differs/u,
+  );
+});
+
+test("requires each Markdown artifact to name its exact canonical HTML URL", () => {
+  const canonical = "https://docs.openpo.st/usage/";
+  assert.equal(
+    assertCanonicalProvenance(
+      `Title: Usage\nCanonical: ${canonical}\n`,
+      canonical,
+      "usage/index.md",
+    ),
+    `Canonical: ${canonical}`,
+  );
+  assert.throws(
+    () =>
+      assertCanonicalProvenance(
+        "Canonical: https://docs.openpo.st/other\n",
+        canonical,
+        "usage/index.md",
+      ),
+    /does not name its exact canonical URL/u,
+  );
+  assert.equal(
+    assertCanonicalProvenance("Canonical: https://openpo.st/\n", "https://openpo.st", "index.md"),
+    "Canonical: https://openpo.st/",
+  );
+  for (const normalizedButNotExact of [
+    "https://docs.openpo.st/usage/./composing-posts",
+    "https://DOCS.openpo.st/usage/composing-posts",
+    "https://docs.openpo.st:443/usage/composing-posts",
+    "not a URL",
+  ]) {
+    assert.throws(
+      () =>
+        assertCanonicalProvenance(
+          `Canonical: ${normalizedButNotExact}\n`,
+          "https://docs.openpo.st/usage/composing-posts",
+          "usage/composing-posts.md",
+        ),
+      /does not name its exact canonical URL/u,
+    );
+  }
+});
+
+test("requires a bounded observation-only 24-hour AI crawl snapshot", () => {
+  const snapshot = {
+    observed_at: "2026-08-14T13:50:27Z",
+    window_start: "2026-08-13T13:50:27Z",
+    window_end: "2026-08-14T13:50:27Z",
+    window_hours: 24,
+    source: "Cloudflare GraphQL Analytics API",
+    scope: ["openpo.st", "docs.openpo.st"],
+    method: "documented crawler user-agent patterns",
+    requests: 3,
+    response_statuses: { 200: 1, 404: 2 },
+    requests_by_host: { "openpo.st": 2, "docs.openpo.st": 1 },
+    user_agent_matching_spoofable: true,
+    crawler_identity_proven: false,
+    release_kpi: false,
+    next_review_owner: "public-surface operator",
+    next_review: "within 24 hours of a policy change",
+  };
+  assert.equal(validateAICrawlSnapshot(snapshot), snapshot);
+  assert.throws(
+    () => validateAICrawlSnapshot({ ...snapshot, release_kpi: true }),
+    /observation, not a release KPI/u,
+  );
+  assert.throws(
+    () =>
+      validateAICrawlSnapshot({
+        ...snapshot,
+        window_start: "2026-08-13T14:50:27Z",
+      }),
+    /exactly 24 hours/u,
+  );
+  assert.throws(
+    () =>
+      validateAICrawlSnapshot({
+        ...snapshot,
+        requests_by_host: { ...snapshot.requests_by_host, "openpo.st": 1 },
+      }),
+    /host total must equal requests/u,
+  );
+});
+
+test("reads explicit Markdown and intentional native links from discovery files", () => {
+  assert.deepEqual(
+    linksFromMarkdown(`
+# OpenPost
+
+- [Guide](https://docs.openpo.st/usage/index.md)
+- [OpenAPI](https://docs.openpo.st/openapi.json): authoritative JSON.
+
+Ignore https://example.com/bare and [local](./local.md).
+`),
+    ["https://docs.openpo.st/usage/index.md", "https://docs.openpo.st/openapi.json", "./local.md"],
+  );
+});
+
+test("rejects HTML and external links from indexes and the full corpus", () => {
+  const known = new Set([
+    "https://docs.openpo.st/usage/accounts.md",
+    "https://docs.openpo.st/llms-full.txt",
+  ]);
+  assert.doesNotThrow(() =>
+    validateMachineLinks(
+      "corpus",
+      "[Accounts](https://docs.openpo.st/usage/accounts.md)\n![Image](https://docs.openpo.st/assets/image.png)\n[API](https://docs.openpo.st/openapi.json)",
+      known,
+    ),
+  );
+  assert.throws(
+    () =>
+      validateMachineLinks("corpus", "[Accounts](https://docs.openpo.st/usage/accounts)", known),
+    /non-resolving or non-machine/u,
+  );
+  assert.throws(
+    () => validateMachineLinks("corpus", "[Video](https://youtu.be/example)", known),
+    /non-resolving or non-machine/u,
+  );
+});
+
+test("asset samples belong to the surface that deploys them", () => {
+  for (const [, url] of publicSurfaceSamples().native) {
+    const { hostname, pathname } = new URL(url);
+    if (!pathname.startsWith("/assets/")) continue;
+    const surface = hostname === "docs.openpo.st" ? "docs" : "marketing";
+    assert.ok(
+      assetSurfaceManifest[surface].includes(pathname.slice("/assets/".length)),
+      `${url} is not published by ${surface}`,
+    );
+  }
+});
+
+test("the live sample plan covers every required public category and machine boundary", () => {
+  const samples = publicSurfaceSamples();
+  assert.deepEqual(
+    samples.marketing.map(({ category, route }) => [category, route]),
+    [
+      ["core", "/pricing"],
+      ["legal", "/privacy"],
+      ["platform", "/platforms/x"],
+      ["guide", "/guides"],
+      ["tool", "/tools/multi-platform-character-counter"],
+    ],
+  );
+  assert.deepEqual(
+    samples.documentation.map(({ category, route }) => [category, route]),
+    [
+      ["root", "/"],
+      ["guide", "/guides/quickstart"],
+      ["self-hosting", "/self-hosting"],
+      ["API reference", "/api-reference"],
+    ],
+  );
+  assert.deepEqual(samples.native, [
+    ["OpenAPI", "https://docs.openpo.st/openapi.json", "application/json"],
+    ["app OpenAPI", "https://app.openpo.st/openapi.json", "application/json"],
+    [
+      "marketing API catalog",
+      "https://openpo.st/.well-known/api-catalog",
+      'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    ],
+    [
+      "app API catalog",
+      "https://app.openpo.st/.well-known/api-catalog",
+      'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    ],
+    [
+      "MCP authorization metadata",
+      "https://app.openpo.st/.well-known/oauth-protected-resource",
+      "application/json",
+    ],
+    [
+      "MCP deterministic authorization metadata",
+      "https://app.openpo.st/.well-known/oauth-protected-resource/mcp",
+      "application/json",
+    ],
+    [
+      "marketing MCP card",
+      "https://openpo.st/.well-known/mcp/server-card.json",
+      "application/json; charset=utf-8",
+    ],
+    ["app MCP card", "https://app.openpo.st/.well-known/mcp/server-card.json", "application/json"],
+    ["ARD", "https://openpo.st/.well-known/ard.json", "application/json; charset=utf-8"],
+    [
+      "Agent Skills index",
+      "https://openpo.st/.well-known/agent-skills/index.json",
+      "application/json; charset=utf-8",
+    ],
+    [
+      "Agent Skill",
+      "https://openpo.st/.well-known/agent-skills/openpost-cli.tar.gz",
+      "application/gzip",
+    ],
+    ["marketing robots", "https://openpo.st/robots.txt", "text/plain; charset=utf-8"],
+    ["documentation robots", "https://docs.openpo.st/robots.txt", "text/plain; charset=utf-8"],
+    ["app robots", "https://app.openpo.st/robots.txt", "text/plain; charset=UTF-8"],
+    ["marketing favicon", "https://openpo.st/favicon.ico", "image/x-icon"],
+    ["MCP", "https://app.openpo.st/mcp", "application/json"],
+    ["marketing asset", "https://openpo.st/assets/brand/logo.svg", "image/svg+xml"],
+    ["marketing social image", "https://openpo.st/og/home.png", "image/png"],
+    ["documentation social image", "https://docs.openpo.st/og/home.png", "image/png"],
+    [
+      "documentation asset",
+      "https://docs.openpo.st/assets/screenshots/integrations/google-enable-api.png",
+      "image/png",
+    ],
+  ]);
+});
+
+test("proves status, media type, exact content, query isolation, and redirect behavior", async () => {
+  const responses = new Map([
+    [
+      "https://openpo.st/pricing.md",
+      response(200, "text/markdown; charset=utf-8", "# Features\n", {
+        "x-openpost-discovery": "current",
+      }),
+    ],
+    [
+      "https://deployment.example/pricing.md",
+      response(200, "text/markdown; charset=utf-8", "# Features\n", {
+        "x-openpost-discovery": "current",
+      }),
+    ],
+    [
+      "https://openpo.st/pricing.md?openpost_proof=query-isolation",
+      response(200, "text/markdown; charset=utf-8", "# Features\n", {
+        "x-openpost-discovery": "current",
+      }),
+    ],
+    [
+      "https://openpo.st/pricing/?openpost_proof=redirect",
+      response(308, "text/html; charset=UTF-8", "", {
+        location: "https://openpo.st/pricing?openpost_proof=redirect",
+      }),
+    ],
+  ]);
+  const fetchImpl = async (url) => {
+    const found = responses.get(String(url));
+    assert.ok(found, `unexpected request ${url}`);
+    return found.clone();
+  };
+
+  const result = await proveHTTPContract({
+    fetchImpl,
+    checks: [
+      {
+        kind: "artifact",
+        name: "marketing core",
+        canonicalURL: "https://openpo.st/pricing.md",
+        deploymentURL: "https://deployment.example/pricing.md",
+        contentType: "text/markdown; charset=utf-8",
+        expectedBody: "# Features\n",
+        responseHeaders: { "x-openpost-discovery": "current" },
+        queryIsolation: true,
+      },
+      {
+        kind: "redirect",
+        name: "marketing canonical redirect",
+        url: "https://openpo.st/pricing/?openpost_proof=redirect",
+        status: 308,
+        location: "/pricing?openpost_proof=redirect",
+      },
+    ],
+  });
+
+  assert.equal(result.length, 2);
+  assert.equal(result[0].sha256.length, 64);
+  assert.equal(result[0].query_isolated, true);
+  assert.equal(result[1].location, "https://openpo.st/pricing?openpost_proof=redirect");
+});
+
+test("fails when a query changes generated content", async () => {
+  const fetchImpl = async (url) =>
+    String(url).includes("openpost_proof")
+      ? response(200, "text/markdown; charset=utf-8", "leaked query")
+      : response(200, "text/markdown; charset=utf-8", "stable");
+
+  await assert.rejects(
+    proveHTTPContract({
+      fetchImpl,
+      checks: [
+        {
+          kind: "artifact",
+          name: "query isolation",
+          canonicalURL: "https://openpo.st/index.md",
+          contentType: "text/markdown; charset=utf-8",
+          expectedBody: "stable",
+          queryIsolation: true,
+        },
+      ],
+    }),
+    /query changed the response body/u,
+  );
+});
+
+test("proves binary discovery artifacts byte for byte", async () => {
+  const expectedBody = Buffer.from([0, 255, 1, 254]);
+  const responses = new Map([
+    ["https://openpo.st/skill.tar.gz", response(200, "application/gzip", expectedBody)],
+    ["https://deployment.example/skill.tar.gz", response(200, "application/gzip", expectedBody)],
+  ]);
+  const [result] = await proveHTTPContract({
+    fetchImpl: async (url) => responses.get(String(url)).clone(),
+    checks: [
+      {
+        kind: "artifact",
+        name: "binary Agent Skill",
+        canonicalURL: "https://openpo.st/skill.tar.gz",
+        deploymentURL: "https://deployment.example/skill.tar.gz",
+        contentType: "application/gzip",
+        expectedBody,
+        binary: true,
+      },
+    ],
+  });
+
+  assert.equal(result.local_matches, true);
+  assert.equal(result.deployment_matches, true);
+  assert.equal(result.bytes, expectedBody.length);
+});
+
+function response(status, contentType, body, headers = {}) {
+  return new Response(body, {
+    status,
+    headers: { "content-type": contentType, ...headers },
+  });
+}
+
+test("resolves section Markdown from each surface source", () => {
+  assert.equal(markdownOutputForRoute("/self-hosting", "marketing"), "self-hosting.md");
+  assert.equal(markdownOutputForRoute("/self-hosting", "documentation"), "self-hosting/index.md");
+  assert.equal(markdownOutputForRoute("/api-reference", "documentation"), "api-reference/index.md");
+  assert.equal(markdownOutputForRoute("/mcp/cursor", "documentation"), "mcp/cursor.md");
+});

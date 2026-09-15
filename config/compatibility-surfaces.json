@@ -1,0 +1,1100 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "minimum_sunset_days": 90,
+    "minimum_stable_releases": 2,
+    "required_consumer_classes": ["web", "cli", "mcp", "mcp-media", "n8n", "api"],
+    "telemetry_source": "Structured request logs expose the normalized route and a low-cardinality consumer hint; they are operational evidence, not authenticated caller identity.",
+    "required_notice_channels": [
+      "CHANGELOG.md",
+      "OpenAPI deprecated marker",
+      "migration documentation"
+    ],
+    "removal_rule": "A public surface may be removed only after its replacement and migration path are available, deprecation is announced, the minimum time and stable-release windows both pass, every consumer class has reviewed evidence, and no known use remains."
+  },
+  "entries": [
+    {
+      "id": "hostname.public-redirects",
+      "kind": "hostname",
+      "owner": "public-surface-operators",
+      "status": "retained",
+      "hostnames": [
+        "openpost.social",
+        "docs.openpost.social",
+        "app.openpost.social",
+        "media.openpost.social",
+        "cool.openpost.social"
+      ],
+      "decision": "Keep every former public hostname only as a permanent path-and-query-preserving redirect after the hard cutover.",
+      "replacement": {
+        "status": "available",
+        "operations": [
+          "https://openpo.st",
+          "https://docs.openpo.st",
+          "https://app.openpo.st",
+          "https://media.openpo.st",
+          "https://cool.openpo.st"
+        ],
+        "notes": "The new hosts own all current product, application, media, telemetry, discovery, and metadata traffic."
+      },
+      "migration_path": "Route each former hostname to its openpo.st replacement with the path and query intact.",
+      "compatibility": {
+        "minimum_until": null,
+        "retirement_condition": "Redirect ownership may move, but every former hostname must continue serving one proven permanent redirect without a chain."
+      },
+      "notice": { "announced_on": null, "announced_version": null, "locations": [] },
+      "removal": { "earliest_on": null, "removal_version": null },
+      "telemetry": {
+        "hostnames": [
+          "openpost.social",
+          "docs.openpost.social",
+          "app.openpost.social",
+          "media.openpost.social",
+          "cool.openpost.social"
+        ],
+        "observation_started_on": "2026-08-31",
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "known-use",
+            "evidence": "Published links and search indexes can still name former hosts, so redirects remain permanent."
+          },
+          "cli": {
+            "status": "not-applicable",
+            "evidence": "No supported CLI profile exists in the hard-cutover production environment."
+          },
+          "mcp": {
+            "status": "not-applicable",
+            "evidence": "The Official MCP Registry advertises only app.openpo.st in its current version."
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "No supported MCP media client exists in the hard-cutover production environment."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "No supported n8n credential exists in the hard-cutover production environment."
+          },
+          "api": {
+            "status": "not-applicable",
+            "evidence": "No supported external API client exists in the hard-cutover production environment."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.posts.legacy-write",
+      "kind": "rest",
+      "owner": "publishing",
+      "status": "removed",
+      "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+      "operations": [
+        {
+          "method": "POST",
+          "path": "/posts",
+          "operation_id": "create-post",
+          "introduced_version": "v0.1.0",
+          "introduced_commit": "1fdfef18591f76b4d20ef079478236b4798a6dbc"
+        },
+        {
+          "method": "PATCH",
+          "path": "/posts/{id}",
+          "operation_id": "update-post",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "80c302c571b0f49fd2698a125bab6747e1eabfb5"
+        },
+        {
+          "method": "POST",
+          "path": "/posts/thread",
+          "operation_id": "create-thread",
+          "introduced_version": "v0.3.0",
+          "introduced_commit": "65a3d9104f4174dc0cfda8a94ff53578e8d79f5c"
+        },
+        {
+          "method": "DELETE",
+          "path": "/posts/{id}",
+          "operation_id": "delete-post",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "80c302c571b0f49fd2698a125bab6747e1eabfb5"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": [
+          "POST /publications",
+          "PATCH /publications/{id}",
+          "POST /publications/{id}/schedule",
+          "POST /publications/{id}/cancel",
+          "DELETE /publications/{id}"
+        ],
+        "notes": "Publications own source content, revision, segments, renditions, schedule state, and durable jobs."
+      },
+      "migration_path": "Create and update Publications instead of Posts. Map content to source_text and the first segment body, social_account_ids to Renditions, media_ids to segment or rendition media, scheduled_at to the Publication schedule operation, and use publication_id returned by compatibility responses before the Post ID sunset.",
+      "notice": {
+        "announced_on": "2026-08-15",
+        "announced_version": "v3.12.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-08-16",
+        "removal_version": "v3.13.0",
+        "stable_releases_elapsed": ["v3.12.0"],
+        "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+        "authorization": {
+          "authorized_by": "rodrgds (repository maintainer)",
+          "authorized_on": "2026-08-16",
+          "reason": "The architecture program (#98) and its removal ticket (#115) are explicitly authorized for completion now. Publication is the only authoring aggregate; every maintained consumer uses Publication contracts, Post routes and MCP tools are deleted, and historical migration files plus immutable legacy records preserve old-database upgrades only."
+        }
+      },
+      "telemetry": {
+        "observation_started_on": "2026-08-15",
+        "observation_ended_on": "2026-08-16",
+        "evidence": [
+          "Post routes and MCP post tools are removed from the API and OpenAPI. No first-party consumer references a Post surface."
+        ],
+        "route_patterns": ["/api/v1/posts", "/api/v1/posts/:id", "/api/v1/posts/thread"],
+        "consumers": {
+          "web": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "cli": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp-media": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "api": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "The n8n node reserves destination-options and publication contracts; it never called Post authoring routes."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.posts.legacy-read",
+      "kind": "rest",
+      "owner": "publishing",
+      "status": "removed",
+      "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/posts",
+          "operation_id": "list-posts",
+          "introduced_version": "v0.1.0",
+          "introduced_commit": "1fdfef18591f76b4d20ef079478236b4798a6dbc"
+        },
+        {
+          "method": "GET",
+          "path": "/posts/{id}",
+          "operation_id": "get-post",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "80c302c571b0f49fd2698a125bab6747e1eabfb5"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["GET /publications", "GET /publications/{id}"],
+        "notes": "Publication reads include lifecycle status, schedule, segments, Renditions, media, and provider delivery state without preserving a second authoring model."
+      },
+      "migration_path": "Use GET /publications for lists and GET /publications/{id} for detail. Use compatibility publication_id aliases to resolve stored Post IDs, then read Renditions instead of destinations or variants.",
+      "notice": {
+        "announced_on": "2026-08-15",
+        "announced_version": "v3.12.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-08-16",
+        "removal_version": "v3.13.0",
+        "stable_releases_elapsed": ["v3.12.0"],
+        "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+        "authorization": {
+          "authorized_by": "rodrgds (repository maintainer)",
+          "authorized_on": "2026-08-16",
+          "reason": "The architecture program (#98) and its removal ticket (#115) are explicitly authorized for completion now. Publication is the only authoring aggregate; every maintained consumer uses Publication contracts, Post routes and MCP tools are deleted, and historical migration files plus immutable legacy records preserve old-database upgrades only."
+        }
+      },
+      "telemetry": {
+        "observation_started_on": "2026-08-15",
+        "observation_ended_on": "2026-08-16",
+        "evidence": [
+          "Post routes and MCP post tools are removed from the API and OpenAPI. No first-party consumer references a Post surface."
+        ],
+        "route_patterns": ["/api/v1/posts", "/api/v1/posts/:id"],
+        "consumers": {
+          "web": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "cli": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp-media": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "api": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "The n8n node reserves destination-options and publication contracts; it never called Post authoring routes."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.posts.schedule-overview",
+      "kind": "rest",
+      "owner": "publishing",
+      "status": "removed",
+      "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/posts/schedule-overview",
+          "operation_id": "get-schedule-overview",
+          "introduced_version": "v0.1.0",
+          "introduced_commit": "1e1a54814db738cb5bbe7779420041bc8bb2bfc5"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["GET /publications with calendar_from and calendar_before"],
+        "notes": "Publication list calendar filters return the canonical records needed to render monthly schedule state."
+      },
+      "migration_path": "Request the month with calendar_from and calendar_before on GET /publications, then group returned calendar occurrences by local date until a Publication calendar aggregate replaces the compatibility projection.",
+      "notice": {
+        "announced_on": "2026-08-15",
+        "announced_version": "v3.12.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-08-16",
+        "removal_version": "v3.13.0",
+        "stable_releases_elapsed": ["v3.12.0"],
+        "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+        "authorization": {
+          "authorized_by": "rodrgds (repository maintainer)",
+          "authorized_on": "2026-08-16",
+          "reason": "The architecture program (#98) and its removal ticket (#115) are explicitly authorized for completion now. Publication is the only authoring aggregate; every maintained consumer uses Publication contracts, Post routes and MCP tools are deleted, and historical migration files plus immutable legacy records preserve old-database upgrades only."
+        }
+      },
+      "telemetry": {
+        "observation_started_on": "2026-08-15",
+        "observation_ended_on": "2026-08-16",
+        "evidence": [
+          "Post routes and MCP post tools are removed from the API and OpenAPI. No first-party consumer references a Post surface."
+        ],
+        "route_patterns": ["/api/v1/posts/schedule-overview"],
+        "consumers": {
+          "web": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "cli": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp-media": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "api": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "The n8n node reserves destination-options and publication contracts; it never called Post authoring routes."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.posts.legacy-drafts",
+      "kind": "rest",
+      "owner": "publishing",
+      "status": "removed",
+      "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+      "operations": [
+        {
+          "method": "POST",
+          "path": "/posts/draft",
+          "operation_id": "create-text-post-draft",
+          "introduced_version": "v1.1.15",
+          "introduced_commit": "0407df3a1f9f5641682654df6f5186185b5ef238"
+        },
+        {
+          "method": "PUT",
+          "path": "/posts/{id}/draft",
+          "operation_id": "save-text-post-draft",
+          "introduced_version": "v1.1.15",
+          "introduced_commit": "0407df3a1f9f5641682654df6f5186185b5ef238"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["POST /publications", "PATCH /publications/{id}"],
+        "notes": "Publication creation and update preserve expected_revision while storing the canonical source, segments, media, settings, and Renditions."
+      },
+      "migration_path": "Create a Publication for new drafts. Save existing drafts by resolving the compatibility Post ID to publication_id and sending expected_revision, segments, renditions, media, and settings to PATCH /publications/{id}.",
+      "notice": {
+        "announced_on": "2026-08-15",
+        "announced_version": "v3.12.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-08-16",
+        "removal_version": "v3.13.0",
+        "stable_releases_elapsed": ["v3.12.0"],
+        "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+        "authorization": {
+          "authorized_by": "rodrgds (repository maintainer)",
+          "authorized_on": "2026-08-16",
+          "reason": "The architecture program (#98) and its removal ticket (#115) are explicitly authorized for completion now. Publication is the only authoring aggregate; every maintained consumer uses Publication contracts, Post routes and MCP tools are deleted, and historical migration files plus immutable legacy records preserve old-database upgrades only."
+        }
+      },
+      "telemetry": {
+        "observation_started_on": "2026-08-15",
+        "observation_ended_on": "2026-08-16",
+        "evidence": [
+          "Post routes and MCP post tools are removed from the API and OpenAPI. No first-party consumer references a Post surface."
+        ],
+        "route_patterns": ["/api/v1/posts/draft", "/api/v1/posts/:id/draft"],
+        "consumers": {
+          "web": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "cli": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp-media": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "api": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "The n8n node reserves destination-options and publication contracts; it never called Post authoring routes."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.posts.legacy-renditions",
+      "kind": "rest",
+      "owner": "publishing",
+      "status": "removed",
+      "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+      "operations": [
+        {
+          "method": "PUT",
+          "path": "/posts/{id}/variants",
+          "operation_id": "upsert-post-variants",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "87a19010c69af3028770b4ff13895c1dcd4e7465"
+        },
+        {
+          "method": "GET",
+          "path": "/posts/{id}/variants",
+          "operation_id": "get-post-variants",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "87a19010c69af3028770b4ff13895c1dcd4e7465"
+        },
+        {
+          "method": "DELETE",
+          "path": "/posts/{id}/variants",
+          "operation_id": "delete-post-variants",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "87a19010c69af3028770b4ff13895c1dcd4e7465"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["GET /publications/{id}", "PUT /publications/{id}/renditions"],
+        "notes": "Renditions carry per-account body, media, format, settings, timing, and provider delivery state."
+      },
+      "migration_path": "Read Renditions from GET /publications/{id}. Replace variant writes with PUT /publications/{id}/renditions and map social_account_id, content, media_ids, settings, and unsynced media state to Rendition fields.",
+      "notice": {
+        "announced_on": "2026-08-15",
+        "announced_version": "v3.12.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-08-16",
+        "removal_version": "v3.13.0",
+        "stable_releases_elapsed": ["v3.12.0"],
+        "decision": "Remove the Post compatibility surface. Publications and Renditions are the only authoring aggregates; historical migrations and immutable legacy records remain only for old-database upgrades.",
+        "authorization": {
+          "authorized_by": "rodrgds (repository maintainer)",
+          "authorized_on": "2026-08-16",
+          "reason": "The architecture program (#98) and its removal ticket (#115) are explicitly authorized for completion now. Publication is the only authoring aggregate; every maintained consumer uses Publication contracts, Post routes and MCP tools are deleted, and historical migration files plus immutable legacy records preserve old-database upgrades only."
+        }
+      },
+      "telemetry": {
+        "observation_started_on": "2026-08-15",
+        "observation_ended_on": "2026-08-16",
+        "evidence": [
+          "Post routes and MCP post tools are removed from the API and OpenAPI. No first-party consumer references a Post surface."
+        ],
+        "route_patterns": ["/api/v1/posts/:id/variants"],
+        "consumers": {
+          "web": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "cli": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "mcp-media": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "api": {
+            "status": "no-use-observed",
+            "evidence": "The maintained web app, CLI, MCP, and MCP media surfaces use Publication tools and routes; no first-party caller references a Post route, tool, identifier, or mutable model. Post HTTP routes and MCP post tools are deleted."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "The n8n node reserves destination-options and publication contracts; it never called Post authoring routes."
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.accounts.mastodon-servers",
+      "kind": "rest",
+      "owner": "provider-connections",
+      "status": "retained",
+      "decision": "Retain until the provider catalogue proves exact configured and dynamically registered Mastodon instance selection for every connection flow.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/accounts/mastodon/servers",
+          "operation_id": "list-mastodon-servers",
+          "introduced_version": "v0.1.0",
+          "introduced_commit": "ddd7fa1f8b9d8235cdac41897c05c2009866d00a"
+        }
+      ],
+      "replacement": {
+        "status": "candidate",
+        "operations": ["GET /accounts/providers"],
+        "notes": "The provider catalogue must first expose the exact effective Mastodon instance and dynamic-registration behavior without leaking operator configuration."
+      },
+      "migration_path": "Move all app and external consumers to the provider catalogue only after parity tests cover configured and dynamic instances.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": ["/api/v1/accounts/mastodon/servers"],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy cannot start account connections."
+          },
+          "n8n": {
+            "status": "pending",
+            "evidence": null
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.accounts.destination-options",
+      "kind": "rest",
+      "owner": "provider-capabilities",
+      "status": "retained",
+      "decision": "Retain and stabilize because the approved n8n v0.1 contract reserves it as a selector dependency. Do not infer retirement from first-party source reachability.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/accounts/{account_id}/destination-options",
+          "operation_id": "get-account-destination-options",
+          "introduced_version": "v1.1.4",
+          "introduced_commit": "81171c73a3d768d1378207ee7e5b4ad609c8ea05"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["GET /accounts/{account_id}/publishing-options/{source}"],
+        "notes": "The paged endpoint is the preferred scalable contract, but the automation node must migrate before deprecation."
+      },
+      "migration_path": "Update the generated n8n selector to the paged publishing-options route, ship compatibility coverage, then observe both route patterns through a sunset window.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": ["/api/v1/accounts/:account_id/destination-options"],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": ["N8N-009 reserves this selector for the selected automation contract."],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy cannot query provider options."
+          },
+          "n8n": {
+            "status": "reserved-use",
+            "evidence": "Reserved by the approved N8N-009 selected automation contract; implementation evidence is still pending."
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.organizations.discovery-team",
+      "kind": "rest",
+      "owner": "workspace-identity",
+      "status": "retained",
+      "decision": "Retain while organization identity, SSO, billing, and workspace access remain distinct scopes. Consolidation requires an external-consumer review and a complete organization administration contract.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/organizations",
+          "operation_id": "list-organizations",
+          "introduced_version": "v1.0.22",
+          "introduced_commit": "447be6e58be29cf8a3c0fdbe6180056fe20a397a"
+        },
+        {
+          "method": "GET",
+          "path": "/organizations/{id}/team",
+          "operation_id": "list-organization-team",
+          "introduced_version": "v1.0.22",
+          "introduced_commit": "447be6e58be29cf8a3c0fdbe6180056fe20a397a"
+        }
+      ],
+      "replacement": {
+        "status": "none",
+        "operations": [],
+        "notes": "Workspace team endpoints do not replace organization membership or identity-provider ownership."
+      },
+      "migration_path": "Define the final organization administration boundary first; any replacement must preserve organization roles independently of workspace roles.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": ["/api/v1/organizations", "/api/v1/organizations/:id/team"],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy has no organization administration access."
+          },
+          "n8n": {
+            "status": "pending",
+            "evidence": null
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.billing.dual-scope",
+      "kind": "rest",
+      "owner": "billing",
+      "status": "retained",
+      "decision": "Retain both workspace-context and organization-path billing routes until the product selects one organization-aware contract and migrates the app, CLI, recovery notice, and external clients together.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/billing/status",
+          "operation_id": "get-billing-status",
+          "introduced_version": "v1.0.18",
+          "introduced_commit": "5d69f903e61183211fbeeff6299fb4e0fb74d0e6"
+        },
+        {
+          "method": "POST",
+          "path": "/billing/checkout",
+          "operation_id": "create-billing-checkout",
+          "introduced_version": "v1.0.18",
+          "introduced_commit": "5d69f903e61183211fbeeff6299fb4e0fb74d0e6"
+        },
+        {
+          "method": "GET",
+          "path": "/organizations/{id}/billing/status",
+          "operation_id": "get-organization-billing-status",
+          "introduced_version": "v1.0.22",
+          "introduced_commit": "447be6e58be29cf8a3c0fdbe6180056fe20a397a"
+        },
+        {
+          "method": "POST",
+          "path": "/organizations/{id}/billing/checkout",
+          "operation_id": "create-organization-billing-checkout",
+          "introduced_version": "v1.0.22",
+          "introduced_commit": "447be6e58be29cf8a3c0fdbe6180056fe20a397a"
+        }
+      ],
+      "replacement": {
+        "status": "candidate",
+        "operations": ["Organization-aware /billing routes with an explicit organization_id"],
+        "notes": "BILL-003 and BILL-004 must settle portal capabilities and the native/provider boundary before one route family becomes canonical."
+      },
+      "migration_path": "Add organization_id to the generic typed contract, migrate the app and CLI, document organization authorization, then observe old organization-path and workspace-context routes separately.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": [
+          "/api/v1/billing/status",
+          "/api/v1/billing/checkout",
+          "/api/v1/organizations/:id/billing/status",
+          "/api/v1/organizations/:id/billing/checkout"
+        ],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": ["The authenticated app and CLI currently call the generic billing routes."],
+        "consumers": {
+          "web": {
+            "status": "known-use",
+            "evidence": "Checkout, Settings, and the account-wide recovery notice use generic billing routes."
+          },
+          "cli": {
+            "status": "known-use",
+            "evidence": "The maintained CLI billing commands use generic billing routes."
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy has no billing access."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "Billing is excluded from the curated n8n contract."
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.auth.oidc-logout",
+      "kind": "rest",
+      "owner": "authentication",
+      "status": "retained",
+      "decision": "Retain. The route revokes the OpenPost session and returns a validated provider RP-initiated logout URL when the configured provider supports it.",
+      "operations": [
+        {
+          "method": "POST",
+          "path": "/auth/oidc/{provider_id}/logout",
+          "operation_id": "logout-oidc-session",
+          "introduced_version": "v1.0.52",
+          "introduced_commit": "6ba3480e4d7598a58e3856a510bad1f8c09343d8"
+        }
+      ],
+      "replacement": {
+        "status": "none",
+        "operations": [],
+        "notes": "This is the active local-session and optional provider-logout contract."
+      },
+      "migration_path": "No migration is planned. Any future replacement must preserve local revocation even when provider logout is unavailable.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": ["/api/v1/auth/oidc/:provider_id/logout"],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "not-applicable",
+            "evidence": "CLI authorization revocation uses its own session contract."
+          },
+          "mcp": {
+            "status": "not-applicable",
+            "evidence": "MCP tokens do not hold browser OIDC sessions."
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy has no browser session."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "Authentication routes are excluded from the curated n8n contract."
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "rest.prompts",
+      "kind": "rest",
+      "owner": "authoring",
+      "status": "retained",
+      "decision": "Retain as the supported advanced Writing prompts page and the composer random-prompt source. The surface is not dormant.",
+      "operations": [
+        {
+          "method": "GET",
+          "path": "/prompts",
+          "operation_id": "list-prompts",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7f83b89d8ca47e06db45ec632e14a8c24ac81915"
+        },
+        {
+          "method": "POST",
+          "path": "/prompts",
+          "operation_id": "create-prompt",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7f83b89d8ca47e06db45ec632e14a8c24ac81915"
+        },
+        {
+          "method": "DELETE",
+          "path": "/prompts/{id}",
+          "operation_id": "delete-prompt",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7f83b89d8ca47e06db45ec632e14a8c24ac81915"
+        },
+        {
+          "method": "GET",
+          "path": "/prompts/random",
+          "operation_id": "get-random-prompt",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7f83b89d8ca47e06db45ec632e14a8c24ac81915"
+        },
+        {
+          "method": "GET",
+          "path": "/prompts/categories",
+          "operation_id": "get-prompt-categories",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7f83b89d8ca47e06db45ec632e14a8c24ac81915"
+        }
+      ],
+      "replacement": {
+        "status": "none",
+        "operations": [],
+        "notes": "The prompt page and composer use the same supported API."
+      },
+      "migration_path": "No migration is planned. Reassess only if a future authoring library replaces both page management and composer prompt selection.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": [
+          "/api/v1/prompts",
+          "/api/v1/prompts/:id",
+          "/api/v1/prompts/random",
+          "/api/v1/prompts/categories"
+        ],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": [
+          "The Writing prompts page and text-and-thread composer are maintained consumers."
+        ],
+        "consumers": {
+          "web": {
+            "status": "known-use",
+            "evidence": "The Writing prompts route and composer consume this API."
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "not-applicable",
+            "evidence": "MCP protocol prompts are a separate typed catalogue, not these stored writing prompts."
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy cannot read writing prompts."
+          },
+          "n8n": {
+            "status": "not-applicable",
+            "evidence": "Prompts are excluded from the selected n8n v0.1 contract."
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "schema.publications.intent-alias",
+      "kind": "schema",
+      "owner": "publishing",
+      "status": "retained",
+      "decision": "Retain the intent input aliases. Their descriptions identify the preferred creation_preset field, but no formal sunset has started and external API clients may still send intent.",
+      "schema_members": [
+        {
+          "schema": "CreatePublicationBody",
+          "property": "intent",
+          "introduced_version": "v3.0.0",
+          "introduced_commit": "711c782153e6230cb25410a02e2c703a54c9c39e"
+        },
+        {
+          "schema": "PublicationUpdateBody",
+          "property": "intent",
+          "introduced_version": "v3.0.0",
+          "introduced_commit": "711c782153e6230cb25410a02e2c703a54c9c39e"
+        },
+        {
+          "schema": "ResolveCapabilitiesInputBody",
+          "property": "intent",
+          "introduced_version": "v3.0.0",
+          "introduced_commit": "711c782153e6230cb25410a02e2c703a54c9c39e"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["Use creation_preset in the same request schema"],
+        "notes": "creation_preset names the starter choice accurately while destination renditions retain their own formats."
+      },
+      "migration_path": "Send creation_preset instead of intent on publication creation, update, and capability-resolution requests. Preserve the same enum value.",
+      "notice": {
+        "announced_on": null,
+        "announced_version": null,
+        "locations": []
+      },
+      "removal": {
+        "earliest_on": null,
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": [
+          "/api/v1/capabilities/resolve",
+          "/api/v1/publications",
+          "/api/v1/publications/:id"
+        ],
+        "observation_started_on": null,
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy does not create or update publications."
+          },
+          "n8n": {
+            "status": "pending",
+            "evidence": null
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    },
+    {
+      "id": "schema.workspaces.media-cleanup-days",
+      "kind": "schema",
+      "owner": "media-lifecycle",
+      "status": "deprecated",
+      "decision": "Keep the ignored media_cleanup_days input and constant 14-day output for old clients through a measured sunset. The media lifecycle itself is fixed and is no longer configurable.",
+      "schema_members": [
+        {
+          "schema": "GetWorkspaceSettingsOutputBody",
+          "property": "media_cleanup_days",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7289963c06459d0058a99e58bd1e19af9aac599d"
+        },
+        {
+          "schema": "UpdateWorkspaceSettingsInputBody",
+          "property": "media_cleanup_days",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7289963c06459d0058a99e58bd1e19af9aac599d"
+        },
+        {
+          "schema": "UpdateWorkspaceSettingsOutputBody",
+          "property": "media_cleanup_days",
+          "introduced_version": "v0.4.3",
+          "introduced_commit": "7289963c06459d0058a99e58bd1e19af9aac599d"
+        }
+      ],
+      "replacement": {
+        "status": "available",
+        "operations": ["Use the fixed media lifecycle without a cleanup-days field"],
+        "notes": "Temporary media becomes eligible after 14 unused days and Trash after seven days; old writes are ignored and old reads return 14."
+      },
+      "migration_path": "Stop sending media_cleanup_days and stop treating the compatibility response value as a workspace control. Follow the fixed policy documented in Media storage and Settings.",
+      "notice": {
+        "announced_on": "2026-08-09",
+        "announced_version": "v3.0.0",
+        "locations": ["CHANGELOG.md", "OpenAPI deprecated marker", "migration documentation"]
+      },
+      "removal": {
+        "earliest_on": "2026-11-07",
+        "removal_version": null
+      },
+      "telemetry": {
+        "route_patterns": ["/api/v1/workspaces/:id/settings"],
+        "observation_started_on": "2026-08-09",
+        "observation_ended_on": null,
+        "evidence": [],
+        "consumers": {
+          "web": {
+            "status": "pending",
+            "evidence": null
+          },
+          "cli": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp": {
+            "status": "pending",
+            "evidence": null
+          },
+          "mcp-media": {
+            "status": "not-applicable",
+            "evidence": "The media proxy cannot read or update workspace settings."
+          },
+          "n8n": {
+            "status": "pending",
+            "evidence": null
+          },
+          "api": {
+            "status": "pending",
+            "evidence": null
+          }
+        }
+      }
+    }
+  ]
+}

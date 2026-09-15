@@ -1,0 +1,143 @@
+import { fileURLToPath } from "node:url";
+import { readCanonicalChangelog } from "../apps/marketing/src/lib/changelog.ts";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import test from "node:test";
+
+import { renderChangelogAtomFeed } from "../apps/marketing/src/lib/changelog-feed.ts";
+import { publicContentSignal, renderPublicRobots } from "../apps/marketing/src/lib/robots.ts";
+import { platforms } from "../apps/marketing/src/routes/_marketing.ts";
+import { structuredDataForMarketingPage } from "../apps/marketing/src/routes/_structured-data.ts";
+import { resolveMarketingSocial } from "../packages/social-images/src/index.js";
+
+test("public crawler policy explicitly permits search, AI input, and model training", async () => {
+  const robots = renderPublicRobots();
+  assert.equal(publicContentSignal, "Content-Signal: search=yes, ai-input=yes, ai-train=yes");
+  assert.match(robots, /^User-agent: \*$/m);
+  assert.match(
+    robots,
+    /^User-agent: \*\nContent-Signal: search=yes, ai-input=yes, ai-train=yes\nAllow: \/$/m,
+  );
+  assert.match(robots, /^Allow: \/$/m);
+  assert.match(robots, /^Sitemap: https:\/\/openpo\.st\/sitemap\.xml$/m);
+  assert.doesNotMatch(robots, /^Disallow:/m);
+  assert.doesNotMatch(robots, /use=reference/u);
+
+  const root = path.resolve(import.meta.dirname, "..");
+  for (const [surface, relativeRobots, relativeHeaders] of [
+    ["marketing", "apps/marketing/src/lib/robots.ts", "apps/marketing/static/_headers"],
+    ["documentation", "apps/docs/public/robots.txt", "apps/docs/public/_headers"],
+  ]) {
+    const [robotsSource, headers] = await Promise.all([
+      readFile(path.join(root, relativeRobots), "utf8"),
+      readFile(path.join(root, relativeHeaders), "utf8"),
+    ]);
+    assert.match(robotsSource, /ai-train=yes/u, `${surface} robots must allow training`);
+    assert.doesNotMatch(
+      robotsSource,
+      /use=reference/u,
+      `${surface} must use supported Content Signals fields only`,
+    );
+    assert.match(
+      headers,
+      /\/robots\.txt[\s\S]*ai-train=yes/u,
+      `${surface} must emit the response header`,
+    );
+  }
+});
+
+test("structured data joins each page to the product, site, and real operator", () => {
+  const about = structuredDataForMarketingPage(resolveMarketingSocial("/about"));
+  const graph = about["@graph"];
+  const page = graph.find((entry) => entry["@id"] === "https://openpo.st/about#webpage");
+  const software = graph.find((entry) => entry["@id"] === "https://openpo.st/#software");
+  const source = graph.find((entry) => entry["@id"] === "https://openpo.st/#source");
+  const operator = graph.find((entry) => entry["@id"] === "https://openpo.st/#operator");
+
+  assert.equal(page["@type"], "AboutPage");
+  assert.deepEqual(page.about, { "@id": "https://openpo.st/#software" });
+  assert.equal(software.name, "OpenPost");
+  assert.equal(software.operatingSystem, "Web, Android");
+  assert.deepEqual(software.sameAs, ["https://github.com/getopenpost/openpost"]);
+  assert.deepEqual(software.softwareHelp, {
+    "@type": "WebPage",
+    url: "https://docs.openpo.st/guides/quickstart",
+  });
+  assert.deepEqual(software.subjectOf, [
+    {
+      "@type": "WebPage",
+      url: "https://github.com/getopenpost/openpost/blob/main/docs/development/index.md",
+    },
+    {
+      "@type": "WebPage",
+      url: "https://docs.openpo.st/guides/automation",
+    },
+    {
+      "@type": "WebPage",
+      url: "https://discord.com/invite/u2QwukmY4W",
+    },
+  ]);
+  assert.ok(
+    software.subjectOf.every(
+      (subject) => typeof subject !== "string" && subject["@type"] === "WebPage",
+    ),
+    "subjectOf values must be CreativeWork nodes rather than URL strings",
+  );
+  assert.equal(source.codeRepository, "https://github.com/getopenpost/openpost");
+  assert.deepEqual(source.runtimePlatform, ["Web", "Linux", "Android"]);
+  assert.equal(operator.name, "Rodrigo Dias");
+  assert.equal(operator.homeLocation.address.addressCountry, "PT");
+  assert.equal(operator.contactPoint.url, "https://openpo.st/contact");
+
+  const faq = structuredDataForMarketingPage(resolveMarketingSocial("/faq"));
+  const faqPage = faq["@graph"].find((entry) => entry["@id"] === "https://openpo.st/faq#webpage");
+  assert.equal(faqPage["@type"], "FAQPage");
+  assert.ok(faqPage.mainEntity.length >= 7);
+  assert.equal(faqPage.mainEntity[0].acceptedAnswer["@type"], "Answer");
+});
+
+test("platform guides link to maintained account documentation", async () => {
+  for (const platform of platforms) {
+    assert.equal(platform.docsUrl, "https://docs.openpo.st/guides/accounts");
+  }
+  await readFile(new URL("../apps/docs/content/docs/guides/accounts.mdx", import.meta.url));
+});
+
+test("changelog feed contains only dated stable releases and escaped content", () => {
+  const feed = renderChangelogAtomFeed(`
+## [Unreleased]
+
+### Added
+
+- Work in progress
+
+## [4.1.0] - 2026-08-23
+
+### Added
+
+- API & agent discovery
+
+## [4.0.1] - 2026-08-22
+
+### Fixed
+
+- Release feed
+`);
+
+  assert.match(feed, /<updated>2026-08-23T00:00:00Z<\/updated>/u);
+  assert.match(feed, /OpenPost v4\.1\.0/u);
+  assert.match(feed, /API &amp; agent discovery/u);
+  assert.match(feed, /changelog#v4\.0\.1/u);
+  assert.doesNotMatch(feed, /Work in progress|Unreleased/u);
+  // Feed readers key entries on these IDs; changing them re-notifies every subscriber.
+  assert.match(feed, /<id>https:\/\/openpo\.st\/changelog<\/id>/u);
+  assert.match(feed, /<link href="https:\/\/openpo\.st\/changelog\.xml" rel="self"/u);
+  assert.match(feed, /<id>https:\/\/openpo\.st\/changelog#v4\.1\.0<\/id>/u);
+});
+
+test("marketing reads the canonical changelog from the grouped app directory", async () => {
+  const canonical = await readFile(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const appRoot = fileURLToPath(new URL("../apps/marketing/", import.meta.url));
+  assert.equal(await readCanonicalChangelog(appRoot), canonical);
+});

@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+	billingPeriodFromSearchParams,
+	checkoutPathForPlan,
+	hostedPlanByID,
+	hostedPlans,
+	normalizeBillingPeriod,
+	normalizeHostedPlanID,
+	paddleTransactionIDFromSearchParams
+} from './billing';
+
+describe('hosted billing catalog', () => {
+	it('keeps the USD-first monthly and annual prices in the product catalog', () => {
+		expect(hostedPlans.map((plan) => [plan.id, plan.monthlyPriceUSD, plan.annualPriceUSD])).toEqual(
+			[
+				['founder', 29, 290],
+				['team', 59, 590],
+				['agency', 99, 990]
+			]
+		);
+	});
+
+	it('rejects unknown plans instead of selecting Solo', () => {
+		expect(normalizeHostedPlanID('AGENCY')).toBe('agency');
+		expect(normalizeHostedPlanID('enterprise')).toBe('');
+		expect(normalizeHostedPlanID('starter')).toBe('');
+		expect(normalizeHostedPlanID('pro')).toBe('');
+		expect(hostedPlanByID('enterprise')).toBeUndefined();
+	});
+
+	it('accepts only canonical monthly and annual billing periods', () => {
+		expect(normalizeBillingPeriod('annual')).toBe('annual');
+		expect(billingPeriodFromSearchParams(new URLSearchParams('billing_period=annual'))).toBe(
+			'annual'
+		);
+		expect(normalizeBillingPeriod('yearly')).toBe('');
+		expect(normalizeBillingPeriod('quarterly')).toBe('');
+		expect(billingPeriodFromSearchParams(new URLSearchParams())).toBe('');
+	});
+
+	it('builds an internal checkout path with a safe plan and billing period', () => {
+		expect(checkoutPathForPlan('team', 'annual')).toBe('/checkout?plan=team&billing_period=annual');
+		expect(checkoutPathForPlan('unknown', 'annual')).toBe('');
+		expect(checkoutPathForPlan('founder', 'yearly')).toBe('');
+	});
+
+	it('accepts only Paddle transaction IDs from managed payment links', () => {
+		expect(
+			paddleTransactionIDFromSearchParams(
+				new URLSearchParams('_ptxn=txn_01jmanagedcheckout123456789')
+			)
+		).toBe('txn_01jmanagedcheckout123456789');
+		expect(
+			paddleTransactionIDFromSearchParams(new URLSearchParams('_ptxn=not-a-transaction'))
+		).toBe('');
+		expect(paddleTransactionIDFromSearchParams(new URLSearchParams())).toBe('');
+	});
+
+	it('preserves every sellable plan across monthly and annual checkout links', () => {
+		for (const plan of hostedPlans) {
+			for (const period of ['monthly', 'annual'] as const) {
+				expect(checkoutPathForPlan(plan.id, period)).toBe(
+					`/checkout?plan=${plan.id}&billing_period=${period}`
+				);
+			}
+		}
+	});
+});

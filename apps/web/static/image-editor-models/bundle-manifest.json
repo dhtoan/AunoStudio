@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "resources": [
+    "/onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm",
+    "/onnxruntime-web/ort-wasm-simd-threaded.wasm",
+    "/onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs",
+    "/onnxruntime-web/ort-wasm-simd-threaded.mjs",
+    "/models/isnet_quint8"
+  ]
+}

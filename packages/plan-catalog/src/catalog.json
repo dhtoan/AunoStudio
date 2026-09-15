@@ -1,0 +1,67 @@
+{
+  "version": "2026-09-08",
+  "purchase_terms": {
+    "trial_days": 14,
+    "card_required": true,
+    "due_today_usd": 0
+  },
+  "self_hosted": {
+    "software_fee_usd": 0,
+    "documentation_url": "https://docs.openpo.st/self-hosting/",
+    "production_checklist_url": "https://docs.openpo.st/self-hosting/configuration",
+    "source_url": "https://github.com/getopenpost/openpost"
+  },
+  "plans": [
+    {
+      "id": "founder",
+      "name": "Solo",
+      "description": "Publish your own work across your channels.",
+      "best_for": "solo founders and creators",
+      "monthly_price_usd": 29,
+      "annual_price_usd": 290,
+      "featured": true,
+      "limits": {
+        "workspaces": 1,
+        "social_accounts": 10,
+        "scheduled_posts_monthly": 500,
+        "media_bytes_stored": 10000000000,
+        "media_bytes_uploaded_monthly": 10000000000,
+        "team_members": 1
+      }
+    },
+    {
+      "id": "team",
+      "name": "Team",
+      "description": "Plan and publish together in shared workspaces.",
+      "best_for": "small teams publishing together",
+      "monthly_price_usd": 59,
+      "annual_price_usd": 590,
+      "featured": false,
+      "limits": {
+        "workspaces": 3,
+        "social_accounts": 10,
+        "scheduled_posts_monthly": 500,
+        "media_bytes_stored": 10000000000,
+        "media_bytes_uploaded_monthly": 10000000000,
+        "team_members": 5
+      }
+    },
+    {
+      "id": "agency",
+      "name": "Agency",
+      "description": "Keep each client’s content and accounts separate.",
+      "best_for": "agencies managing client accounts",
+      "monthly_price_usd": 99,
+      "annual_price_usd": 990,
+      "featured": false,
+      "limits": {
+        "workspaces": 10,
+        "social_accounts": 10,
+        "scheduled_posts_monthly": 500,
+        "media_bytes_stored": 10000000000,
+        "media_bytes_uploaded_monthly": 10000000000,
+        "team_members": 10
+      }
+    }
+  ]
+}

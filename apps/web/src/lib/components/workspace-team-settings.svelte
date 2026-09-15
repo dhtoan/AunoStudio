@@ -1,0 +1,1151 @@
+<script lang="ts">
+	import { onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
+	import { Button } from '$lib/components/ui/button';
+	import CopyButton from '$lib/components/copy-button.svelte';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import AppSelect from '$lib/components/app-select.svelte';
+	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
+	import type { DestructiveActionOutcome } from '$lib/destructive-action-outcome';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+	import { client } from '$lib/api/client';
+	import {
+		adminQueryKeys,
+		developerQueryKeys,
+		openPostWorkspaceKey,
+		OpenPostQueryError,
+		publicProfileQueryKeys,
+		workspaceAccessAuditQueryOptions,
+		organizationQueryKeys,
+		workspaceSettingsQueryKeys,
+		workspaceTeamQueryOptions
+	} from '@openpost/query-catalog';
+	import { queryClient } from '$lib/query/client';
+	import {
+		removeWorkspaceQueriesAfterAccessLoss,
+		workspaceSettingsQueryAPI
+	} from '$lib/query/workspace-settings';
+	import { m } from '$lib/paraglide/messages';
+	import { showToast } from '$lib/toast';
+	import { auth } from '$lib/stores/auth';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
+	import {
+		registerSettingsInitialLoad,
+		SETTINGS_INITIAL_LOAD_PARTICIPANT
+	} from '$lib/settings-initial-load.svelte';
+	import type {
+		TeamMember,
+		WorkspaceAccessAuditEvent,
+		WorkspaceInvitation,
+		WorkspaceTeam
+	} from '../../routes/settings/settings-data';
+	import { ProtectedIcon, ThemeIcon } from '$lib/themes/icons';
+
+	type WorkspaceRole = 'admin' | 'editor' | 'viewer';
+	type InvitationStatus = WorkspaceInvitation['status'];
+	type TeamStatus = 'all' | 'active' | 'inactive' | 'pending' | InvitationStatus;
+	type DestructiveActionTarget =
+		| { kind: 'revoke'; invitation: WorkspaceInvitation }
+		| { kind: 'deactivate'; member: TeamMember }
+		| { kind: 'remove'; member: TeamMember };
+	type DestructiveAction = DestructiveActionTarget & { workspaceID: string };
+
+	interface Props {
+		workspaceID: string;
+		organizationID: string;
+		currentUserID: string;
+		active?: boolean;
+		onMembershipChanged?: () => void | Promise<void>;
+	}
+
+	let {
+		workspaceID,
+		organizationID,
+		currentUserID,
+		active = false,
+		onMembershipChanged = () => undefined
+	}: Props = $props();
+
+	const unsavedChanges = getOptionalUnsavedChanges();
+	let loading = $state(false);
+	let loadError = $state('');
+	let actionError = $state('');
+	let team = $state.raw<WorkspaceTeam | null>(null);
+	let auditEvents = $state.raw<WorkspaceAccessAuditEvent[]>([]);
+	let auditReady = $state(false);
+	let auditLoading = $state(false);
+	let auditError = $state('');
+	let inviteEmail = $state('');
+	let inviteRole = $state<WorkspaceRole>('editor');
+	let search = $state('');
+	let roleFilter = $state<'all' | WorkspaceRole>('all');
+	let statusFilter = $state<TeamStatus>('all');
+	let busyKey = $state('');
+	let createdInviteURL = $state('');
+	let createdInviteDeliveryStatus = $state<WorkspaceInvitation['email_delivery_status'] | ''>('');
+	let destructiveOpen = $state(false);
+	let destructiveAction = $state.raw<DestructiveAction | null>(null);
+	let requestSequence = 0;
+	let loadedWorkspaceID = '';
+	let mutationSequence = 0;
+	let mutationScope = '';
+
+	const canManage = $derived(team?.can_manage ?? false);
+	const reportInitialLoad = registerSettingsInitialLoad(SETTINGS_INITIAL_LOAD_PARTICIPANT.members);
+	$effect(() => {
+		// Load-state reads stay unconditional so the effect keeps tracking them even
+		// when an earlier term short-circuits; otherwise the boundary never settles.
+		const scopeStale = loadedWorkspaceID !== workspaceID && !loadError;
+		const waitingForTeam = loading && !team;
+		const waitingForAudit = Boolean(team?.can_manage) && !auditReady && !auditError;
+		reportInitialLoad(
+			Boolean(active && workspaceID && (scopeStale || waitingForTeam || waitingForAudit))
+		);
+	});
+	const draftDirty = $derived(Boolean(inviteEmail.trim()) || inviteRole !== 'editor');
+	const normalizedSearch = $derived(search.trim().toLocaleLowerCase());
+	const filteredMembers = $derived.by(() => {
+		if (
+			!team ||
+			(statusFilter !== 'all' && statusFilter !== 'active' && statusFilter !== 'inactive')
+		)
+			return [];
+		return team.members.filter((member) => {
+			if (roleFilter !== 'all' && member.role !== roleFilter) return false;
+			if (
+				(statusFilter === 'active' || statusFilter === 'inactive') &&
+				member.status !== statusFilter
+			)
+				return false;
+			return !normalizedSearch || member.email.toLocaleLowerCase().includes(normalizedSearch);
+		});
+	});
+	const filteredInvitations = $derived.by(() => {
+		if (!team || statusFilter === 'active' || statusFilter === 'inactive') return [];
+		return team.invitations.filter((invitation) => {
+			if (roleFilter !== 'all' && invitation.role !== roleFilter) return false;
+			if (statusFilter === 'pending' && !invitationCanRecover(invitation.status)) return false;
+			if (
+				statusFilter !== 'all' &&
+				statusFilter !== 'pending' &&
+				invitation.status !== statusFilter
+			)
+				return false;
+			return !normalizedSearch || invitation.email.toLocaleLowerCase().includes(normalizedSearch);
+		});
+	});
+	const hasResults = $derived(filteredMembers.length > 0 || filteredInvitations.length > 0);
+	const roleOptions = $derived([
+		{ value: 'all', label: m.settings_team_all_roles() },
+		{ value: 'admin', label: roleLabel('admin') },
+		{ value: 'editor', label: roleLabel('editor') },
+		{ value: 'viewer', label: roleLabel('viewer') }
+	]);
+	const editableRoleOptions = $derived(roleOptions.slice(1));
+	const invitationStatusOptions = $derived([
+		{ value: 'created', label: m.settings_invitation_status_created() },
+		{ value: 'queued', label: m.settings_invitation_status_queued() },
+		{ value: 'sent', label: m.settings_invitation_status_sent() },
+		{ value: 'delivered', label: m.settings_invitation_status_delivered() },
+		{
+			value: 'delivery_failed',
+			label: m.settings_invitation_status_delivery_failed()
+		},
+		{
+			value: 'delivery_unavailable',
+			label: m.settings_invitation_status_delivery_unavailable()
+		},
+		{ value: 'expired', label: m.settings_invitation_status_expired() },
+		{ value: 'revoked', label: m.settings_invitation_status_revoked() },
+		{ value: 'accepted', label: m.settings_invitation_status_accepted() }
+	] satisfies Array<{ value: InvitationStatus; label: string }>);
+	const statusOptions = $derived([
+		{ value: 'all', label: m.settings_team_all_statuses() },
+		{ value: 'active', label: m.settings_member_status_active() },
+		{ value: 'inactive', label: m.settings_member_status_inactive() },
+		{ value: 'pending', label: m.settings_invitation_status_pending() },
+		...invitationStatusOptions
+	]);
+
+	$effect(() => {
+		unsavedChanges?.set('member-settings', draftDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('member-settings');
+	});
+
+	$effect(() => {
+		const nextWorkspaceID = workspaceID;
+		const nextMutationScope = `${nextWorkspaceID}:${currentUserID}`;
+		if (nextMutationScope !== mutationScope) {
+			mutationScope = nextMutationScope;
+			mutationSequence += 1;
+			busyKey = '';
+		}
+		if (!active || !nextWorkspaceID || loadedWorkspaceID === nextWorkspaceID) return;
+		destructiveOpen = false;
+		destructiveAction = null;
+		void loadTeam({ targetWorkspaceID: nextWorkspaceID });
+	});
+
+	function presentTeam(data: {
+		members?: TeamMember[] | null;
+		invitations?: WorkspaceInvitation[] | null;
+		current_seats: number;
+		can_manage: boolean;
+	}): WorkspaceTeam {
+		return {
+			members: data.members ?? [],
+			invitations: data.invitations ?? [],
+			current_seats: data.current_seats,
+			can_manage: data.can_manage
+		};
+	}
+
+	function clearTeamAfterAuthorizationLoss(targetWorkspaceID: string) {
+		queryClient.removeQueries({
+			predicate: (query) =>
+				query.queryKey[0] === 'openpost' &&
+				query.queryKey[1] === 'v1' &&
+				query.queryKey[2] === 'workspace' &&
+				query.queryKey[3] === targetWorkspaceID &&
+				(query.queryKey[4] === 'team' || query.queryKey[4] === 'access-audit')
+		});
+		team = null;
+		auditEvents = [];
+		auditReady = false;
+		auditError = '';
+		createdInviteURL = '';
+		createdInviteDeliveryStatus = '';
+	}
+
+	function clearWorkspaceAfterMembershipLoss(targetWorkspaceID: string) {
+		removeWorkspaceQueriesAfterAccessLoss(queryClient, targetWorkspaceID);
+		clearTeamAfterAuthorizationLoss(targetWorkspaceID);
+	}
+
+	async function reconcileSelfMembershipChange(
+		targetWorkspaceID: string,
+		actorID: string,
+		accessLost: boolean
+	) {
+		if (!actorID || get(auth).user?.id !== actorID) return;
+		if (accessLost) clearWorkspaceAfterMembershipLoss(targetWorkspaceID);
+		const projection = auth.captureUserProjection(actorID);
+		if (!projection) return;
+		try {
+			const bootstrap = await workspaceCtx.loadWorkspaces();
+			if (get(auth).user?.id === actorID) auth.projectBootstrap(bootstrap, projection);
+		} catch {
+			// Mutation invalidations remain stale and retry when the next owner mounts.
+		}
+	}
+
+	async function loadTeam(
+		loadOptions: { targetWorkspaceID?: string; preserveCurrent?: boolean } = {}
+	) {
+		const targetWorkspaceID = loadOptions.targetWorkspaceID ?? workspaceID;
+		if (!targetWorkspaceID) return;
+		const sequence = ++requestSequence;
+		const workspaceChanged = loadedWorkspaceID !== targetWorkspaceID;
+		loadedWorkspaceID = targetWorkspaceID;
+		loadError = '';
+		actionError = '';
+		if (workspaceChanged) {
+			team = null;
+			auditEvents = [];
+			auditReady = false;
+			auditError = '';
+			createdInviteURL = '';
+			createdInviteDeliveryStatus = '';
+		}
+		const options = workspaceTeamQueryOptions(workspaceSettingsQueryAPI, targetWorkspaceID);
+		const cachedTeam = queryClient.getQueryData<Parameters<typeof presentTeam>[0]>(
+			options.queryKey
+		);
+		if (cachedTeam !== undefined) team = presentTeam(cachedTeam);
+		else if (!loadOptions.preserveCurrent) {
+			team = null;
+		}
+		loading = !team;
+		if (team?.can_manage) void loadAudit(targetWorkspaceID, sequence);
+		try {
+			const data = await queryClient.fetchQuery(options);
+			if (sequence !== requestSequence || workspaceID !== targetWorkspaceID) return;
+			const nextTeam = presentTeam(data);
+			team = nextTeam;
+			if (nextTeam.can_manage) void loadAudit(targetWorkspaceID, sequence);
+			else {
+				auditEvents = [];
+				auditReady = false;
+				auditError = '';
+			}
+		} catch (error) {
+			if (sequence !== requestSequence || workspaceID !== targetWorkspaceID) return;
+			if (error instanceof OpenPostQueryError && (error.status === 401 || error.status === 403)) {
+				clearTeamAfterAuthorizationLoss(targetWorkspaceID);
+			}
+			loadError = error instanceof Error ? error.message : m.settings_team_load_failed();
+		} finally {
+			if (sequence === requestSequence) loading = false;
+		}
+	}
+
+	async function loadAudit(targetWorkspaceID: string, sequence = requestSequence) {
+		const options = workspaceAccessAuditQueryOptions(
+			workspaceSettingsQueryAPI,
+			targetWorkspaceID,
+			20
+		);
+		const cachedAudit = queryClient.getQueryData<WorkspaceAccessAuditEvent[]>(options.queryKey);
+		if (cachedAudit !== undefined) {
+			auditEvents = cachedAudit;
+			auditReady = true;
+		} else {
+			auditEvents = [];
+			auditReady = false;
+		}
+		auditLoading = cachedAudit === undefined;
+		auditError = '';
+		try {
+			const data = await queryClient.fetchQuery(options);
+			if (sequence === requestSequence && workspaceID === targetWorkspaceID) {
+				auditEvents = data ?? [];
+				auditReady = true;
+			}
+		} catch (error) {
+			if (sequence === requestSequence && workspaceID === targetWorkspaceID) {
+				if (error instanceof OpenPostQueryError && (error.status === 401 || error.status === 403)) {
+					clearTeamAfterAuthorizationLoss(targetWorkspaceID);
+				}
+				auditError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+		} finally {
+			if (sequence === requestSequence) auditLoading = false;
+		}
+	}
+
+	async function createInvitation(event: SubmitEvent) {
+		event.preventDefault();
+		if (!canManage || !inviteEmail.trim()) return;
+		const targetWorkspaceID = workspaceID;
+		const targetOrganizationID = organizationID;
+		const actorID = get(auth).user?.id ?? '';
+		if (!actorID) return;
+		const sequence = ++mutationSequence;
+		const isSameActor = () => get(auth).user?.id === actorID;
+		const isCurrent = () =>
+			isSameActor() && sequence === mutationSequence && workspaceID === targetWorkspaceID;
+		busyKey = 'invite';
+		actionError = '';
+		createdInviteURL = '';
+		createdInviteDeliveryStatus = '';
+		try {
+			const { data, error } = await client.POST('/workspaces/{id}/invitations', {
+				params: { path: { id: targetWorkspaceID } },
+				body: { email: inviteEmail.trim(), role: inviteRole }
+			});
+			if (error || !data) throw new Error(error?.detail || m.settings_action_failed());
+			if (!isSameActor()) return;
+			await reloadAfterMutation(targetWorkspaceID, targetOrganizationID, actorID, sequence);
+			if (!isCurrent()) return;
+			const invitation = data;
+			const nextInviteURL = invitation.accept_url || '';
+			inviteEmail = '';
+			inviteRole = 'editor';
+			createdInviteURL = nextInviteURL;
+			createdInviteDeliveryStatus = invitation.email_delivery_status;
+			showToast(m.settings_invite_created());
+		} catch (error) {
+			if (isCurrent()) {
+				actionError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+		} finally {
+			if (isCurrent()) busyKey = '';
+		}
+	}
+
+	async function updateMember(
+		member: TeamMember,
+		update: { role?: WorkspaceRole; status?: 'active' | 'inactive' },
+		targetWorkspaceID = workspaceID,
+		targetOrganizationID = organizationID
+	) {
+		if (!targetWorkspaceID || targetWorkspaceID !== workspaceID) return false;
+		const actorID = get(auth).user?.id ?? '';
+		if (!actorID) return false;
+		const selfMutation = member.user_id === actorID;
+		const sequence = ++mutationSequence;
+		const isSameActor = () => get(auth).user?.id === actorID;
+		const isCurrent = () =>
+			isSameActor() && sequence === mutationSequence && workspaceID === targetWorkspaceID;
+		busyKey = `member:${member.user_id}`;
+		actionError = '';
+		try {
+			const { error } = await client.PATCH('/workspaces/{id}/members/{user_id}', {
+				params: { path: { id: targetWorkspaceID, user_id: member.user_id } },
+				body: update
+			});
+			if (error) throw new Error(error.detail || m.settings_action_failed());
+			if (!isSameActor()) return false;
+			if (selfMutation && update.status === 'inactive') {
+				await invalidateMutationQueries(targetWorkspaceID, targetOrganizationID, actorID);
+				await reconcileSelfMembershipChange(targetWorkspaceID, actorID, true);
+				if (!isCurrent()) return false;
+				showToast(m.settings_member_deactivated());
+				await onMembershipChanged();
+				return isCurrent();
+			}
+			await reloadAfterMutation(targetWorkspaceID, targetOrganizationID, actorID, sequence);
+			if (selfMutation) {
+				await reconcileSelfMembershipChange(targetWorkspaceID, actorID, false);
+			}
+			if (!isCurrent()) return false;
+			if (update.role) showToast(m.settings_member_role_updated());
+			if (update.status === 'inactive') showToast(m.settings_member_deactivated());
+			if (update.status === 'active') showToast(m.settings_member_reactivated());
+			if (selfMutation) {
+				await onMembershipChanged();
+				return isCurrent();
+			}
+			return true;
+		} catch (error) {
+			if (isCurrent()) {
+				actionError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+			return false;
+		} finally {
+			if (isCurrent()) busyKey = '';
+		}
+	}
+
+	async function removeMember(
+		member: TeamMember,
+		targetWorkspaceID = workspaceID,
+		targetOrganizationID = organizationID
+	) {
+		if (!targetWorkspaceID || targetWorkspaceID !== workspaceID) return false;
+		const actorID = get(auth).user?.id ?? '';
+		if (!actorID) return false;
+		const selfMutation = member.user_id === actorID;
+		const sequence = ++mutationSequence;
+		const isSameActor = () => get(auth).user?.id === actorID;
+		const isCurrent = () =>
+			isSameActor() && sequence === mutationSequence && workspaceID === targetWorkspaceID;
+		busyKey = `member:${member.user_id}`;
+		actionError = '';
+		try {
+			const { error } = await client.DELETE('/workspaces/{id}/members/{user_id}', {
+				params: { path: { id: targetWorkspaceID, user_id: member.user_id } }
+			});
+			if (error) throw new Error(error.detail || m.settings_action_failed());
+			if (!isSameActor()) return false;
+			if (selfMutation) {
+				await invalidateMutationQueries(targetWorkspaceID, targetOrganizationID, actorID);
+				await reconcileSelfMembershipChange(targetWorkspaceID, actorID, true);
+				if (!isCurrent()) return false;
+				showToast(m.settings_member_removed());
+				await onMembershipChanged();
+				return isCurrent();
+			}
+			await reloadAfterMutation(targetWorkspaceID, targetOrganizationID, actorID, sequence);
+			if (!isCurrent()) return false;
+			showToast(m.settings_member_removed());
+			return true;
+		} catch (error) {
+			if (isCurrent()) {
+				actionError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+			return false;
+		} finally {
+			if (isCurrent()) busyKey = '';
+		}
+	}
+
+	async function resendInvitation(invitation: WorkspaceInvitation) {
+		const targetWorkspaceID = workspaceID;
+		const targetOrganizationID = organizationID;
+		const actorID = get(auth).user?.id ?? '';
+		if (!actorID) return;
+		const sequence = ++mutationSequence;
+		const isSameActor = () => get(auth).user?.id === actorID;
+		const isCurrent = () =>
+			isSameActor() && sequence === mutationSequence && workspaceID === targetWorkspaceID;
+		busyKey = `invitation:${invitation.id}`;
+		actionError = '';
+		createdInviteURL = '';
+		createdInviteDeliveryStatus = '';
+		try {
+			const { data, error } = await client.POST(
+				'/workspaces/{id}/invitations/{invitation_id}/resend',
+				{
+					params: {
+						path: { id: targetWorkspaceID, invitation_id: invitation.id }
+					}
+				}
+			);
+			if (error || !data) throw new Error(error?.detail || m.settings_action_failed());
+			if (!isSameActor()) return;
+			await reloadAfterMutation(targetWorkspaceID, targetOrganizationID, actorID, sequence);
+			if (!isCurrent()) return;
+			const nextInviteURL = data.accept_url || '';
+			createdInviteURL = nextInviteURL;
+			createdInviteDeliveryStatus = data.email_delivery_status;
+			showToast(m.settings_invitation_resent());
+		} catch (error) {
+			if (isCurrent()) {
+				actionError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+		} finally {
+			if (isCurrent()) busyKey = '';
+		}
+	}
+
+	async function revokeInvitation(
+		invitation: WorkspaceInvitation,
+		targetWorkspaceID = workspaceID,
+		targetOrganizationID = organizationID
+	) {
+		if (!targetWorkspaceID || targetWorkspaceID !== workspaceID) return false;
+		const actorID = get(auth).user?.id ?? '';
+		if (!actorID) return false;
+		const sequence = ++mutationSequence;
+		const isSameActor = () => get(auth).user?.id === actorID;
+		const isCurrent = () =>
+			isSameActor() && sequence === mutationSequence && workspaceID === targetWorkspaceID;
+		busyKey = `invitation:${invitation.id}`;
+		actionError = '';
+		try {
+			const { error } = await client.DELETE('/workspaces/{id}/invitations/{invitation_id}', {
+				params: {
+					path: { id: targetWorkspaceID, invitation_id: invitation.id }
+				}
+			});
+			if (error) throw new Error(error.detail || m.settings_action_failed());
+			if (!isSameActor()) return false;
+			await reloadAfterMutation(targetWorkspaceID, targetOrganizationID, actorID, sequence);
+			if (!isCurrent()) return false;
+			showToast(m.settings_invitation_revoked());
+			return true;
+		} catch (error) {
+			if (isCurrent()) {
+				actionError = error instanceof Error ? error.message : m.settings_action_failed();
+			}
+			return false;
+		} finally {
+			if (isCurrent()) busyKey = '';
+		}
+	}
+
+	async function invalidateMutationQueries(
+		targetWorkspaceID: string,
+		targetOrganizationID: string,
+		actorID: string
+	) {
+		if (!actorID || get(auth).user?.id !== actorID) return;
+		queryClient.removeQueries({ queryKey: publicProfileQueryKeys.all() });
+		const invalidations = [
+			queryClient.invalidateQueries({ queryKey: adminQueryKeys.usersRoot() }),
+			queryClient.invalidateQueries({
+				queryKey: developerQueryKeys.mcpActivityRoot()
+			}),
+			queryClient.invalidateQueries({
+				queryKey: workspaceSettingsQueryKeys.team(targetWorkspaceID)
+			}),
+			queryClient.invalidateQueries({
+				queryKey: openPostWorkspaceKey(targetWorkspaceID, 'access-audit')
+			}),
+			queryClient.invalidateQueries({
+				queryKey: workspaceSettingsQueryKeys.setup(targetWorkspaceID),
+				exact: true
+			})
+		];
+		if (targetOrganizationID) {
+			invalidations.push(
+				queryClient.invalidateQueries({
+					queryKey: organizationQueryKeys.auditRoot(targetOrganizationID)
+				})
+			);
+		}
+		invalidations.push(
+			queryClient.invalidateQueries({
+				queryKey: organizationQueryKeys.instanceAuditRoot()
+			})
+		);
+		await Promise.all(invalidations);
+	}
+
+	async function reloadAfterMutation(
+		targetWorkspaceID: string,
+		targetOrganizationID: string,
+		actorID: string,
+		sequence: number
+	) {
+		await invalidateMutationQueries(targetWorkspaceID, targetOrganizationID, actorID);
+		if (
+			get(auth).user?.id !== actorID ||
+			sequence !== mutationSequence ||
+			workspaceID !== targetWorkspaceID
+		)
+			return;
+		loadedWorkspaceID = '';
+		await loadTeam({ targetWorkspaceID, preserveCurrent: true });
+	}
+
+	onDestroy(() => {
+		requestSequence += 1;
+		mutationSequence += 1;
+	});
+
+	function requestDestructiveAction(action: DestructiveActionTarget) {
+		destructiveAction = { ...action, workspaceID };
+		destructiveOpen = true;
+	}
+
+	async function confirmDestructiveAction(): Promise<DestructiveActionOutcome> {
+		const action = destructiveAction;
+		if (!action) return { ok: false };
+		if (action.kind === 'revoke') {
+			const ok = await revokeInvitation(action.invitation, action.workspaceID);
+			const message = ok ? undefined : actionError;
+			if (!ok) actionError = '';
+			return { ok, message };
+		}
+		if (action.kind === 'deactivate') {
+			const ok = await updateMember(action.member, { status: 'inactive' }, action.workspaceID);
+			const message = ok ? undefined : actionError;
+			if (!ok) actionError = '';
+			return { ok, message };
+		}
+		const ok = await removeMember(action.member, action.workspaceID);
+		const message = ok ? undefined : actionError;
+		if (!ok) actionError = '';
+		return { ok, message };
+	}
+
+	function destructiveTitle() {
+		if (destructiveAction?.kind === 'revoke') return m.settings_revoke_invitation_title();
+		if (destructiveAction?.kind === 'deactivate') return m.settings_member_deactivate_title();
+		return m.settings_member_remove_title();
+	}
+
+	function destructiveBody() {
+		if (destructiveAction?.kind === 'revoke') return m.settings_revoke_invitation_body();
+		if (destructiveAction?.kind === 'deactivate') {
+			return m.settings_member_deactivate_body({
+				email: destructiveAction.member.email
+			});
+		}
+		if (destructiveAction?.kind === 'remove') {
+			return m.settings_member_remove_body({
+				email: destructiveAction.member.email
+			});
+		}
+		return '';
+	}
+
+	function roleLabel(role: string) {
+		if (role === 'admin') return m.settings_role_admin();
+		if (role === 'viewer') return m.settings_role_viewer();
+		return m.settings_role_editor();
+	}
+
+	function roleDescription(role: string) {
+		if (role === 'admin') return m.settings_role_admin_description();
+		if (role === 'viewer') return m.settings_role_viewer_description();
+		return m.settings_role_editor_description();
+	}
+
+	function invitationDelivery(status: WorkspaceInvitation['email_delivery_status']) {
+		switch (status) {
+			case 'created':
+				return {
+					label: m.settings_invitation_delivery_created(),
+					createdMessage: m.settings_invite_delivery_queued(),
+					tone: 'success' as const,
+					needsAction: false
+				};
+			case 'queued':
+				return {
+					label: m.settings_invitation_delivery_queued(),
+					createdMessage: m.settings_invite_delivery_queued(),
+					tone: 'success' as const,
+					needsAction: false
+				};
+			case 'sent':
+				return {
+					label: m.settings_invitation_delivery_sent(),
+					createdMessage: m.settings_invite_delivery_sent(),
+					tone: 'success' as const,
+					needsAction: false
+				};
+			case 'delivered':
+				return {
+					label: m.settings_invitation_delivery_delivered(),
+					createdMessage: m.settings_invite_delivery_sent(),
+					tone: 'success' as const,
+					needsAction: false
+				};
+			case 'failed':
+				return {
+					label: m.settings_invitation_delivery_failed(),
+					createdMessage: m.settings_invite_delivery_failed(),
+					tone: 'warning' as const,
+					needsAction: true
+				};
+			default:
+				return {
+					label: m.settings_invitation_delivery_unavailable(),
+					createdMessage: m.settings_invite_delivery_unavailable(),
+					tone: 'warning' as const,
+					needsAction: true
+				};
+		}
+	}
+
+	function invitationStatusLabel(status: InvitationStatus) {
+		return (
+			invitationStatusOptions.find((option) => option.value === status)?.label ??
+			m.settings_invitation_status_pending()
+		);
+	}
+
+	function invitationCanRecover(status: InvitationStatus) {
+		return status !== 'accepted' && status !== 'revoked';
+	}
+
+	function formatDate(value: string) {
+		if (!value) return '';
+		return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+	}
+
+	function auditDescription(event: WorkspaceAccessAuditEvent) {
+		const email = event.subject_email || m.settings_team_member_unknown();
+		if (event.action === 'invitation.created')
+			return m.settings_access_invitation_created({ email });
+		if (event.action === 'invitation.resent') return m.settings_access_invitation_resent({ email });
+		if (event.action === 'invitation.revoked')
+			return m.settings_access_invitation_revoked({ email });
+		if (event.action === 'invitation.accepted')
+			return m.settings_access_invitation_accepted({ email });
+		if (event.action === 'member.role_changed') {
+			return m.settings_access_role_changed({
+				email,
+				from: roleLabel(event.previous_role || ''),
+				to: roleLabel(event.role || '')
+			});
+		}
+		if (event.action === 'member.deactivated')
+			return m.settings_access_member_deactivated({ email });
+		if (event.action === 'member.reactivated')
+			return m.settings_access_member_reactivated({ email });
+		if (event.action === 'member.removed') return m.settings_access_member_removed({ email });
+		return event.action;
+	}
+</script>
+
+{#if team}
+	<p class="mb-4 text-sm text-muted-foreground">
+		{team.current_seats === 1
+			? m.settings_seat_reserved()
+			: m.settings_seats_reserved({ count: team.current_seats })}
+	</p>
+{/if}
+
+{#if loadError}
+	<div data-testid="team-load-error" class="mb-4">
+		<InlineNotice tone={team ? 'warning' : 'error'} message={loadError}>
+			{#snippet actions()}
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() =>
+						void loadTeam({
+							targetWorkspaceID: workspaceID,
+							preserveCurrent: Boolean(createdInviteURL)
+						})}
+					disabled={loading}
+				>
+					{m.common_retry()}
+				</Button>
+			{/snippet}
+		</InlineNotice>
+	</div>
+{/if}
+{#if actionError}
+	<div data-testid="team-error" class="mb-4">
+		<InlineNotice tone="error" message={actionError} />
+	</div>
+{/if}
+
+{#if loading && !team}
+	<PageLoading layout="grid" label={m.common_loading()} items={2} />
+{:else if team}
+	{#if canManage}
+		<form
+			onsubmit={createInvitation}
+			class="mb-5 grid gap-3 rounded-lg border bg-muted/10 p-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]"
+		>
+			<div class="space-y-2">
+				<Label for="team-invite-email">{m.settings_invite_email()}</Label>
+				<Input
+					id="team-invite-email"
+					data-testid="team-invite-email"
+					type="email"
+					bind:value={inviteEmail}
+					placeholder="teammate@example.com"
+					autocomplete="email"
+					required
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="team-invite-role">{m.settings_role()}</Label>
+				<AppSelect
+					id="team-invite-role"
+					bind:value={inviteRole}
+					options={editableRoleOptions}
+					ariaLabel={m.settings_role()}
+				/>
+				<p class="text-xs text-muted-foreground">
+					{roleDescription(inviteRole)}
+				</p>
+			</div>
+			<div class="flex items-end">
+				<Button type="submit" disabled={Boolean(busyKey) || !inviteEmail.trim()}>
+					{#if busyKey === 'invite'}
+						<ProtectedIcon icon="loading" class="size-4 animate-spin" />
+					{:else}
+						<ThemeIcon role="growth" class="size-4" />
+					{/if}
+					{m.settings_send_invite()}
+				</Button>
+			</div>
+		</form>
+	{:else}
+		<div class="mb-5">
+			<InlineNotice tone="info" message={m.settings_team_read_only()} />
+		</div>
+	{/if}
+
+	{#if createdInviteURL}
+		<div data-testid="team-invite-link" data-feedback-redact>
+			<InlineNotice
+				tone={invitationDelivery(createdInviteDeliveryStatus || 'unavailable').tone}
+				class="mb-5"
+			>
+				<p class="font-medium">
+					{invitationDelivery(createdInviteDeliveryStatus || 'unavailable').createdMessage}
+				</p>
+				<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+					<p class="min-w-0 flex-1 rounded-md bg-background px-3 py-2 font-mono text-xs break-all">
+						{createdInviteURL}
+					</p>
+					<CopyButton
+						variant="outline"
+						size="sm"
+						value={createdInviteURL}
+						scopeKey={`${currentUserID}:${workspaceID}`}
+						errorMessage={m.interaction_copy_failed()}
+					/>
+				</div>
+			</InlineNotice>
+		</div>
+	{/if}
+
+	<div class="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_180px]">
+		<div class="space-y-2">
+			<Label for="team-search">{m.settings_team_search()}</Label>
+			<div class="relative">
+				<ThemeIcon
+					role="search"
+					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+				/>
+				<Input
+					id="team-search"
+					data-testid="team-search"
+					bind:value={search}
+					class="pl-9"
+					placeholder={m.settings_team_search_placeholder()}
+				/>
+			</div>
+		</div>
+		<div class="space-y-2">
+			<Label for="team-role-filter">{m.settings_team_filter_role()}</Label>
+			<AppSelect
+				id="team-role-filter"
+				bind:value={roleFilter}
+				options={roleOptions}
+				ariaLabel={m.settings_team_filter_role()}
+			/>
+		</div>
+		<div class="space-y-2">
+			<Label for="team-status-filter">{m.settings_team_filter_status()}</Label>
+			<AppSelect
+				id="team-status-filter"
+				bind:value={statusFilter}
+				options={statusOptions}
+				ariaLabel={m.settings_team_filter_status()}
+			/>
+		</div>
+	</div>
+
+	{#if !hasResults}
+		<p class="rounded-md border bg-muted/20 p-5 text-sm text-muted-foreground">
+			{m.settings_team_no_results()}
+		</p>
+	{:else}
+		<div class="grid gap-5 xl:grid-cols-2">
+			{#if statusFilter !== 'pending' && statusFilter !== 'expired'}
+				<div>
+					<h3 class="mb-2 text-sm font-semibold">
+						{m.settings_members_heading()}
+					</h3>
+					<div data-testid="team-members-list" class="space-y-2">
+						{#each filteredMembers as member (member.user_id)}
+							<div class="rounded-md border p-3">
+								<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+									<div class="min-w-0">
+										<p class="truncate text-sm font-medium">
+											{member.email}
+											{#if member.user_id === currentUserID}<span class="text-muted-foreground">
+													{m.settings_member_you()}</span
+												>{/if}
+										</p>
+										<p class="mt-1 text-xs text-muted-foreground">
+											{m.settings_member_since({
+												date: formatDate(member.created_at)
+											})}
+										</p>
+									</div>
+									<span
+										class={[
+											'inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-medium',
+											member.status === 'active'
+												? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+												: 'bg-muted text-muted-foreground'
+										]}
+									>
+										{member.status === 'active'
+											? m.settings_member_status_active()
+											: m.settings_member_status_inactive()}
+									</span>
+								</div>
+								<div class="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center">
+									{#if canManage}
+										<AppSelect
+											value={member.role}
+											options={editableRoleOptions}
+											ariaLabel={m.settings_member_role_for({
+												email: member.email
+											})}
+											disabled={Boolean(busyKey)}
+											class="w-full sm:w-40"
+											onValueChange={(role) => {
+												if (role === 'admin' || role === 'editor' || role === 'viewer') {
+													void updateMember(member, { role });
+												}
+											}}
+										/>
+										<div class="flex flex-wrap gap-1 sm:ml-auto">
+											{#if member.status === 'active'}
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													disabled={Boolean(busyKey)}
+													onclick={() =>
+														requestDestructiveAction({
+															kind: 'deactivate',
+															member
+														})}
+												>
+													{m.settings_member_deactivate()}
+												</Button>
+											{:else}
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													disabled={Boolean(busyKey)}
+													onclick={() => void updateMember(member, { status: 'active' })}
+												>
+													{#if busyKey === `member:${member.user_id}`}<ProtectedIcon
+															icon="loading"
+															class="size-4 animate-spin"
+														/>{:else}<ThemeIcon role="refresh" class="size-4" />{/if}
+													{m.settings_member_reactivate()}
+												</Button>
+											{/if}
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												class="text-destructive hover:text-destructive"
+												disabled={Boolean(busyKey)}
+												onclick={() => requestDestructiveAction({ kind: 'remove', member })}
+											>
+												{m.settings_member_remove()}
+											</Button>
+										</div>
+									{:else}
+										<span
+											class="inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-medium"
+											>{roleLabel(member.role)}</span
+										>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if statusFilter !== 'active' && statusFilter !== 'inactive'}
+				<div>
+					<h3 class="mb-2 text-sm font-semibold">
+						{m.settings_pending_invitations()}
+					</h3>
+					<div data-testid="team-invitations-list" class="space-y-2">
+						{#each filteredInvitations as invitation (invitation.id)}
+							<div class="rounded-md border p-3">
+								<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+									<div class="min-w-0">
+										<p class="truncate text-sm font-medium">
+											{invitation.email}
+										</p>
+										<p class="mt-1 text-xs text-muted-foreground">
+											{m.settings_invitation_details({
+												role: roleLabel(invitation.role),
+												date: formatDate(invitation.expires_at)
+											})}
+										</p>
+										<p class="mt-1 text-xs text-muted-foreground">
+											{m.settings_invitation_last_sent({
+												date: formatDate(invitation.last_sent_at)
+											})}
+										</p>
+										<p
+											data-testid={`invitation-email-delivery-${invitation.id}`}
+											class={[
+												'mt-1 text-xs font-medium',
+												invitationDelivery(invitation.email_delivery_status).needsAction
+													? 'text-amber-700 dark:text-amber-300'
+													: 'text-muted-foreground'
+											]}
+										>
+											{invitationDelivery(invitation.email_delivery_status).label}
+										</p>
+										{#if invitationDelivery(invitation.email_delivery_status).needsAction}
+											<p class="mt-1 text-xs text-muted-foreground">
+												{m.settings_invitation_delivery_action()}
+											</p>
+										{/if}
+									</div>
+									<span
+										class="inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-medium"
+									>
+										{invitationStatusLabel(invitation.status)}
+									</span>
+								</div>
+								{#if canManage && invitationCanRecover(invitation.status)}
+									<div class="mt-3 flex flex-wrap justify-end gap-1 border-t pt-3">
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											disabled={Boolean(busyKey)}
+											onclick={() => void resendInvitation(invitation)}
+										>
+											{#if busyKey === `invitation:${invitation.id}`}<ProtectedIcon
+													icon="loading"
+													class="size-4 animate-spin"
+												/>{:else}<ThemeIcon role="refresh" class="size-4" />{/if}
+											{m.settings_invitation_resend()}
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											class="text-destructive hover:text-destructive"
+											disabled={Boolean(busyKey)}
+											onclick={() =>
+												requestDestructiveAction({
+													kind: 'revoke',
+													invitation
+												})}
+										>
+											{m.settings_revoke()}
+										</Button>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	{#if canManage}
+		<div class="mt-6 border-t pt-5">
+			<div class="mb-3 flex items-start gap-3">
+				<div class="rounded-md border bg-muted/30 p-2">
+					<ThemeIcon role="history" class="size-4" />
+				</div>
+				<div>
+					<h3 class="text-sm font-semibold">{m.settings_access_history()}</h3>
+					<p class="text-sm text-muted-foreground">
+						{m.settings_access_history_body()}
+					</p>
+				</div>
+			</div>
+			{#if auditError}
+				<InlineNotice tone={auditReady ? 'warning' : 'error'} message={auditError} class="mb-3">
+					{#snippet actions()}
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => void loadAudit(workspaceID)}
+							disabled={auditLoading}
+						>
+							{m.common_retry()}
+						</Button>
+					{/snippet}
+				</InlineNotice>
+			{/if}
+			{#if auditLoading && !auditReady}
+				<PageLoading layout="list" label={m.common_loading()} items={3} />
+			{:else if auditReady && auditEvents.length === 0}
+				<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+					{m.settings_access_history_empty()}
+				</p>
+			{:else if auditReady}
+				<ol class="space-y-2">
+					{#each auditEvents as event (event.id)}
+						<li
+							class="flex flex-col gap-1 rounded-md border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+						>
+							<span>{auditDescription(event)}</span><time
+								class="shrink-0 text-xs text-muted-foreground"
+								datetime={event.created_at}>{formatDate(event.created_at)}</time
+							>
+						</li>
+					{/each}
+				</ol>
+			{/if}
+		</div>
+	{/if}
+{/if}
+
+<DestructiveConfirmDialog
+	bind:open={destructiveOpen}
+	title={destructiveTitle()}
+	description={destructiveBody()}
+	confirmLabel={destructiveAction?.kind === 'deactivate'
+		? m.settings_member_deactivate()
+		: destructiveAction?.kind === 'remove'
+			? m.settings_member_remove()
+			: m.settings_revoke()}
+	onConfirm={confirmDestructiveAction}
+/>

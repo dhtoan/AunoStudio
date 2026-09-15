@@ -1,0 +1,1048 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import EditorColorWheel from '$lib/components/editor-color-wheel.svelte';
+	import { Slider } from '$lib/components/ui/slider';
+	import { ThemeIcon, ProtectedIcon } from '$lib/themes/icons';
+	import { m } from '$lib/paraglide/messages';
+	import {
+		hueAmountFromWheelChannels,
+		wheelChannelsFromHueAmount,
+		type WheelChannels
+	} from '$lib/video-editor/effects/wheel-channels';
+	import { getGpuEffect, getGpuEffectDefaultParams } from '$lib/video-editor/effects/gpu/registry';
+	import { gpuEffectLabel, gpuParamLabel } from '$lib/video-editor/effects/gpu/i18n';
+	import type { GpuNumberParamSchema } from '$lib/video-editor/effects/gpu/types';
+	import type { GpuEffect } from '$lib/video-editor/effects/types';
+	import {
+		effectKeyframeValue,
+		getGpuEffectKeyframeProperty,
+		resolveAnimatedEffectsAt
+	} from '$lib/video-editor/effects/effect-keyframes';
+	import { colorPreviewStore } from '$lib/video-editor/effects/color-preview-store.svelte';
+	import type { ColorPickerKind } from '$lib/video-editor/effects/color-preview-store.svelte';
+	import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
+	import { autoKeyframeStore } from '$lib/video-editor/timeline/stores/auto-keyframe-store.svelte';
+	import {
+		removeKeyframe,
+		setAnimatedGpuEffectParamsOnItems,
+		setKeyframe
+	} from '$lib/video-editor/timeline/actions/keyframes';
+	import ColorEffectHeader from './color-effect-header.svelte';
+	import ScrubbableNumberInput from '$lib/components/editor-scrubbable-number-input.svelte';
+	import {
+		EDITOR_COLOR_PRIMARY_BOTTOM_PARAMETERS,
+		EDITOR_COLOR_PRIMARY_TOP_PARAMETERS,
+		EDITOR_COLOR_WHEELS
+	} from '$lib/editor-color-grade/controls';
+
+	const EFFECT_ID = 'gpu-color-wheels';
+	// Sidebar-style slider rows ported from FreeCut (MIT)
+	// `gpu-wheels-panel.tsx` PRIMARY_PARAMS / TONAL_PARAMS: exact numeric control
+	// with per-parameter keyframes for params the dock wheels only expose as
+	// chips (or not at all: exposure, blackPoint, whitePoint).
+	const PRIMARY_SLIDER_PARAMS = [
+		'exposure',
+		'contrast',
+		'pivot',
+		'lift',
+		'gamma',
+		'gain',
+		'offset',
+		'blackPoint',
+		'whitePoint'
+	] as const;
+	const BALANCE_SLIDER_PARAMS = ['temperature', 'tint', 'saturation'] as const;
+	const MAX_DOCK_WHEEL_SIZE = 200;
+	const MIN_DOCK_WHEEL_SIZE = 48;
+	const DOCK_WHEEL_GRID_GAP_PX = 28;
+	const DOCK_WHEEL_EXTRAS_PX = 76;
+	const defaults = getGpuEffectDefaultParams(EFFECT_ID);
+	const definition = getGpuEffect(EFFECT_ID)!;
+
+	const wheelDescriptors = EDITOR_COLOR_WHEELS;
+	const channelIndices = [0, 1, 2] as const;
+	const channelLabels = ['Red', 'Green', 'Blue'] as const;
+	const channelAccents = ['bg-red-500', 'bg-green-500', 'bg-blue-500'] as const;
+
+	const topParameters = EDITOR_COLOR_PRIMARY_TOP_PARAMETERS;
+	const bottomParameters = EDITOR_COLOR_PRIMARY_BOTTOM_PARAMETERS;
+	const parameterDisplays = {
+		temperature: { scale: 40, bias: 0, step: 10, decimals: 1 },
+		tint: { scale: 1, bias: 0, step: 0.1, decimals: 2 },
+		contrast: { scale: 1, bias: 0, step: 0.005, decimals: 3 },
+		pivot: { scale: 1, bias: 0, step: 0.005, decimals: 3 },
+		midDetail: { scale: 1, bias: 0, step: 0.5, decimals: 2 },
+		colorBoost: { scale: 1, bias: 0, step: 0.5, decimals: 2 },
+		shadows: { scale: 1, bias: 0, step: 0.5, decimals: 2 },
+		highlights: { scale: 1, bias: 0, step: 0.5, decimals: 2 },
+		saturation: { scale: 0.5, bias: 50, step: 0.5, decimals: 2 },
+		hue: { scale: 1, bias: 0, step: 0.5, decimals: 2 },
+		lumMix: { scale: 1, bias: 0, step: 0.5, decimals: 2 }
+	} satisfies Record<string, { scale: number; bias: number; step: number; decimals: number }>;
+	const parameterDisplayByName = new Map(Object.entries(parameterDisplays));
+	const parameterAccents = {
+		temperature: 'neutral',
+		contrast: 'neutral',
+		pivot: 'neutral',
+		lumMix: 'neutral',
+		tint: 'hue',
+		hue: 'hue',
+		saturation: 'rgb',
+		colorBoost: 'rgb'
+	} satisfies Record<string, string>;
+	const parameterAccentByName = new Map(Object.entries(parameterAccents));
+
+	let {
+		itemId,
+		itemIds = [],
+		onedit,
+		onautobalance,
+		onpick,
+		forceAutoKey = false
+	}: {
+		itemId: string | null;
+		itemIds?: string[];
+		onedit: () => void;
+		onautobalance?: () => void;
+		onpick?: (kind: ColorPickerKind) => void;
+		forceAutoKey?: boolean;
+	} = $props();
+
+	let showPrimaries = $state(false);
+	let showBalance = $state(false);
+	let wheelDrafts = $state<Record<string, { hue: number; amount: number }>>({});
+	let parameterDrafts = $state<Record<string, number>>({});
+	let wheelGrid: HTMLDivElement | null = $state(null);
+	let wheelSize = $state(80);
+
+	onMount(() => {
+		if (!wheelGrid) return;
+		const updateSize = () => {
+			if (!wheelGrid) return;
+			const styles = getComputedStyle(wheelGrid);
+			const paddingX =
+				(Number.parseFloat(styles.paddingLeft) || 0) +
+				(Number.parseFloat(styles.paddingRight) || 0);
+			const paddingY =
+				(Number.parseFloat(styles.paddingTop) || 0) +
+				(Number.parseFloat(styles.paddingBottom) || 0);
+			const availableWidth = wheelGrid.clientWidth - paddingX;
+			const slotWidth =
+				(availableWidth - DOCK_WHEEL_GRID_GAP_PX * (wheelDescriptors.length - 1)) /
+				wheelDescriptors.length;
+			const slotHeight = wheelGrid.clientHeight - paddingY - DOCK_WHEEL_EXTRAS_PX;
+			wheelSize = Math.max(
+				MIN_DOCK_WHEEL_SIZE,
+				Math.min(MAX_DOCK_WHEEL_SIZE, Math.floor(Math.min(slotWidth, slotHeight)))
+			);
+		};
+		updateSize();
+		if (!globalThis.ResizeObserver) return;
+		const observer = new globalThis.ResizeObserver(updateSize);
+		observer.observe(wheelGrid);
+		return () => observer.disconnect();
+	});
+
+	const item = $derived(itemId ? timelineStore.itemById.get(itemId) : undefined);
+	const wheelEffect = $derived(
+		(item ? resolveAnimatedEffectsAt(item, timelineStore.currentFrame) : undefined)?.find(
+			(effect): effect is GpuEffect => effect.type === 'gpu' && effect.effectId === EFFECT_ID
+		)
+	);
+	const displayEffect = $derived<GpuEffect>(
+		wheelEffect ?? {
+			id: '__color-wheels__',
+			type: 'gpu',
+			effectId: EFFECT_ID,
+			enabled: true,
+			params: defaults
+		}
+	);
+	const controlsEnabled = $derived(wheelEffect?.enabled !== false);
+	const targetItemIds = $derived.by(() => {
+		const requested = itemId && itemIds.includes(itemId) ? itemIds : itemId ? [itemId] : [];
+		return [...new Set(requested)].filter((id) => timelineStore.itemById.get(id)?.type !== 'audio');
+	});
+	const targetWheelEffects = $derived(
+		targetItemIds.map((id) =>
+			resolveAnimatedEffectsAt(timelineStore.itemById.get(id)!, timelineStore.currentFrame)?.find(
+				(effect): effect is GpuEffect => effect.type === 'gpu' && effect.effectId === EFFECT_ID
+			)
+		)
+	);
+
+	function schema(name: string): GpuNumberParamSchema | undefined {
+		const entry = definition.schema.find((candidate) => candidate.name === name);
+		return entry?.type === undefined || entry?.type === 'number' ? entry : undefined;
+	}
+
+	function label(name: string): string {
+		const param = schema(name);
+		return param ? gpuParamLabel(param) : name;
+	}
+
+	function read(name: string): number {
+		return Number(wheelEffect?.params[name] ?? defaults[name] ?? 0);
+	}
+
+	function parameterIsMixed(name: string): boolean {
+		if (targetWheelEffects.length < 2) return false;
+		const values = targetWheelEffects.map((effect) =>
+			Number(effect?.params[name] ?? defaults[name] ?? 0)
+		);
+		return values.some((value) => Math.abs(value - (values[0] ?? 0)) > 0.0001);
+	}
+
+	function wheelIsMixed(descriptor: (typeof wheelDescriptors)[number]): boolean {
+		return [descriptor.hue, descriptor.amount, descriptor.level].some(parameterIsMixed);
+	}
+
+	function wheelValue(descriptor: (typeof wheelDescriptors)[number]): {
+		hue: number;
+		amount: number;
+	} {
+		return (
+			wheelDrafts[descriptor.hue] ?? {
+				hue: read(descriptor.hue),
+				amount: read(descriptor.amount)
+			}
+		);
+	}
+
+	function parameterValue(name: string): number {
+		return parameterDrafts[name] ?? read(name);
+	}
+
+	function preview(updates: Record<string, number>): void {
+		if (!itemId || !controlsEnabled) return;
+		const effectIds = targetItemIds.flatMap((id) => {
+			const effect = timelineStore.itemById
+				.get(id)
+				?.effects?.find(
+					(candidate) => candidate.type === 'gpu' && candidate.effectId === EFFECT_ID
+				);
+			return effect?.type === 'gpu' ? [effect.id] : [];
+		});
+		colorPreviewStore.setEffectDraft(itemId, displayEffect, updates, effectIds, targetItemIds);
+	}
+
+	function commit(updates: Record<string, number>): void {
+		if (!itemId || !controlsEnabled) return;
+		colorPreviewStore.clearEffectDraft(itemId);
+		if (
+			setAnimatedGpuEffectParamsOnItems(
+				targetItemIds,
+				EFFECT_ID,
+				timelineStore.currentFrame,
+				updates,
+				(id, property) => forceAutoKey || autoKeyframeStore.isEnabled(id, property)
+			)
+		)
+			onedit();
+	}
+
+	function resetWheel(descriptor: (typeof wheelDescriptors)[number]): void {
+		commit({
+			[descriptor.hue]: Number(defaults[descriptor.hue] ?? 0),
+			[descriptor.amount]: Number(defaults[descriptor.amount] ?? 0),
+			[descriptor.level]: Number(defaults[descriptor.level] ?? 0)
+		});
+	}
+
+	function updateParameter(name: string, value: number): void {
+		if (!controlsEnabled) return;
+		parameterDrafts[name] = value;
+		preview({ [name]: value });
+	}
+
+	function commitParameter(name: string, value: number): void {
+		if (!controlsEnabled) return;
+		delete parameterDrafts[name];
+		commit({ [name]: value });
+	}
+
+	function cancelParameter(name: string): void {
+		delete parameterDrafts[name];
+		if (itemId) colorPreviewStore.clearEffectDraft(itemId);
+	}
+
+	function parameterDisplay(name: string) {
+		const param = schema(name);
+		return (
+			parameterDisplayByName.get(name) ?? {
+				scale: 1,
+				bias: 0,
+				step: Number(param?.step ?? 1),
+				decimals: Number(param?.step ?? 1) >= 1 ? 0 : 2
+			}
+		);
+	}
+
+	function displayParameter(name: string): number | null {
+		if (parameterIsMixed(name) && parameterDrafts[name] === undefined) return null;
+		const display = parameterDisplay(name);
+		return parameterValue(name) * display.scale + display.bias;
+	}
+
+	function parameterFromDisplay(name: string, value: number): number {
+		const display = parameterDisplay(name);
+		return normalizeLevel(name, (value - display.bias) / display.scale);
+	}
+
+	function parameterDisplayRange(name: string) {
+		const param = schema(name);
+		const display = parameterDisplay(name);
+		return {
+			min: Number(param?.min ?? 0) * display.scale + display.bias,
+			max: Number(param?.max ?? 0) * display.scale + display.bias
+		};
+	}
+
+	function resetParameter(name: string): void {
+		commitParameter(name, Number(defaults[name] ?? 0));
+	}
+
+	function sliderDecimals(name: string): number {
+		const step = Number(schema(name)?.step ?? 1);
+		if (step >= 1) return 0;
+		if (step >= 0.01) return 2;
+		return 3;
+	}
+
+	function sliderRelativeFrame(): number | null {
+		if (
+			!item ||
+			timelineStore.currentFrame < item.from ||
+			timelineStore.currentFrame >= item.from + item.durationInFrames
+		) {
+			return null;
+		}
+		return timelineStore.currentFrame - item.from;
+	}
+
+	function sliderKeyframe(name: string): {
+		autoEnabled: boolean;
+		hasTrack: boolean;
+		atCurrentFrame: boolean;
+		canKeyframe: boolean;
+	} | null {
+		// Keyframe lanes are keyed by stored effect id, so the auto/diamond
+		// controls only exist once the wheels instance exists. Slider commits
+		// below still create the instance (and honor auto-key) when missing.
+		if (!itemId || !item || !wheelEffect) return null;
+		const property = getGpuEffectKeyframeProperty(wheelEffect, name);
+		if (!property) return null;
+		const relativeFrame = sliderRelativeFrame();
+		const track = item.keyframes?.[property];
+		return {
+			autoEnabled: forceAutoKey || autoKeyframeStore.isEnabled(itemId, property),
+			hasTrack: Boolean(track?.frames.length),
+			atCurrentFrame: relativeFrame !== null && Boolean(track?.frames.includes(relativeFrame)),
+			canKeyframe: relativeFrame !== null
+		};
+	}
+
+	function toggleSliderAutoKey(name: string): void {
+		if (!itemId || !wheelEffect) return;
+		const property = getGpuEffectKeyframeProperty(wheelEffect, name);
+		if (!property) return;
+		autoKeyframeStore.toggle(itemId, property);
+	}
+
+	function toggleSliderKeyframe(name: string): void {
+		if (!itemId || !item || !wheelEffect) return;
+		const property = getGpuEffectKeyframeProperty(wheelEffect, name);
+		const relativeFrame = sliderRelativeFrame();
+		if (!property || relativeFrame === null) return;
+		const track = item.keyframes?.[property];
+		if (track?.frames.includes(relativeFrame)) {
+			if (removeKeyframe(itemId, property, relativeFrame)) onedit();
+			return;
+		}
+		const encoded = effectKeyframeValue(wheelEffect, name, parameterValue(name));
+		if (encoded !== null && setKeyframe(itemId, property, relativeFrame, encoded)) onedit();
+	}
+
+	function normalizeLevel(name: string, value: number): number {
+		const param = schema(name);
+		if (!param) return value;
+		return Math.min(Number(param.max), Math.max(Number(param.min), value));
+	}
+
+	function displayLevelNumber(descriptor: (typeof wheelDescriptors)[number]): number {
+		return parameterValue(descriptor.level) * descriptor.display.scale + descriptor.display.bias;
+	}
+
+	function displayLevel(descriptor: (typeof wheelDescriptors)[number]): number | null {
+		return parameterIsMixed(descriptor.level) && parameterDrafts[descriptor.level] === undefined
+			? null
+			: displayLevelNumber(descriptor);
+	}
+
+	function levelFromDisplay(descriptor: (typeof wheelDescriptors)[number], value: number): number {
+		return normalizeLevel(
+			descriptor.level,
+			(value - descriptor.display.bias) / descriptor.display.scale
+		);
+	}
+
+	function displayRange(descriptor: (typeof wheelDescriptors)[number]) {
+		const levelSchema = schema(descriptor.level);
+		return {
+			min: Number(levelSchema?.min ?? 0) * descriptor.display.scale + descriptor.display.bias,
+			max: Number(levelSchema?.max ?? 0) * descriptor.display.scale + descriptor.display.bias
+		};
+	}
+
+	function displayedChannels(descriptor: (typeof wheelDescriptors)[number]): WheelChannels {
+		const wheel = wheelValue(descriptor);
+		const master = displayLevelNumber(descriptor);
+		const deviations = wheelChannelsFromHueAmount(wheel.hue, wheel.amount);
+		return [
+			master + deviations[0] * descriptor.display.scale,
+			master + deviations[1] * descriptor.display.scale,
+			master + deviations[2] * descriptor.display.scale
+		];
+	}
+
+	function updateChannel(
+		descriptor: (typeof wheelDescriptors)[number],
+		index: 0 | 1 | 2,
+		value: number,
+		mode: 'live' | 'commit'
+	): void {
+		const range = displayRange(descriptor);
+		const channels = displayedChannels(descriptor);
+		channels[index] = Math.max(
+			range.min - descriptor.display.scale,
+			Math.min(range.max + descriptor.display.scale, value)
+		);
+		const mean = (channels[0] + channels[1] + channels[2]) / 3;
+		const normalizedChannels: WheelChannels = [
+			(channels[0] - mean) / descriptor.display.scale,
+			(channels[1] - mean) / descriptor.display.scale,
+			(channels[2] - mean) / descriptor.display.scale
+		];
+		const wheel = hueAmountFromWheelChannels(normalizedChannels);
+		const updates = {
+			[descriptor.level]: Math.round(levelFromDisplay(descriptor, mean) * 10_000) / 10_000,
+			[descriptor.hue]: Math.round(wheel.hue * 10) / 10,
+			[descriptor.amount]: Math.round(wheel.amount * 1000) / 1000
+		};
+		if (mode === 'live') {
+			parameterDrafts[descriptor.level] = updates[descriptor.level];
+			wheelDrafts[descriptor.hue] = {
+				hue: updates[descriptor.hue],
+				amount: updates[descriptor.amount]
+			};
+			preview(updates);
+			return;
+		}
+		delete parameterDrafts[descriptor.level];
+		delete wheelDrafts[descriptor.hue];
+		commit(updates);
+	}
+
+	function cancelChannel(descriptor: (typeof wheelDescriptors)[number]): void {
+		delete parameterDrafts[descriptor.level];
+		delete wheelDrafts[descriptor.hue];
+		if (itemId) colorPreviewStore.clearEffectDraft(itemId);
+	}
+
+	function ringFill(descriptor: (typeof wheelDescriptors)[number]): number {
+		return Math.max(
+			0,
+			Math.min(
+				1,
+				(parameterValue(descriptor.level) - descriptor.ring.min) /
+					Math.max(0.0001, descriptor.ring.max - descriptor.ring.min)
+			)
+		);
+	}
+</script>
+
+<section class="flex h-full min-h-0 flex-col" aria-label={gpuEffectLabel(definition)}>
+	{#snippet sliderRow(name: string)}
+		{@const param = schema(name)}
+		{@const keyframe = sliderKeyframe(name)}
+		{@const keyframeLabel = `${gpuEffectLabel(definition)}: ${label(name)}`}
+		{#if param}
+			<label class="flex items-center gap-1.5 text-xs">
+				<span
+					class="w-20 shrink-0 truncate text-[var(--video-editor-muted)]"
+					title={gpuParamLabel(param)}
+				>
+					{gpuParamLabel(param)}
+				</span>
+				<Slider
+					disabled={!controlsEnabled}
+					class="min-w-0 flex-1"
+					min={Number(param.min)}
+					max={Number(param.max)}
+					step={Number(param.step)}
+					value={parameterValue(name)}
+					ariaLabel={`${gpuEffectLabel(definition)}: ${gpuParamLabel(param)}`}
+					onValueChange={(next) => updateParameter(name, next)}
+					onValueCommit={(next) => commitParameter(name, next)}
+					onValueCancel={() => cancelParameter(name)}
+					onKeydown={(event) => event.stopPropagation()}
+				/>
+				<output class="w-12 shrink-0 text-right text-[var(--video-editor-muted)] tabular-nums">
+					{parameterValue(name).toFixed(sliderDecimals(name))}
+				</output>
+				{#if keyframe}
+					<button
+						type="button"
+						disabled={!controlsEnabled}
+						class={`flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold hover:bg-[var(--video-editor-control-hover)] focus-visible:outline-2 focus-visible:outline-[var(--video-editor-focus)] ${keyframe.autoEnabled ? 'bg-[var(--video-editor-selection)] text-[var(--video-editor-selection-text)]' : ''}`}
+						aria-pressed={keyframe.autoEnabled}
+						aria-label={keyframe.autoEnabled
+							? m.video_editor_effects_auto_key_disable({
+									parameter: keyframeLabel
+								})
+							: m.video_editor_effects_auto_key_enable({
+									parameter: keyframeLabel
+								})}
+						title={keyframe.autoEnabled
+							? m.video_editor_effects_auto_key_disable({
+									parameter: keyframeLabel
+								})
+							: m.video_editor_effects_auto_key_enable({
+									parameter: keyframeLabel
+								})}
+						onclick={() => toggleSliderAutoKey(name)}>A</button
+					>
+					<button
+						type="button"
+						disabled={!controlsEnabled || !keyframe.canKeyframe}
+						class={`flex size-5 shrink-0 items-center justify-center rounded hover:bg-[var(--video-editor-control-hover)] focus-visible:outline-2 focus-visible:outline-[var(--video-editor-focus)] disabled:opacity-35 ${keyframe.hasTrack ? 'text-[var(--video-editor-primary)]' : ''}`}
+						aria-label={keyframe.atCurrentFrame
+							? m.video_editor_effects_keyframe_remove({
+									parameter: keyframeLabel
+								})
+							: m.video_editor_effects_keyframe_add({
+									parameter: keyframeLabel
+								})}
+						title={keyframe.atCurrentFrame
+							? m.video_editor_effects_keyframe_remove({
+									parameter: keyframeLabel
+								})
+							: m.video_editor_effects_keyframe_add({
+									parameter: keyframeLabel
+								})}
+						onclick={() => toggleSliderKeyframe(name)}
+					>
+						<span
+							class="block size-2 rotate-45 border {keyframe.atCurrentFrame ? 'bg-current' : ''}"
+							aria-hidden="true"
+						></span>
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="parameter-reset"
+					disabled={!controlsEnabled ||
+						(!parameterIsMixed(name) &&
+							Object.is(parameterValue(name), Number(defaults[name] ?? 0)))}
+					title={`Reset ${gpuParamLabel(param)}`}
+					aria-label={`Reset ${gpuParamLabel(param)}`}
+					onclick={() => resetParameter(name)}
+				>
+					<ThemeIcon role="undo" class="size-2.5" />
+				</button>
+			</label>
+		{/if}
+	{/snippet}
+
+	<ColorEffectHeader
+		{itemId}
+		{itemIds}
+		effectId={EFFECT_ID}
+		label={gpuEffectLabel(definition)}
+		badge="PRIMARIES"
+		{onedit}
+	/>
+
+	<div
+		class="grid shrink-0 grid-cols-[auto_repeat(5,minmax(0,1fr))] items-center gap-x-1 border-b border-[var(--video-editor-border)] px-2 py-1.5 2xl:gap-x-3 2xl:px-4"
+	>
+		<div class="flex items-center gap-0.5 pr-1">
+			<button
+				type="button"
+				class="parameter-tool"
+				disabled={!itemId || !onautobalance || !controlsEnabled}
+				title={m.video_editor_color_auto_balance()}
+				aria-label={m.video_editor_color_auto_balance()}
+				onclick={() => onautobalance?.()}
+			>
+				<span
+					class="flex size-3.5 items-center justify-center rounded-full border border-current text-[8px] leading-none font-semibold"
+					>A</span
+				>
+			</button>
+			<button
+				type="button"
+				class="parameter-tool"
+				disabled={!itemId || !onpick || !controlsEnabled}
+				title={m.video_editor_color_pick_white_balance()}
+				aria-label={m.video_editor_color_pick_white_balance()}
+				onclick={() => onpick?.('white-balance')}
+			>
+				<ProtectedIcon icon="editor-eyedropper" class="size-3.5" />
+			</button>
+			<button
+				type="button"
+				class="parameter-tool"
+				disabled={!itemId || !onpick || !controlsEnabled}
+				title={m.video_editor_color_pick_black_point()}
+				aria-label={m.video_editor_color_pick_black_point()}
+				onclick={() => onpick?.('black-point')}
+			>
+				<span class="relative">
+					<ProtectedIcon icon="editor-eyedropper" class="size-3.5" />
+					<span
+						class="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full border border-zinc-500 bg-black"
+					></span>
+				</span>
+			</button>
+			<button
+				type="button"
+				class="parameter-tool"
+				disabled={!itemId || !onpick || !controlsEnabled}
+				title={m.video_editor_color_pick_white_point()}
+				aria-label={m.video_editor_color_pick_white_point()}
+				onclick={() => onpick?.('white-point')}
+			>
+				<span class="relative">
+					<ProtectedIcon icon="editor-eyedropper" class="size-3.5" />
+					<span
+						class="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full border border-zinc-600 bg-white"
+					></span>
+				</span>
+			</button>
+		</div>
+		{#each topParameters as name (name)}
+			{@const param = schema(name)}
+			{@const display = parameterDisplay(name)}
+			{@const range = parameterDisplayRange(name)}
+			{#if param}
+				<div class="parameter-control">
+					<span class="parameter-label" title={gpuParamLabel(param)}>{gpuParamLabel(param)}</span>
+					<span class="flex min-w-0 flex-col items-center">
+						<ScrubbableNumberInput
+							disabled={!controlsEnabled}
+							ariaLabel={gpuParamLabel(param)}
+							value={displayParameter(name)}
+							min={range.min}
+							max={range.max}
+							step={display.step}
+							decimals={display.decimals}
+							class="parameter-chip"
+							placeholder={m.image_editor_mixed_value()}
+							onlive={(next) => updateParameter(name, parameterFromDisplay(name, next))}
+							oncommit={(next) => commitParameter(name, parameterFromDisplay(name, next))}
+							oncancel={() => cancelParameter(name)}
+						/>
+						<span
+							class="parameter-accent {parameterAccentByName.get(name) ?? 'tonal'}"
+							aria-hidden="true"
+						></span>
+					</span>
+					<button
+						type="button"
+						class="parameter-reset"
+						disabled={!controlsEnabled ||
+							(!parameterIsMixed(name) &&
+								Object.is(parameterValue(name), Number(defaults[name] ?? 0)))}
+						title={`Reset ${gpuParamLabel(param)}`}
+						aria-label={`Reset ${gpuParamLabel(param)}`}
+						onclick={() => resetParameter(name)}
+					>
+						<ThemeIcon role="undo" class="size-2.5" />
+					</button>
+				</div>
+			{/if}
+		{/each}
+	</div>
+
+	<div
+		bind:this={wheelGrid}
+		class="grid min-h-0 flex-1 grid-cols-4 items-center gap-1.5 overflow-hidden px-3 py-2 2xl:gap-7 2xl:px-6 2xl:py-3"
+	>
+		{#each wheelDescriptors as descriptor (descriptor.hue)}
+			{@const value = wheelValue(descriptor)}
+			{@const levelSchema = schema(descriptor.level)}
+			{@const levelRange = displayRange(descriptor)}
+			{@const channels = displayedChannels(descriptor)}
+			<div class="flex min-h-0 min-w-0 flex-col items-center gap-1.5">
+				<div class="flex h-5 items-center justify-center gap-1">
+					<span class="truncate text-[10px] font-semibold">{label(descriptor.level)}</span>
+					<button
+						type="button"
+						disabled={!controlsEnabled}
+						class="flex size-5 items-center justify-center rounded text-[var(--video-editor-muted)] hover:bg-[var(--video-editor-control-hover)] hover:text-[var(--video-editor-text)] focus-visible:outline-2 focus-visible:outline-[var(--video-editor-focus)]"
+						aria-label={`Reset ${label(descriptor.level)}`}
+						title={`Reset ${label(descriptor.level)}`}
+						onclick={() => resetWheel(descriptor)}
+					>
+						<ThemeIcon role="undo" class="size-3" />
+					</button>
+				</div>
+				<div
+					class="relative shrink-0"
+					style:width={`${wheelSize}px`}
+					style:height={`${wheelSize}px`}
+				>
+					<EditorColorWheel
+						label={label(descriptor.level)}
+						{value}
+						disabled={!controlsEnabled}
+						mixed={wheelIsMixed(descriptor)}
+						ringFill={ringFill(descriptor)}
+						ringFrom={descriptor.ring.fromDeg}
+						onpreview={(next) => {
+							wheelDrafts[descriptor.hue] = next;
+							preview({ [descriptor.hue]: next.hue, [descriptor.amount]: next.amount });
+						}}
+						oncommit={(next) => {
+							commit({ [descriptor.hue]: next.hue, [descriptor.amount]: next.amount });
+							delete wheelDrafts[descriptor.hue];
+						}}
+						oncancel={() => {
+							delete wheelDrafts[descriptor.hue];
+							if (itemId) colorPreviewStore.clearEffectDraft(itemId);
+						}}
+					/>
+				</div>
+				{#if levelSchema}
+					<div
+						class="grid w-full gap-px px-0.5 2xl:gap-1 2xl:px-1 {descriptor.masterChip
+							? 'grid-cols-4'
+							: 'grid-cols-3'}"
+					>
+						{#if descriptor.masterChip}
+							<span class="flex min-w-0 flex-col items-center">
+								<ScrubbableNumberInput
+									disabled={!controlsEnabled}
+									ariaLabel={`${label(descriptor.level)} master`}
+									value={displayLevel(descriptor)}
+									min={levelRange.min}
+									max={levelRange.max}
+									step={descriptor.display.step}
+									decimals={descriptor.display.decimals}
+									class="wheel-chip"
+									placeholder={m.image_editor_mixed_value()}
+									onlive={(next) =>
+										updateParameter(descriptor.level, levelFromDisplay(descriptor, next))}
+									oncommit={(next) =>
+										commitParameter(descriptor.level, levelFromDisplay(descriptor, next))}
+									oncancel={() => cancelParameter(descriptor.level)}
+								/>
+								<span class="mt-0.5 h-0.5 w-5 rounded-full bg-zinc-200"></span>
+							</span>
+						{/if}
+						{#each channelIndices as channelIndex (channelIndex)}
+							<span class="flex min-w-0 flex-col items-center">
+								<ScrubbableNumberInput
+									disabled={!controlsEnabled}
+									ariaLabel={`${label(descriptor.level)} ${channelLabels[channelIndex]}`}
+									value={wheelIsMixed(descriptor) ? null : channels[channelIndex]}
+									min={levelRange.min - descriptor.display.scale}
+									max={levelRange.max + descriptor.display.scale}
+									step={descriptor.display.step}
+									decimals={descriptor.display.decimals}
+									class="wheel-chip"
+									placeholder={m.image_editor_mixed_value()}
+									onlive={(next) => updateChannel(descriptor, channelIndex, next, 'live')}
+									oncommit={(next) => updateChannel(descriptor, channelIndex, next, 'commit')}
+									oncancel={() => cancelChannel(descriptor)}
+								/>
+								<span class="mt-0.5 h-0.5 w-5 rounded-full {channelAccents[channelIndex]}"></span>
+							</span>
+						{/each}
+					</div>
+					<Slider
+						disabled={!controlsEnabled}
+						class="wheel-thumb [&_[data-slot=slider-thumb]]:shadow-none"
+						min={levelRange.min}
+						max={levelRange.max}
+						step={descriptor.display.step}
+						value={displayLevel(descriptor) ?? descriptor.display.bias}
+						ariaValueText={parameterIsMixed(descriptor.level)
+							? m.image_editor_mixed_value()
+							: undefined}
+						ariaLabel={`${label(descriptor.level)} thumb wheel`}
+						onValueChange={(nextValue) =>
+							updateParameter(descriptor.level, levelFromDisplay(descriptor, nextValue))}
+						onValueCommit={(nextValue) =>
+							commitParameter(descriptor.level, levelFromDisplay(descriptor, nextValue))}
+						onValueCancel={() => cancelParameter(descriptor.level)}
+						onKeydown={(event) => event.stopPropagation()}
+					/>
+				{/if}
+			</div>
+		{/each}
+	</div>
+
+	<div
+		class="grid shrink-0 grid-cols-6 items-center gap-x-1 border-t border-[var(--video-editor-border)] px-2 py-1.5 2xl:gap-x-3 2xl:px-4"
+	>
+		{#each bottomParameters as name (name)}
+			{@const param = schema(name)}
+			{@const display = parameterDisplay(name)}
+			{@const range = parameterDisplayRange(name)}
+			{#if param}
+				<div class="parameter-control">
+					<span class="parameter-label" title={gpuParamLabel(param)}>{gpuParamLabel(param)}</span>
+					<span class="flex min-w-0 flex-col items-center">
+						<ScrubbableNumberInput
+							disabled={!controlsEnabled}
+							ariaLabel={gpuParamLabel(param)}
+							value={displayParameter(name)}
+							min={range.min}
+							max={range.max}
+							step={display.step}
+							decimals={display.decimals}
+							class="parameter-chip"
+							placeholder={m.image_editor_mixed_value()}
+							onlive={(next) => updateParameter(name, parameterFromDisplay(name, next))}
+							oncommit={(next) => commitParameter(name, parameterFromDisplay(name, next))}
+							oncancel={() => cancelParameter(name)}
+						/>
+						<span
+							class="parameter-accent {parameterAccentByName.get(name) ?? 'tonal'}"
+							aria-hidden="true"
+						></span>
+					</span>
+					<button
+						type="button"
+						class="parameter-reset"
+						disabled={!controlsEnabled ||
+							(!parameterIsMixed(name) &&
+								Object.is(parameterValue(name), Number(defaults[name] ?? 0)))}
+						title={`Reset ${gpuParamLabel(param)}`}
+						aria-label={`Reset ${gpuParamLabel(param)}`}
+						onclick={() => resetParameter(name)}
+					>
+						<ThemeIcon role="undo" class="size-2.5" />
+					</button>
+				</div>
+			{/if}
+		{/each}
+	</div>
+
+	<div class="shrink-0 border-t border-[var(--video-editor-border)]">
+		<button
+			type="button"
+			class="flex h-7 w-full items-center justify-between px-2 text-[10px] font-semibold tracking-wide text-[var(--video-editor-muted)] uppercase hover:text-[var(--video-editor-text)] focus-visible:outline-2 focus-visible:outline-[var(--video-editor-focus)]"
+			aria-expanded={showPrimaries}
+			onclick={() => (showPrimaries = !showPrimaries)}
+		>
+			{m.video_editor_color_primaries()}
+			<span aria-hidden="true">{showPrimaries ? '−' : '+'}</span>
+		</button>
+		{#if showPrimaries}
+			<div class="flex flex-col gap-1 px-2 pb-2">
+				{#each PRIMARY_SLIDER_PARAMS as name (name)}
+					{@render sliderRow(name)}
+				{/each}
+			</div>
+		{/if}
+		<button
+			type="button"
+			class="flex h-7 w-full items-center justify-between border-t border-[var(--video-editor-border)] px-2 text-[10px] font-semibold tracking-wide text-[var(--video-editor-muted)] uppercase hover:text-[var(--video-editor-text)] focus-visible:outline-2 focus-visible:outline-[var(--video-editor-focus)]"
+			aria-expanded={showBalance}
+			onclick={() => (showBalance = !showBalance)}
+		>
+			{m.video_editor_color_balance_heading()}
+			<span aria-hidden="true">{showBalance ? '−' : '+'}</span>
+		</button>
+		{#if showBalance}
+			<div class="flex flex-col gap-1 px-2 pb-2">
+				{#each BALANCE_SLIDER_PARAMS as name (name)}
+					{@render sliderRow(name)}
+				{/each}
+			</div>
+		{/if}
+	</div>
+</section>
+
+<style>
+	.parameter-tool {
+		display: flex;
+		height: 1.5rem;
+		width: 1.5rem;
+		align-items: center;
+		justify-content: center;
+		color: var(--video-editor-muted);
+	}
+
+	.parameter-tool:hover:not(:disabled),
+	.parameter-reset:hover:not(:disabled) {
+		background: var(--video-editor-control-hover);
+		color: var(--video-editor-text);
+	}
+
+	.parameter-tool:focus-visible,
+	.parameter-reset:focus-visible {
+		outline: 2px solid var(--video-editor-focus);
+		outline-offset: 1px;
+	}
+
+	.parameter-tool:disabled,
+	.parameter-reset:disabled {
+		cursor: not-allowed;
+		opacity: 0.35;
+	}
+
+	.parameter-control {
+		display: grid;
+		min-width: 0;
+		grid-template-columns: minmax(0, 1fr) 1rem;
+		align-items: center;
+		column-gap: 0.125rem;
+	}
+
+	.parameter-label {
+		grid-column: 1 / -1;
+		min-width: 0;
+		overflow: hidden;
+		color: var(--video-editor-muted);
+		font-size: 0.5rem;
+		text-align: center;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.parameter-reset {
+		display: flex;
+		height: 1rem;
+		width: 1rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		color: var(--video-editor-muted);
+	}
+
+	:global(.parameter-chip) {
+		height: 1.5rem;
+		width: 100%;
+		min-width: 0;
+		border: 1px solid var(--video-editor-border);
+		border-radius: 2px;
+		background: var(--video-editor-field);
+		padding-inline: 0.125rem;
+		color: var(--video-editor-field-text);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.625rem;
+		font-variant-numeric: tabular-nums;
+		text-align: center;
+		outline: none;
+	}
+
+	:global(.parameter-chip:focus-visible) {
+		border-color: var(--video-editor-focus-border);
+		box-shadow: 0 0 0 1px color-mix(in oklch, var(--video-editor-focus) 55%, transparent);
+	}
+
+	.parameter-accent {
+		margin-top: 0.125rem;
+		height: 0.125rem;
+		width: 2rem;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #d4d4d8, #ef4444, #3b82f6);
+	}
+
+	.parameter-accent.neutral {
+		background: linear-gradient(90deg, #e4e4e7, #71717a, #18181b);
+	}
+
+	.parameter-accent.hue {
+		background: linear-gradient(90deg, #22d3ee, #d946ef, #fcd34d);
+	}
+
+	.parameter-accent.rgb {
+		background: linear-gradient(90deg, #ef4444, #22c55e, #3b82f6);
+	}
+
+	@media (min-width: 1536px) {
+		.parameter-control {
+			grid-template-columns: minmax(3.75rem, 1fr) 3.75rem 1rem;
+		}
+
+		.parameter-label {
+			grid-column: auto;
+			font-size: 0.625rem;
+			text-align: right;
+		}
+	}
+
+	:global(.wheel-chip) {
+		height: 1.25rem;
+		width: 100%;
+		min-width: 0;
+		border: 1px solid var(--video-editor-border);
+		border-radius: 2px;
+		background: var(--video-editor-field);
+		padding-inline: 0;
+		color: var(--video-editor-field-text);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.5rem;
+		font-variant-numeric: tabular-nums;
+		text-align: center;
+		outline: none;
+	}
+
+	:global(.wheel-chip:focus-visible) {
+		border-color: var(--video-editor-focus-border);
+		box-shadow: 0 0 0 1px color-mix(in oklch, var(--video-editor-focus) 55%, transparent);
+	}
+
+	:global(.wheel-thumb) {
+		margin-top: 0.125rem;
+		height: 0.65rem;
+		width: 100%;
+		cursor: ew-resize;
+	}
+
+	:global(.wheel-thumb [data-slot='slider-track']) {
+		height: 0.65rem;
+		border: 1px solid rgb(0 0 0 / 80%);
+		border-radius: 999px;
+		background: repeating-linear-gradient(
+			90deg,
+			rgb(255 255 255 / 22%) 0 1px,
+			rgb(0 0 0 / 65%) 1px 5px
+		);
+	}
+
+	:global(.wheel-thumb [data-slot='slider-range']) {
+		background: transparent;
+	}
+
+	:global(.wheel-thumb [data-slot='slider-thumb']) {
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	:global(.wheel-thumb [data-slot='slider-thumb'])::after {
+		display: block;
+		height: 0.7rem;
+		width: 0.7rem;
+		border: 1px solid rgb(0 0 0 / 80%);
+		border-radius: 999px;
+		background: rgb(228 228 231);
+	}
+
+	@media (pointer: coarse) {
+		:global(.wheel-thumb) {
+			height: 2.75rem;
+		}
+
+		:global([data-editor-protected='color-wheel']) {
+			min-width: 4.5rem;
+			min-height: 4.5rem;
+		}
+	}
+</style>

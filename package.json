@@ -1,0 +1,72 @@
+{
+  "name": "openpost",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/docs",
+    "apps/marketing",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "_policy": "bun scripts/tasks.mjs check policy --policy-only",
+    "browser:install": "playwright install chromium",
+    "build": "bun scripts/tasks.mjs build",
+    "capture:product-screenshots": "OPENPOST_UPDATE_PRODUCT_SCREENSHOTS=1 OPENPOST_APP_E2E_PORT=${OPENPOST_APP_E2E_PORT:-19181} playwright test --config tests/app/playwright.config.ts tests/app/product-screenshots.spec.ts --workers=1 && bun scripts/optimize-readme-images.mjs && bun scripts/sync-assets.mjs",
+    "check": "bun scripts/tasks.mjs check",
+    "check:changed": "bash scripts/changed-files-check.sh",
+    "check:frontend:i18n": "bun run --filter @openpost/web generate:i18n",
+    "check:frontend:types": "bun run check:frontend:i18n && OPENPOST_CHECK_PREPARED=1 bunx turbo run check --filter @openpost/web",
+    "check:n8n": "bun scripts/tasks.mjs check n8n-package",
+    "dev": "bun scripts/tasks.mjs dev",
+    "doctor": "bash scripts/dev-doctor.sh",
+    "format": "bun scripts/tasks.mjs format",
+    "format:check": "bun scripts/tasks.mjs format:check",
+    "generate:social-assets": "bun assets/social/openpost/source/generate.mjs",
+    "lint": "bun scripts/tasks.mjs lint",
+    "release": "devenv shell -- bun scripts/release.mjs",
+    "test": "bun scripts/tasks.mjs test",
+    "test:backend:pkg": "go test -tags dev",
+    "test:file": "bun test",
+    "verify": "bun scripts/tasks.mjs verify"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@napi-rs/canvas": "0.1.80",
+    "@playwright/test": "^1.61.1",
+    "js-yaml": "4.3.2",
+    "knip": "6.32.0",
+    "oxfmt": "0.61.0",
+    "parse5": "7.3.0",
+    "sharp": "0.35.4",
+    "tar": "7.5.22",
+    "turbo": "^2.6.3"
+  },
+  "overrides": {
+    "@sveltejs/kit": "2.70.2",
+    "@vitest/browser": "4.1.11",
+    "@vitest/browser-playwright": "4.1.11",
+    "adm-zip": "0.6.0",
+    "cookie": "0.7.2",
+    "fast-uri": "3.1.6",
+    "js-yaml": "4.3.2",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.23",
+    "qs": "6.16.0",
+    "sharp": "0.35.4",
+    "tar": "7.5.22",
+    "undici": "7.29.0",
+    "vitest": "4.1.11"
+  },
+  "packageManager": "bun@1.3.11",
+  "patchedDependencies": {
+    "@asamuzakjp/css-color@3.2.0": "patches/@asamuzakjp%2Fcss-color@3.2.0.patch"
+  },
+  "trustedDependencies": [
+    "@openpost/web",
+    "esbuild",
+    "sharp",
+    "vue-demi",
+    "workerd"
+  ]
+}

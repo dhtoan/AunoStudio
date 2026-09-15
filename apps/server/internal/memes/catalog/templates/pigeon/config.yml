@@ -1,0 +1,49 @@
+name: Is This a Pigeon?
+source: https://knowyourmeme.com/memes/is-this-a-pigeon
+keywords:
+  -
+text:
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.15
+    anchor_y: 0.0
+    angle: 0.0
+    scale_x: 0.35
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.71
+    anchor_y: 0.3
+    angle: 0.0
+    scale_x: 0.175
+    scale_y: 0.1
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: khaki
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.8
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.2
+    align: center
+    start: 0.4
+    stop: 1.0
+example:
+  - Engineer
+  - PowerPoint
+  - Is this Photoshop?
+overlay:
+  - center_x: 0.8
+    center_y: 0.2
+    angle: 0.0
+    scale: 0.4
+    start: 0.0
+    stop: 1.0

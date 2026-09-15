@@ -1,0 +1,52 @@
+import { m } from '$lib/paraglide/messages';
+
+const transitionLabels: Record<string, () => string> = {
+	fade: m.video_editor_transition_preset_fade,
+	barnDoor: m.video_editor_transition_preset_barn_door,
+	wipe: m.video_editor_transition_preset_wipe,
+	slide: m.video_editor_transition_preset_slide,
+	split: m.video_editor_transition_preset_split,
+	flip: m.video_editor_transition_preset_flip,
+	clockWipe: m.video_editor_transition_preset_clock_wipe,
+	iris: m.video_editor_transition_preset_iris,
+	dissolve: m.video_editor_transition_preset_dissolve,
+	additiveDissolve: m.video_editor_transition_preset_additive_dissolve,
+	blurDissolve: m.video_editor_transition_preset_blur_dissolve,
+	dipToColorDissolve: m.video_editor_transition_preset_dip_to_color,
+	nonAdditiveDissolve: m.video_editor_transition_preset_non_additive_dissolve,
+	smoothCut: m.video_editor_transition_preset_smooth_cut,
+	sparkles: m.video_editor_transition_preset_sparkles,
+	glitch: m.video_editor_transition_preset_glitch,
+	pixelate: m.video_editor_transition_preset_pixelate,
+	chromatic: m.video_editor_transition_preset_chromatic,
+	radialBlur: m.video_editor_transition_preset_radial_blur,
+	liquidDistort: m.video_editor_transition_preset_liquid_distort,
+	lensWarpZoom: m.video_editor_transition_preset_lens_warp_zoom,
+	lightLeakBurn: m.video_editor_transition_preset_light_leak_burn,
+	filmGateSlip: m.video_editor_transition_preset_film_gate_slip,
+	arrowIris: m.video_editor_transition_preset_arrow_iris,
+	crossIris: m.video_editor_transition_preset_cross_iris,
+	diamondIris: m.video_editor_transition_preset_diamond_iris,
+	eyeIris: m.video_editor_transition_preset_eye_iris,
+	hexagonIris: m.video_editor_transition_preset_hexagon_iris,
+	ovalIris: m.video_editor_transition_preset_oval_iris,
+	pentagonIris: m.video_editor_transition_preset_pentagon_iris,
+	squareIris: m.video_editor_transition_preset_square_iris,
+	triangleIris: m.video_editor_transition_preset_triangle_iris,
+	boxShape: m.video_editor_transition_preset_box,
+	heartShape: m.video_editor_transition_preset_heart,
+	starShape: m.video_editor_transition_preset_star,
+	triangleLeftShape: m.video_editor_transition_preset_triangle_left,
+	triangleRightShape: m.video_editor_transition_preset_triangle_right,
+	bandWipe: m.video_editor_transition_preset_band_wipe,
+	centerWipe: m.video_editor_transition_preset_center_wipe,
+	edgeWipe: m.video_editor_transition_preset_edge_wipe,
+	radialWipe: m.video_editor_transition_preset_radial_wipe,
+	spiralWipe: m.video_editor_transition_preset_spiral_wipe,
+	venetianBlindWipe: m.video_editor_transition_preset_venetian_blind,
+	xWipe: m.video_editor_transition_preset_x_wipe
+};
+
+export function localizedTransitionLabel(id: string, fallback = id): string {
+	return transitionLabels[id]?.() ?? fallback;
+}

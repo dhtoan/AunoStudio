@@ -1,0 +1,48 @@
+name: Daily Struggle
+source: https://knowyourmeme.com/memes/daily-struggle
+keywords:
+  -
+text:
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.085
+    anchor_y: 0.085
+    angle: 12.5
+    scale_x: 0.32
+    scale_y: 0.095
+    align: center
+    start: 0.0
+    stop: 0.5
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.455
+    anchor_y: 0.055
+    angle: 10.5
+    scale_x: 0.23
+    scale_y: 0.09
+    align: center
+    start: 0.5
+    stop: 1.0
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.04
+    anchor_y: 0.82
+    angle: 0.0
+    scale_x: 0.92
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - The dress is black and blue.
+  - The dress is gold and white.
+overlay:
+  - center_x: 0.525
+    center_y: 0.55
+    angle: 0.0
+    scale: 0.4
+    start: 0.0
+    stop: 1.0

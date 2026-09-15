@@ -1,0 +1,675 @@
+<script lang="ts">
+	import { onDestroy } from 'svelte';
+	import { client } from '$lib/api/client';
+	import {
+		instanceAuditQueryOptions,
+		OpenPostQueryError,
+		organizationAuditQueryOptions,
+		organizationQueryKeys,
+		organizationsQueryOptions,
+		type InstanceAuditPage,
+		type OrganizationAuditPage
+	} from '@openpost/query-catalog';
+	import { organizationQueryAPI } from '$lib/query/organizations';
+	import { queryClient } from '$lib/query/client';
+	import type { components, operations } from '$lib/api/types';
+	import AppSelect from '$lib/components/app-select.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { m } from '$lib/paraglide/messages';
+	import { ProtectedIcon, ThemeIcon } from '$lib/themes/icons';
+	import { auth } from '$lib/stores/auth';
+	import {
+		registerSettingsInitialLoad,
+		SETTINGS_INITIAL_LOAD_PARTICIPANT
+	} from '$lib/settings-initial-load.svelte';
+
+	type AuditEvent = components['schemas']['AuditEvent'];
+	type Organization = components['schemas']['OrganizationResponse'];
+	type AuditQuery = NonNullable<
+		operations['list-organization-audit-events']['parameters']['query']
+	>;
+	type InstanceAuditQuery = NonNullable<
+		operations['list-instance-audit-events']['parameters']['query']
+	>;
+	type ResourceType = AuditQuery['resource_type'];
+	type AuditResult = AuditQuery['result'];
+
+	interface Props {
+		organizationID: string;
+		active?: boolean;
+		instanceWide?: boolean;
+	}
+	let { organizationID, active = false, instanceWide = false }: Props = $props();
+	let organizations = $state.raw<Organization[]>([]);
+	let organizationsLoaded = $state(false);
+	let organizationsLoading = $state(false);
+	let selectedOrganizationID = $state('');
+	let instanceOrganizationID = $state('');
+	let items = $state.raw<AuditEvent[]>([]);
+	let itemsReady = $state(false);
+	let nextCursor = $state('');
+	let loading = $state(false);
+	let loadingMore = $state(false);
+	let exporting = $state<'json' | 'csv' | ''>('');
+	let error = $state('');
+	let ownerRequired = $state(false);
+	let action = $state('');
+	let actorUserID = $state('');
+	let resourceType = $state<ResourceType | ''>('');
+	let resultFilter = $state<AuditResult | ''>('');
+	let workspaceID = $state('');
+	let from = $state('');
+	let before = $state('');
+	let loadedScopeKey = $state('');
+	let requestSequence = 0;
+	let exportRequestSequence = 0;
+	let observedExportContextKey = '';
+	let mounted = true;
+	const scope = $derived(
+		instanceWide
+			? {
+					key: 'instance',
+					testID: 'instance-audit-settings',
+					eventsTestID: 'instance-audit-events',
+					privacyNotice: m.settings_instance_audit_privacy_notice(),
+					accessError: m.settings_instance_audit_admin_required(),
+					loadError: m.settings_instance_audit_load_failed(),
+					exportError: m.settings_instance_audit_export_failed(),
+					filenameScope: 'instance'
+				}
+			: {
+					key: selectedOrganizationID,
+					testID: 'organization-audit-settings',
+					eventsTestID: 'organization-audit-events',
+					privacyNotice: m.settings_audit_privacy_notice(),
+					accessError: m.settings_audit_owner_required(),
+					loadError: m.settings_audit_load_failed(),
+					exportError: m.settings_audit_export_failed(),
+					filenameScope: 'organization'
+				}
+	);
+	const reportAuditInitialLoad = registerSettingsInitialLoad(
+		SETTINGS_INITIAL_LOAD_PARTICIPANT.audit
+	);
+	const reportInstanceInitialLoad = registerSettingsInitialLoad(
+		SETTINGS_INITIAL_LOAD_PARTICIPANT.instanceAudit
+	);
+	const reportInitialLoad = (pending: boolean) => {
+		reportAuditInitialLoad(!instanceWide && pending);
+		reportInstanceInitialLoad(instanceWide && pending);
+	};
+	$effect(() => {
+		if (!active || error) {
+			reportInitialLoad(false);
+			return;
+		}
+		if (!instanceWide && !organizationsLoaded && organizations.length === 0) {
+			reportInitialLoad(true);
+			return;
+		}
+		reportInitialLoad(
+			Boolean(scope.key) && (loadedScopeKey !== scope.key || (loading && !itemsReady))
+		);
+	});
+
+	const resourceOptions = $derived([
+		{ value: '', label: m.settings_audit_all_resources() },
+		{ value: 'organization', label: m.settings_audit_resource_organization() },
+		{ value: 'workspace', label: m.settings_audit_resource_workspace() },
+		{
+			value: 'workspace_member',
+			label: m.settings_audit_resource_workspace_member()
+		},
+		{
+			value: 'workspace_invitation',
+			label: m.settings_audit_resource_workspace_invitation()
+		},
+		{
+			value: 'organization_ownership_transfer',
+			label: m.settings_audit_resource_organization_ownership_transfer()
+		},
+		{ value: 'provider', label: m.settings_audit_resource_provider() },
+		{ value: 'policy', label: m.settings_audit_resource_policy() },
+		{ value: 'domain', label: m.settings_audit_resource_domain() },
+		{ value: 'session', label: m.settings_audit_resource_session() },
+		{ value: 'identity', label: m.settings_audit_resource_identity() },
+		{
+			value: 'reauthentication',
+			label: m.settings_audit_resource_reauthentication()
+		},
+		{
+			value: 'identity_configuration',
+			label: m.settings_audit_resource_identity_configuration()
+		},
+		{
+			value: 'impersonation',
+			label: m.settings_audit_resource_impersonation()
+		},
+		{ value: 'billing', label: m.settings_audit_resource_billing() },
+		{
+			value: 'mcp_tool_call',
+			label: m.settings_audit_resource_mcp_tool_call()
+		},
+		{ value: 'publication', label: m.settings_audit_resource_publication() },
+		{
+			value: 'publication_authorization',
+			label: m.settings_audit_resource_publication_authorization()
+		},
+		{
+			value: 'provider_write',
+			label: m.settings_audit_resource_provider_write()
+		}
+	]);
+	const resultOptions = $derived([
+		{ value: '', label: m.settings_audit_all_results() },
+		{ value: 'succeeded', label: m.settings_audit_result_succeeded() },
+		{ value: 'failed', label: m.settings_audit_result_failed() },
+		{ value: 'pending', label: m.settings_audit_result_pending() }
+	]);
+	const organizationOptions = $derived(
+		organizations.map((organization) => ({
+			value: organization.id,
+			label: organization.name
+		}))
+	);
+	const exportContextKey = $derived(
+		[
+			active ? 'active' : 'inactive',
+			instanceWide ? 'instance' : selectedOrganizationID,
+			instanceOrganizationID,
+			action,
+			actorUserID,
+			resourceType,
+			resultFilter,
+			workspaceID,
+			from,
+			before
+		].join('\u0000')
+	);
+
+	onDestroy(() => {
+		mounted = false;
+		requestSequence += 1;
+		exportRequestSequence += 1;
+	});
+
+	$effect(() => {
+		const contextKey = exportContextKey;
+		if (!observedExportContextKey) {
+			observedExportContextKey = contextKey;
+			return;
+		}
+		if (observedExportContextKey === contextKey) return;
+		observedExportContextKey = contextKey;
+		exportRequestSequence += 1;
+		exporting = '';
+	});
+
+	$effect(() => {
+		if (!instanceWide && active && !organizationsLoaded && !organizationsLoading)
+			void loadOrganizations();
+	});
+
+	$effect(() => {
+		const target = scope.key;
+		if (!active || !target || loadedScopeKey === target) return;
+		loadedScopeKey = target;
+		items = [];
+		itemsReady = false;
+		nextCursor = '';
+		void loadAudit({ target: instanceWide ? '' : target });
+	});
+
+	async function loadOrganizations() {
+		const queryOptions = organizationsQueryOptions(organizationQueryAPI);
+		const cachedOrganizations = queryClient.getQueryData<Organization[]>(queryOptions.queryKey);
+		if (cachedOrganizations !== undefined) applyOrganizations(cachedOrganizations);
+		organizationsLoading = cachedOrganizations === undefined;
+		try {
+			applyOrganizations(await queryClient.fetchQuery(queryOptions));
+			return true;
+		} catch (cause) {
+			if (cause instanceof OpenPostQueryError && (cause.status === 401 || cause.status === 403)) {
+				queryClient.removeQueries({
+					queryKey: queryOptions.queryKey,
+					exact: true
+				});
+				organizations = [];
+				selectedOrganizationID = '';
+				ownerRequired = true;
+			}
+			error = m.settings_audit_load_failed();
+			return false;
+		} finally {
+			organizationsLoading = false;
+			organizationsLoaded = true;
+		}
+	}
+
+	function applyOrganizations(data: Organization[]) {
+		organizations = data.filter((organization) => organization.role === 'owner');
+		selectedOrganizationID =
+			organizations.find((organization) => organization.id === selectedOrganizationID)?.id ??
+			organizations.find((organization) => organization.id === organizationID)?.id ??
+			organizations[0]?.id ??
+			'';
+		ownerRequired = organizations.length === 0;
+		if (ownerRequired) error = m.settings_audit_owner_required();
+	}
+
+	function appendUniqueAuditEvents(current: AuditEvent[], incoming: AuditEvent[]) {
+		const existingIDs = new Set(current.map((event) => event.id));
+		return [...current, ...incoming.filter((event) => !existingIDs.has(event.id))];
+	}
+
+	function filterQuery(cursor = ''): AuditQuery {
+		return {
+			workspace_id: workspaceID.trim() || undefined,
+			actor_user_id: actorUserID.trim() || undefined,
+			action: action.trim() || undefined,
+			resource_type: resourceType || undefined,
+			result: resultFilter || undefined,
+			from: from ? new Date(from).toISOString() : undefined,
+			before: before ? new Date(before).toISOString() : undefined,
+			cursor: cursor || undefined,
+			limit: 50
+		};
+	}
+	function instanceFilterQuery(cursor = ''): InstanceAuditQuery {
+		return {
+			...filterQuery(cursor),
+			organization_id: instanceOrganizationID.trim() || undefined
+		};
+	}
+
+	async function loadAudit(options: { append?: boolean; target?: string } = {}) {
+		const append = options.append ?? false;
+		const target = options.target ?? selectedOrganizationID;
+		if (!instanceWide && !target) return;
+		const sequence = ++requestSequence;
+		const previousItems = items;
+		const cursor = append ? nextCursor : '';
+		const queryOptions = instanceWide
+			? instanceAuditQueryOptions(organizationQueryAPI, instanceFilterQuery(cursor))
+			: organizationAuditQueryOptions(organizationQueryAPI, target, filterQuery(cursor));
+		const cachedResult = queryClient.getQueryData<InstanceAuditPage | OrganizationAuditPage>(
+			queryOptions.queryKey
+		);
+		if (cachedResult !== undefined) {
+			items = append
+				? appendUniqueAuditEvents(previousItems, cachedResult.items ?? [])
+				: (cachedResult.items ?? []);
+			nextCursor = cachedResult.next_cursor ?? '';
+			if (!append) itemsReady = true;
+		} else if (!append) {
+			itemsReady = false;
+		}
+		if (append) loadingMore = true;
+		else loading = !itemsReady;
+		error = '';
+		ownerRequired = false;
+		try {
+			const result = instanceWide
+				? await queryClient.fetchQuery(
+						instanceAuditQueryOptions(organizationQueryAPI, instanceFilterQuery(cursor))
+					)
+				: await queryClient.fetchQuery(
+						organizationAuditQueryOptions(organizationQueryAPI, target, filterQuery(cursor))
+					);
+			if (sequence !== requestSequence) return;
+			items = append
+				? appendUniqueAuditEvents(previousItems, result.items ?? [])
+				: (result.items ?? []);
+			nextCursor = result.next_cursor ?? '';
+			if (!append) itemsReady = true;
+		} catch (cause) {
+			if (sequence !== requestSequence) return;
+			ownerRequired =
+				cause instanceof OpenPostQueryError && (cause.status === 401 || cause.status === 403);
+			if (ownerRequired) {
+				items = [];
+				itemsReady = false;
+				nextCursor = '';
+				queryClient.removeQueries({
+					queryKey: instanceWide
+						? organizationQueryKeys.instanceAuditRoot()
+						: organizationQueryKeys.auditRoot(target)
+				});
+			}
+			error = ownerRequired ? scope.accessError : scope.loadError;
+		} finally {
+			if (sequence === requestSequence) {
+				loading = false;
+				loadingMore = false;
+			}
+		}
+	}
+
+	function applyFilters() {
+		items = [];
+		itemsReady = false;
+		nextCursor = '';
+		void loadAudit();
+	}
+	function resetFilters() {
+		instanceOrganizationID = '';
+		action = '';
+		actorUserID = '';
+		resourceType = '';
+		resultFilter = '';
+		workspaceID = '';
+		from = '';
+		before = '';
+		applyFilters();
+	}
+
+	async function retryLoad() {
+		const organizationsLoadedSuccessfully = instanceWide ? true : await loadOrganizations();
+		if (organizationsLoadedSuccessfully && (instanceWide || selectedOrganizationID)) {
+			await loadAudit();
+		}
+	}
+	async function exportAudit(format: 'json' | 'csv') {
+		if ((!instanceWide && !selectedOrganizationID) || exporting) return;
+		const identity = auth.captureIdentity();
+		if (!identity) return;
+		const requestSequence = ++exportRequestSequence;
+		const targetInstanceWide = instanceWide;
+		const targetOrganizationID = selectedOrganizationID;
+		const targetContextKey = exportContextKey;
+		const filenameScope = scope.filenameScope;
+		const exportError = scope.exportError;
+		const isCurrentRequest = () =>
+			mounted &&
+			active &&
+			requestSequence === exportRequestSequence &&
+			auth.isIdentityCurrent(identity) &&
+			instanceWide === targetInstanceWide &&
+			selectedOrganizationID === targetOrganizationID &&
+			exportContextKey === targetContextKey;
+		exporting = format;
+		error = '';
+		try {
+			const organizationParams = {
+				path: { id: targetOrganizationID },
+				query: { ...filterQuery(), limit: undefined, cursor: undefined }
+			};
+			const instanceParams = {
+				query: {
+					...instanceFilterQuery(),
+					limit: undefined,
+					cursor: undefined
+				}
+			};
+			const result = targetInstanceWide
+				? format === 'json'
+					? await client.GET('/admin/audit-events/export.json', {
+							params: instanceParams
+						})
+					: await client.GET('/admin/audit-events/export.csv', {
+							params: instanceParams,
+							parseAs: 'text'
+						})
+				: format === 'json'
+					? await client.GET('/organizations/{id}/audit-events/export.json', {
+							params: organizationParams
+						})
+					: await client.GET('/organizations/{id}/audit-events/export.csv', {
+							params: organizationParams,
+							parseAs: 'text'
+						});
+			if (!isCurrentRequest()) return;
+			if (result.error || result.data === undefined) throw new Error('audit export failed');
+			const payload =
+				format === 'json' ? JSON.stringify(result.data, null, 2) : String(result.data);
+			const mime = format === 'json' ? 'application/json' : 'text/csv';
+			const filename = `openpost-${filenameScope}-audit-${new Date().toISOString().slice(0, 10)}.${format}`;
+			await saveExport(new Blob([payload], { type: mime }), filename, isCurrentRequest);
+			if (!isCurrentRequest()) return;
+		} catch {
+			if (isCurrentRequest()) error = exportError;
+		} finally {
+			if (isCurrentRequest()) exporting = '';
+		}
+	}
+
+	async function saveExport(blob: Blob, filename: string, isCurrentRequest: () => boolean) {
+		if (!isCurrentRequest()) return;
+		const file = new File([blob], filename, { type: blob.type });
+		if (navigator.canShare?.({ files: [file] })) {
+			if (!isCurrentRequest()) return;
+			await navigator.share({ files: [file], title: filename });
+			if (!isCurrentRequest()) return;
+			return;
+		}
+		const href = URL.createObjectURL(blob);
+		try {
+			if (!isCurrentRequest()) return;
+			const link = document.createElement('a');
+			link.href = href;
+			link.download = filename;
+			link.click();
+		} finally {
+			URL.revokeObjectURL(href);
+		}
+	}
+	function formatDate(value: string) {
+		return new Intl.DateTimeFormat(undefined, {
+			dateStyle: 'medium',
+			timeStyle: 'short'
+		}).format(new Date(value));
+	}
+	function actionLabel(value: string) {
+		return value.replaceAll('.', ' · ').replaceAll('_', ' ');
+	}
+	function changedFieldLabel(event: AuditEvent) {
+		return (event.changed_fields ?? [])
+			.map((field) =>
+				field.previous && field.current
+					? `${field.field}: ${field.previous} → ${field.current}`
+					: `${field.field}: ${field.current ?? field.previous ?? ''}`
+			)
+			.join(', ');
+	}
+</script>
+
+<div class="space-y-6" data-testid={scope.testID}>
+	<InlineNotice tone="info" message={scope.privacyNotice} />
+	{#if instanceWide}
+		<div class="max-w-md space-y-2">
+			<Label for="instance-audit-organization">{m.settings_audit_organization()}</Label>
+			<Input
+				id="instance-audit-organization"
+				bind:value={instanceOrganizationID}
+				placeholder={m.settings_instance_audit_organization_hint()}
+			/>
+		</div>
+	{:else if organizationOptions.length > 1}
+		<div class="max-w-md space-y-2">
+			<Label for="audit-organization">{m.settings_audit_organization()}</Label>
+			<AppSelect
+				id="audit-organization"
+				bind:value={selectedOrganizationID}
+				options={organizationOptions}
+			/>
+		</div>
+	{/if}
+
+	<Card.Root>
+		<Card.Header
+			><Card.Title class="flex items-center gap-2 text-base"
+				><ThemeIcon role="filter" class="size-4" />{m.settings_audit_filters()}</Card.Title
+			></Card.Header
+		>
+		<Card.Content class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+			<div class="space-y-2">
+				<Label for="audit-action">{m.settings_audit_action()}</Label><Input
+					id="audit-action"
+					bind:value={action}
+					placeholder="member.role_changed"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-actor">{m.settings_audit_actor()}</Label><Input
+					id="audit-actor"
+					bind:value={actorUserID}
+					placeholder={m.settings_audit_actor_hint()}
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-workspace">{m.settings_audit_workspace()}</Label><Input
+					id="audit-workspace"
+					bind:value={workspaceID}
+					placeholder={m.settings_audit_workspace_hint()}
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-resource">{m.settings_audit_resource()}</Label><AppSelect
+					id="audit-resource"
+					bind:value={resourceType}
+					options={resourceOptions}
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-result-filter">{m.settings_audit_result()}</Label><AppSelect
+					id="audit-result-filter"
+					bind:value={resultFilter}
+					options={resultOptions}
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-from">{m.settings_audit_from()}</Label><Input
+					id="audit-from"
+					type="datetime-local"
+					bind:value={from}
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="audit-before">{m.settings_audit_before()}</Label><Input
+					id="audit-before"
+					type="datetime-local"
+					bind:value={before}
+				/>
+			</div>
+		</Card.Content>
+		<Card.Footer class="flex flex-wrap gap-2"
+			><Button onclick={applyFilters}>{m.settings_audit_apply_filters()}</Button><Button
+				variant="outline"
+				onclick={resetFilters}>{m.settings_audit_clear_filters()}</Button
+			></Card.Footer
+		>
+	</Card.Root>
+
+	<div class="flex flex-wrap gap-2">
+		<Button
+			variant="outline"
+			size="sm"
+			disabled={(!instanceWide && !selectedOrganizationID) || Boolean(exporting)}
+			onclick={() => void exportAudit('json')}
+			data-testid="audit-export-json"
+			><ThemeIcon role="download" class="size-4" />{m.settings_audit_export_json()}</Button
+		>
+		<Button
+			variant="outline"
+			size="sm"
+			disabled={(!instanceWide && !selectedOrganizationID) || Boolean(exporting)}
+			onclick={() => void exportAudit('csv')}
+			data-testid="audit-export-csv"
+			><ThemeIcon role="download" class="size-4" />{m.settings_audit_export_csv()}</Button
+		>
+	</div>
+
+	{#if error}
+		<InlineNotice tone={ownerRequired ? 'info' : itemsReady ? 'warning' : 'error'} message={error}>
+			{#if !ownerRequired}{#snippet actions()}<Button
+						variant="outline"
+						size="sm"
+						onclick={() => void retryLoad()}>{m.common_retry()}</Button
+					>{/snippet}{/if}
+		</InlineNotice>
+	{/if}
+	{#if loading && !itemsReady}
+		<PageLoading layout="list" label={m.settings_audit_loading()} items={5} />
+	{:else if itemsReady && items.length === 0}
+		<p class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+			{m.settings_audit_empty()}
+		</p>
+	{:else if itemsReady}
+		<div class="space-y-3" aria-live="polite" data-testid={scope.eventsTestID}>
+			{#each items as event (event.source + event.id)}
+				<Card.Root
+					><Card.Content class="space-y-3 p-4">
+						<div class="flex flex-wrap items-start justify-between gap-2">
+							<div class="min-w-0">
+								<p class="font-medium capitalize">
+									{actionLabel(event.action)}
+								</p>
+								<p class="text-sm break-all text-muted-foreground">
+									{event.resource.type}{event.resource.id ? ` · ${event.resource.id}` : ''}
+								</p>
+							</div>
+							<time class="text-xs text-muted-foreground" datetime={event.occurred_at}
+								>{formatDate(event.occurred_at)}</time
+							>
+						</div>
+						<dl class="grid gap-2 text-sm sm:grid-cols-2">
+							{#if instanceWide && event.resource.organization_id}<div>
+									<dt class="text-xs text-muted-foreground">
+										{m.settings_audit_organization()}
+									</dt>
+									<dd class="break-all">{event.resource.organization_id}</dd>
+								</div>{/if}
+							<div>
+								<dt class="text-xs text-muted-foreground">
+									{m.settings_audit_actor()}
+								</dt>
+								<dd class="break-all">
+									{event.actor_user_id || m.settings_audit_system_actor()}
+								</dd>
+							</div>
+							<div>
+								<dt class="text-xs text-muted-foreground">
+									{m.settings_audit_result()}
+								</dt>
+								<dd>{event.result}</dd>
+							</div>
+							{#if event.effective_actor_user_id && event.effective_actor_user_id !== event.actor_user_id}<div
+								>
+									<dt class="text-xs text-muted-foreground">
+										{m.settings_audit_effective_actor()}
+									</dt>
+									<dd class="break-all">{event.effective_actor_user_id}</dd>
+								</div>{/if}
+							{#if event.resource.workspace_id}<div>
+									<dt class="text-xs text-muted-foreground">
+										{m.settings_audit_workspace()}
+									</dt>
+									<dd class="break-all">{event.resource.workspace_id}</dd>
+								</div>{/if}
+							{#if changedFieldLabel(event)}<div>
+									<dt class="text-xs text-muted-foreground">
+										{m.settings_audit_changes()}
+									</dt>
+									<dd>{changedFieldLabel(event)}</dd>
+								</div>{/if}
+						</dl>
+					</Card.Content></Card.Root
+				>
+			{/each}
+		</div>
+		{#if nextCursor}<Button
+				variant="outline"
+				disabled={loadingMore}
+				onclick={() => void loadAudit({ append: true })}
+				>{#if loadingMore}<ProtectedIcon
+						icon="loading"
+						class="size-4 animate-spin"
+					/>{/if}{m.settings_audit_load_older()}</Button
+			>{/if}
+	{/if}
+</div>

@@ -1,0 +1,375 @@
+package platform
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+)
+
+func TestThreadsExchangeCodeRecordsGrantedOptionalScopes(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "graph.threads.net" {
+			if req.URL.Path == "/oauth/access_token" {
+				return jsonResponse(req, `{"access_token":"short","user_id":12345}`), nil
+			}
+			if req.URL.Path == "/access_token" {
+				return jsonResponse(req, `{"access_token":"long","expires_in":5184000}`), nil
+			}
+		}
+		t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		return nil, nil
+	})}
+
+	token, err := NewThreadsAdapter("client", "secret", "https://app.example/callback").
+		ExchangeCode(context.Background(), "code", nil)
+	if err != nil {
+		t.Fatalf("ExchangeCode returned error: %v", err)
+	}
+	if token.AccessToken != "long" || !strings.Contains(token.Extra["scope"], "threads_manage_insights") || !strings.Contains(token.Extra["scope"], "threads_location_tagging") {
+		t.Fatalf("expected token with analytics and location scopes, got %#v", token)
+	}
+}
+
+func TestThreadsExchangeCodeKeepsUserIDRequestLocal(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	firstLongLivedStarted := make(chan struct{})
+	releaseFirstLongLived := make(chan struct{})
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/oauth/access_token":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				return nil, err
+			}
+			switch form.Get(oauthParamCode) {
+			case "first-code":
+				return jsonResponse(req, `{"access_token":"first-short","user_id":111}`), nil
+			case "second-code":
+				return jsonResponse(req, `{"access_token":"second-short","user_id":222}`), nil
+			default:
+				t.Fatalf("unexpected authorization code %q", form.Get(oauthParamCode))
+			}
+		case "/access_token":
+			if req.URL.Query().Get(oauthParamAccessToken) == "first-short" {
+				close(firstLongLivedStarted)
+				<-releaseFirstLongLived
+			}
+			return jsonResponse(req, `{"access_token":"long","expires_in":5184000}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		return nil, nil
+	})}
+
+	adapter := NewThreadsAdapter("client", "secret", "https://app.example/callback")
+	type exchangeResult struct {
+		token *TokenResult
+		err   error
+	}
+	firstResult := make(chan exchangeResult, 1)
+	go func() {
+		token, err := adapter.ExchangeCode(context.Background(), "first-code", nil)
+		firstResult <- exchangeResult{token: token, err: err}
+	}()
+
+	<-firstLongLivedStarted
+	secondToken, err := adapter.ExchangeCode(context.Background(), "second-code", nil)
+	if err != nil {
+		t.Fatalf("second ExchangeCode returned error: %v", err)
+	}
+	close(releaseFirstLongLived)
+	first := <-firstResult
+	if first.err != nil {
+		t.Fatalf("first ExchangeCode returned error: %v", first.err)
+	}
+
+	if first.token.Extra["user_id"] != "111" {
+		t.Fatalf("first exchange received another request's user ID: %#v", first.token.Extra)
+	}
+	if secondToken.Extra["user_id"] != "222" {
+		t.Fatalf("second exchange received another request's user ID: %#v", secondToken.Extra)
+	}
+}
+
+func TestThreadsReplyAndHideComment(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodPost && req.URL.String() == "https://graph.threads.net/v1.0/user-1/threads":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading reply body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing reply body: %v", err)
+			}
+			if form.Get(jsonFieldText) != "Thanks" || form.Get("reply_to_id") != "reply-1" || form.Get("media_type") != "TEXT" || form.Get(oauthParamAccessToken) != "threads-token" {
+				t.Fatalf("unexpected reply form %#v", form)
+			}
+			return jsonResponse(req, `{"id":"creation-1"}`), nil
+		case req.Method == http.MethodGet && req.URL.String() == "https://graph.threads.net/v1.0/creation-1?fields=status,error_message":
+			if req.Header.Get(headerAuthorization) != bearerPrefix+"threads-token" {
+				t.Fatalf("unexpected status auth header %q", req.Header.Get(headerAuthorization))
+			}
+			return jsonResponse(req, `{"status":"FINISHED"}`), nil
+		case req.Method == http.MethodPost && req.URL.String() == "https://graph.threads.net/v1.0/user-1/threads_publish":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading publish body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing publish body: %v", err)
+			}
+			if form.Get("creation_id") != "creation-1" || form.Get(oauthParamAccessToken) != "threads-token" {
+				t.Fatalf("unexpected publish form %#v", form)
+			}
+			return jsonResponse(req, `{"id":"reply-post-1"}`), nil
+		case req.Method == http.MethodPost && req.URL.String() == "https://graph.threads.net/v1.0/reply-1/manage_reply":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading hide body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing hide body: %v", err)
+			}
+			if form.Get("hide") != "true" || form.Get(oauthParamAccessToken) != "threads-token" {
+				t.Fatalf("unexpected hide form %#v", form)
+			}
+			return jsonResponse(req, `{"success":true}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewThreadsAdapter("", "", "")
+	replyID, err := adapter.ReplyToComment(context.Background(), "threads-token", "user-1", "reply-1", " Thanks ")
+	if err != nil {
+		t.Fatalf("ReplyToComment returned error: %v", err)
+	}
+	if replyID != "reply-post-1" {
+		t.Fatalf("expected reply post ID, got %q", replyID)
+	}
+	if err := adapter.HideComment(context.Background(), "threads-token", "user-1", "reply-1"); err != nil {
+		t.Fatalf("HideComment returned error: %v", err)
+	}
+}
+
+func TestThreadsPublishContainerRetriesTypedPropagationError(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	attempts := 0
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.String() != "https://graph.threads.net/v1.0/user-1/threads_publish" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		attempts++
+		if attempts == 1 {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"code":24,"error_subcode":4279009}}`)),
+				Request:    req,
+			}, nil
+		}
+		return jsonResponse(req, `{"id":"thread-1"}`), nil
+	})}
+
+	id, err := NewThreadsAdapter("", "", "").publishContainer(
+		context.Background(),
+		"threads-token",
+		"user-1",
+		"creation-1",
+	)
+
+	if err != nil {
+		t.Fatalf("publishContainer returned error: %v", err)
+	}
+	if id != "thread-1" || attempts != 2 {
+		t.Fatalf("expected one code-24 retry and thread-1, got id=%q attempts=%d", id, attempts)
+	}
+}
+
+func TestThreadsPublishContainerDoesNotRetryUnrelatedCode24(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	attempts := 0
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		attempts++
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"code":24,"error_subcode":123}}`)),
+			Request:    req,
+		}, nil
+	})}
+
+	_, err := NewThreadsAdapter("", "", "").publishContainer(
+		context.Background(),
+		"threads-token",
+		"user-1",
+		"creation-1",
+	)
+
+	if err == nil || attempts != 1 {
+		t.Fatalf("expected unrelated code-24 failure without retry, got err=%v attempts=%d", err, attempts)
+	}
+}
+
+func TestThreadsDeleteCommentUnsupported(t *testing.T) {
+	err := NewThreadsAdapter("", "", "").DeleteComment(context.Background(), "threads-token", "user-1", "reply-1")
+	if !errors.Is(err, ErrUnsupportedCommentAction) {
+		t.Fatalf("expected unsupported comment action, got %v", err)
+	}
+}
+
+func TestThreadsPublishMixedMediaCarousel(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	childCount := 0
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodPost && req.URL.String() == "https://graph.threads.net/v1.0/user-1/threads":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading container body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing container body: %v", err)
+			}
+			if form.Get(oauthParamAccessToken) != "threads-token" {
+				t.Fatalf("unexpected access token in %#v", form)
+			}
+			if form.Get("is_carousel_item") == "true" {
+				childCount++
+				if childCount == 1 && (form.Get("media_type") != "IMAGE" || form.Get("image_url") != "https://cdn.example/image.jpg") {
+					t.Fatalf("unexpected image item form %#v", form)
+				}
+				if childCount == 2 && (form.Get("media_type") != "VIDEO" || form.Get("video_url") != "https://cdn.example/video.mp4") {
+					t.Fatalf("unexpected video item form %#v", form)
+				}
+				return jsonResponse(req, `{"id":"`+[]string{"child-1", "child-2"}[childCount-1]+`"}`), nil
+			}
+			if form.Get("media_type") != "CAROUSEL" || form.Get("children") != "child-1,child-2" || form.Get(jsonFieldText) != "Launch" {
+				t.Fatalf("unexpected carousel form %#v", form)
+			}
+			return jsonResponse(req, `{"id":"carousel-1"}`), nil
+		case req.Method == http.MethodGet && (req.URL.Path == "/v1.0/child-1" || req.URL.Path == "/v1.0/child-2" || req.URL.Path == "/v1.0/carousel-1"):
+			return jsonResponse(req, `{"status":"FINISHED"}`), nil
+		case req.Method == http.MethodPost && req.URL.String() == "https://graph.threads.net/v1.0/user-1/threads_publish":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading publish body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil || form.Get("creation_id") != "carousel-1" {
+				t.Fatalf("unexpected publish form %#v err=%v", form, err)
+			}
+			return jsonResponse(req, `{"id":"thread-1"}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	id, err := NewThreadsAdapter("", "", "").Publish(context.Background(), "threads-token", "user-1", &PublishRequest{
+		Content:          "Launch",
+		PlatformMediaIDs: []string{"https://cdn.example/image.jpg", "https://cdn.example/video.mp4"},
+		Media:            []MediaItem{{MimeType: "image/jpeg"}, {MimeType: "video/mp4"}},
+	})
+
+	if err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
+	if id.ExternalID != "thread-1" {
+		t.Fatalf("expected thread-1, got %q", id)
+	}
+}
+
+func TestThreadsSettingsUseOfficialPollAndSpoilerFields(t *testing.T) {
+	payload := map[string]string{}
+	err := applyThreadsSettings(payload, &PublishRequest{Settings: map[string]interface{}{
+		"poll_options":  "One\nTwo\nThree",
+		"reply_control": "followers_only",
+		"topic_tag":     "OpenPost",
+	}})
+	if err != nil {
+		t.Fatalf("applyThreadsSettings returned error: %v", err)
+	}
+	if payload["reply_control"] != "followers_only" || payload["topic_tag"] != "OpenPost" {
+		t.Fatalf("unexpected Threads settings payload %#v", payload)
+	}
+	var poll map[string]string
+	if err := json.Unmarshal([]byte(payload["poll_attachment"]), &poll); err != nil {
+		t.Fatalf("decoding poll attachment: %v", err)
+	}
+	want := map[string]string{"option_a": "One", "option_b": "Two", "option_c": "Three"}
+	if len(poll) != len(want) {
+		t.Fatalf("unexpected poll attachment %#v", poll)
+	}
+	for key, value := range want {
+		if poll[key] != value {
+			t.Fatalf("unexpected poll attachment %#v", poll)
+		}
+	}
+
+	err = applyThreadsSettings(map[string]string{}, &PublishRequest{Settings: map[string]interface{}{
+		"url":          "https://example.com",
+		"poll_options": "One\nTwo",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "link attachment") {
+		t.Fatalf("expected poll/link conflict, got %v", err)
+	}
+
+	err = applyThreadsSettings(map[string]string{}, &PublishRequest{Settings: map[string]interface{}{
+		"poll_options": "Only one",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "2-4 options") {
+		t.Fatalf("expected poll option count error, got %v", err)
+	}
+}
+
+func TestThreadsLocationSearchWaitsForAQuery(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("empty location search should not call Threads: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	})}
+
+	page, err := NewThreadsAdapter("", "", "").SearchPublishingOptions(context.Background(), "threads-token", PublishingOptionsInput{
+		Source: "threads_locations",
+		Search: "   ",
+		Limit:  100,
+	})
+	if err != nil {
+		t.Fatalf("SearchPublishingOptions returned error: %v", err)
+	}
+	if len(page.Options) != 0 || page.NextCursor != "" {
+		t.Fatalf("expected an empty location page, got %#v", page)
+	}
+}

@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import {
+	billingPortalBody,
+	parseBillingRecoveryStatus,
+	requiresBillingRecovery
+} from './billing-recovery';
+
+function status(providerStatus: string, accessRestricted: boolean) {
+	return {
+		organization_id: 'organization-1',
+		workspace_id: 'workspace-1',
+		status: providerStatus,
+		can_manage_billing: true,
+		access_restricted: accessRestricted
+	};
+}
+
+describe('billing recovery', () => {
+	it('requires canonical past-due status and restricted access', () => {
+		expect(requiresBillingRecovery(status('past_due', true))).toBe(true);
+		expect(requiresBillingRecovery(status('PAST_DUE', true))).toBe(true);
+		expect(requiresBillingRecovery(status('active', false))).toBe(false);
+		expect(requiresBillingRecovery(status('past_due', false))).toBe(false);
+		expect(requiresBillingRecovery(undefined)).toBe(false);
+	});
+
+	it('builds purpose-specific portal requests', () => {
+		expect(billingPortalBody('workspace-1', 'update_payment_method')).toEqual({
+			workspace_id: 'workspace-1',
+			purpose: 'update_payment_method'
+		});
+		expect(billingPortalBody('workspace-1')).toEqual({
+			workspace_id: 'workspace-1',
+			purpose: 'manage'
+		});
+		expect(billingPortalBody('workspace-1', 'invoices')).toEqual({
+			workspace_id: 'workspace-1',
+			purpose: 'invoices'
+		});
+		expect(billingPortalBody('workspace-1', 'billing_details')).toEqual({
+			workspace_id: 'workspace-1',
+			purpose: 'billing_details'
+		});
+		expect(billingPortalBody('workspace-1', 'cancel_subscription')).toEqual({
+			workspace_id: 'workspace-1',
+			purpose: 'cancel_subscription'
+		});
+	});
+
+	it('accepts only a complete workspace-scoped recovery status', () => {
+		expect(parseBillingRecoveryStatus(status('past_due', true))).toMatchObject(
+			status('past_due', true)
+		);
+		expect(
+			parseBillingRecoveryStatus({ ...status('past_due', true), organization_id: '' })
+		).toBeNull();
+		expect(
+			parseBillingRecoveryStatus({ ...status('past_due', true), workspace_id: '' })
+		).toBeNull();
+		expect(
+			parseBillingRecoveryStatus({
+				...status('past_due', true),
+				can_manage_billing: 'yes'
+			})
+		).toBeNull();
+		expect(parseBillingRecoveryStatus(null)).toBeNull();
+	});
+});

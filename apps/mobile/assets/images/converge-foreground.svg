@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g transform="matrix(2 0 0 2 128 128)" fill="#ffffff">
+    <path d="M24 4h36v28L32 60H4V24A20 20 0 0 1 24 4Z" />
+    <path d="M68 4h36a20 20 0 0 1 20 20v36H96L68 32Z" />
+    <path d="M4 68h28l28 28v28H24a20 20 0 0 1-20-20Z" />
+    <path d="m68 96 28-28h28v36a20 20 0 0 1-20 20H68Z" />
+  </g>
+</svg>

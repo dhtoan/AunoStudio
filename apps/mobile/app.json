@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "OpenPost",
+    "slug": "openpost",
+    "version": "0.2.30",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "openpost",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.openpost.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.openpost.app",
+      "versionCode": 32,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#B74C05",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-share-intent",
+      "./plugins/with-android-release-signing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow OpenPost to attach photos to your posts.",
+          "cameraPermission": "Allow OpenPost to take a photo for your post."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#B74C05",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 128,
+          "dark": {
+            "backgroundColor": "#B74C05",
+            "image": "./assets/images/splash-icon.png"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

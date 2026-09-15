@@ -1,0 +1,507 @@
+import { router, Stack } from "expo-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+
+import { DelayedQueryPlaceholder, InitialQueryError, QueryNotice } from "@/components/query-state";
+import {
+  BodyText,
+  Button,
+  Card,
+  EmptyState,
+  PageTitle,
+  Screen,
+  StatusBadge,
+} from "@/components/ui";
+import { api, errorMessage } from "@/lib/api/client";
+import { formatDateTime, platformLabel, relativeTime } from "@/lib/format";
+import { errorHaptic, selectionHaptic, successHaptic } from "@/lib/haptics";
+import { invalidatePublicationData } from "@/lib/query-cache";
+import { initialQueryBoundaryPending } from "@/lib/query-loading";
+import { currentWorkspaceId, usePublications, type PublicationListItem } from "@/lib/queries";
+import { getWorkspaceId } from "@/lib/api/token-store";
+import {
+  captureWorkspaceQueryScope,
+  queryActorScopeIsCurrent,
+  requireCurrentQuerySession,
+  workspaceQueryScopeIsCurrent,
+  type WorkspaceQueryScope,
+} from "@/lib/query-session";
+import { useNativeTheme } from "@/theme";
+
+type PublicationMutationRequest = {
+  publicationId: string;
+  scope: WorkspaceQueryScope;
+};
+
+type DismissMutationRequest = PublicationMutationRequest & {
+  publication: PublicationListItem;
+};
+
+type DismissedPublication = {
+  publication: PublicationListItem;
+  scope: WorkspaceQueryScope;
+};
+
+export default function QueueScreen() {
+  const theme = useNativeTheme();
+  const { colors, shape, spacing, typography } = theme.manifest;
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<DismissedPublication | null>(null);
+
+  const scheduled = usePublications("scheduled");
+  const failed = usePublications("failed");
+
+  function mutationRequest(publicationId: string): PublicationMutationRequest {
+    return {
+      publicationId,
+      scope: captureWorkspaceQueryScope(currentWorkspaceId()),
+    };
+  }
+
+  function scopeIsCurrent(scope: WorkspaceQueryScope): boolean {
+    return workspaceQueryScopeIsCurrent(scope, getWorkspaceId());
+  }
+
+  function invalidate(
+    { publicationId, scope }: PublicationMutationRequest,
+    activities: readonly ("scheduled" | "failed")[],
+    calendar = false,
+  ): void {
+    if (!queryActorScopeIsCurrent(scope)) return;
+    void invalidatePublicationData(queryClient, {
+      workspaceId: scope.workspaceId,
+      publicationId,
+      activities,
+      calendar,
+    });
+  }
+
+  const retryFailed = useMutation({
+    mutationFn: async ({ publicationId, scope }: PublicationMutationRequest) => {
+      requireCurrentQuerySession(scope);
+      const { error, response } = await api().POST("/publications/{id}/retry-failed", {
+        params: { path: { id: publicationId } },
+      });
+      if (error) throw new Error(await errorMessage(response, "Retry failed"));
+    },
+    onSuccess: (_, request) => {
+      if (scopeIsCurrent(request.scope)) void successHaptic();
+      invalidate(request, ["failed", "scheduled"], true);
+    },
+    onError: (err, request) => {
+      if (scopeIsCurrent(request.scope)) {
+        setActionError(err.message);
+        void errorHaptic();
+      }
+      invalidate(request, ["failed", "scheduled"], true);
+    },
+  });
+
+  const dismissFailed = useMutation({
+    mutationFn: async ({ publicationId, scope }: DismissMutationRequest) => {
+      requireCurrentQuerySession(scope);
+      const { error, response } = await api().POST("/publications/{id}/failure-dismissal", {
+        params: { path: { id: publicationId } },
+      });
+      if (error) throw new Error(await errorMessage(response, "Could not dismiss failed post"));
+    },
+    onSuccess: (_, request) => {
+      if (scopeIsCurrent(request.scope)) {
+        setDismissed({ publication: request.publication, scope: request.scope });
+        setActionError(null);
+        void selectionHaptic();
+      }
+      invalidate(request, ["failed"]);
+    },
+    onError: (err, request) => {
+      if (scopeIsCurrent(request.scope)) {
+        setActionError(err.message);
+        void errorHaptic();
+      }
+      invalidate(request, ["failed"]);
+    },
+  });
+
+  const restoreFailed = useMutation({
+    mutationFn: async ({ publicationId, scope }: PublicationMutationRequest) => {
+      requireCurrentQuerySession(scope);
+      const { error, response } = await api().DELETE("/publications/{id}/failure-dismissal", {
+        params: { path: { id: publicationId } },
+      });
+      if (error) throw new Error(await errorMessage(response, "Could not restore failed post"));
+    },
+    onSuccess: (_, request) => {
+      if (scopeIsCurrent(request.scope)) setDismissed(null);
+      invalidate(request, ["failed"]);
+    },
+    onError: (err, request) => {
+      if (scopeIsCurrent(request.scope)) {
+        setActionError(err.message);
+        void errorHaptic();
+      }
+      invalidate(request, ["failed"]);
+    },
+  });
+
+  const refreshing = scheduled.isRefetching || failed.isRefetching;
+  const hasScheduledData = scheduled.data !== undefined;
+  const hasFailedData = failed.data !== undefined;
+  const coldPending = initialQueryBoundaryPending([
+    { hasData: hasScheduledData, isError: scheduled.isError, isPending: scheduled.isPending },
+    { hasData: hasFailedData, isError: failed.isError, isPending: failed.isPending },
+  ]);
+
+  function refresh() {
+    void scheduled.refetch();
+    void failed.refetch();
+  }
+
+  return (
+    <Screen>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View
+        style={{
+          paddingBottom: spacing.small,
+          paddingHorizontal: spacing.extraLarge,
+          paddingTop: spacing.large,
+        }}
+      >
+        <PageTitle>Queue</PageTitle>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{
+          gap: spacing.extraLarge,
+          padding: spacing.extraLarge,
+          paddingBottom: spacing.doubleExtraLarge + spacing.small,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={colors.onSurfaceVariant}
+          />
+        }
+      >
+        <DelayedQueryPlaceholder
+          pending={coldPending}
+          shape="list"
+          offline={scheduled.fetchStatus === "paused" || failed.fetchStatus === "paused"}
+        />
+        {actionError ? (
+          <BodyText
+            accessibilityRole="alert"
+            style={{ color: colors.error, marginBottom: spacing.small }}
+          >
+            {actionError}
+          </BodyText>
+        ) : null}
+
+        {!coldPending ? (
+          <Section title="Failed" count={failed.data?.length ?? 0}>
+            {failed.isError ? (
+              <QueryError query={failed} label="failed posts" hasData={hasFailedData} />
+            ) : null}
+            {hasFailedData && failed.fetchStatus === "paused" ? (
+              <QueryNotice
+                message="You are offline. Current failed posts remain visible."
+                offline
+              />
+            ) : null}
+            {(failed.data ?? []).map((publication) => (
+              <FailedCard
+                key={publication.id}
+                publication={publication}
+                onRetry={() => retryFailed.mutate(mutationRequest(publication.id))}
+                onDismiss={() =>
+                  dismissFailed.mutate({
+                    ...mutationRequest(publication.id),
+                    publication,
+                  })
+                }
+                pending={
+                  retryFailed.isPending && retryFailed.variables?.publicationId === publication.id
+                }
+              />
+            ))}
+            {(failed.data?.length ?? 0) === 0 && hasFailedData ? (
+              <EmptyState title="No failed posts" />
+            ) : null}
+          </Section>
+        ) : null}
+
+        {!coldPending ? (
+          <Section title="Upcoming" count={scheduled.data?.length ?? 0}>
+            {scheduled.isError ? (
+              <QueryError query={scheduled} label="scheduled posts" hasData={hasScheduledData} />
+            ) : null}
+            {hasScheduledData && scheduled.fetchStatus === "paused" ? (
+              <QueryNotice
+                message="You are offline. Current scheduled posts remain visible."
+                offline
+              />
+            ) : null}
+            {(scheduled.data ?? []).map((publication) => (
+              <QueueRow key={publication.id} publication={publication} />
+            ))}
+            {(scheduled.data?.length ?? 0) === 0 && hasScheduledData ? (
+              <EmptyState title="Nothing scheduled yet" />
+            ) : null}
+          </Section>
+        ) : null}
+      </ScrollView>
+      {dismissed && scopeIsCurrent(dismissed.scope) ? (
+        <View
+          style={[
+            styles.undoBar,
+            {
+              backgroundColor: colors.onSurface,
+              borderRadius: shape.medium,
+              bottom: spacing.large,
+              left: spacing.extraLarge,
+              paddingLeft: spacing.large,
+              right: spacing.extraLarge,
+            },
+          ]}
+          accessibilityRole="alert"
+        >
+          <Text style={[typography.bodyMedium, { color: colors.background, flex: 1 }]}>
+            Failed post dismissed
+          </Text>
+          <Button
+            title="Undo"
+            intent="quiet"
+            onPress={() =>
+              restoreFailed.mutate({
+                publicationId: dismissed.publication.id,
+                scope: dismissed.scope,
+              })
+            }
+            loading={restoreFailed.isPending}
+            style={styles.undoButton}
+          />
+        </View>
+      ) : null}
+    </Screen>
+  );
+}
+
+function QueryError({
+  query,
+  label,
+  hasData,
+}: {
+  query: { error: unknown; refetch: () => unknown };
+  label: string;
+  hasData: boolean;
+}) {
+  const message =
+    query.error instanceof Error ? query.error.message : "Check your connection and try again.";
+  return hasData ? (
+    <QueryNotice
+      message={`Could not refresh ${label}. The current list remains visible.`}
+      retry={() => void query.refetch()}
+    />
+  ) : (
+    <InitialQueryError
+      title={`Could not load ${label}`}
+      message={message}
+      retry={() => void query.refetch()}
+    />
+  );
+}
+
+function Section({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  const theme = useNativeTheme();
+  const { colors, spacing, typography } = theme.manifest;
+  return (
+    <View style={{ gap: spacing.small }}>
+      <Text
+        accessibilityRole="header"
+        style={[
+          typography.labelMedium,
+          {
+            color: colors.onSurfaceVariant,
+            marginHorizontal: spacing.extraSmall,
+          },
+        ]}
+      >
+        {title.toUpperCase()}
+        {count > 0 ? ` · ${count}` : ""}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+function QueueRow({ publication }: { publication: PublicationListItem }) {
+  const theme = useNativeTheme();
+  const { colors, spacing, typography } = theme.manifest;
+  const platforms = distinctPlatforms(publication);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() =>
+        router.push({
+          pathname: "/publications/[id]",
+          params: { id: publication.id },
+        })
+      }
+    >
+      {({ pressed }) => (
+        <Card
+          style={[
+            styles.row,
+            { gap: spacing.medium, paddingVertical: spacing.large },
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <View style={{ flex: 1, gap: spacing.extraSmall }}>
+            <Text style={[typography.bodyLarge, { color: colors.onSurface }]} numberOfLines={2}>
+              {titleFor(publication)}
+            </Text>
+            <BodyText>
+              {formatDateTime(publication.scheduled_at)}
+              {platforms.length > 0 ? ` · ${platforms.join(", ")}` : ""}
+            </BodyText>
+          </View>
+          <StatusBadge status={publication.status} />
+        </Card>
+      )}
+    </Pressable>
+  );
+}
+
+function FailedCard({
+  publication,
+  onRetry,
+  onDismiss,
+  pending,
+}: {
+  publication: PublicationListItem;
+  onRetry: () => void;
+  onDismiss: () => void;
+  pending: boolean;
+}) {
+  const theme = useNativeTheme();
+  const { colors, shape, spacing, typography } = theme.manifest;
+  const errors = (publication.renditions ?? [])
+    .filter((rendition) => rendition.status === "failed")
+    .map((rendition) => ({
+      platform: rendition.platform,
+      message: rendition.error_message,
+    }));
+  return (
+    <Swipeable
+      friction={1.6}
+      leftThreshold={72}
+      overshootLeft={false}
+      renderLeftActions={() => (
+        <View
+          style={[
+            styles.swipeAction,
+            {
+              backgroundColor: colors.success,
+              borderRadius: shape.medium,
+              paddingHorizontal: spacing.extraLarge,
+            },
+          ]}
+        >
+          <Text style={[typography.labelLarge, { color: colors.onSuccess }]}>Dismiss</Text>
+        </View>
+      )}
+      onSwipeableOpen={onDismiss}
+    >
+      <Card style={[styles.row, { gap: spacing.medium, paddingVertical: spacing.large }]}>
+        <Pressable
+          accessibilityRole="button"
+          style={{ flex: 1 }}
+          onPress={() =>
+            router.push({
+              pathname: "/publications/[id]",
+              params: { id: publication.id },
+            })
+          }
+        >
+          <View style={{ gap: spacing.small }}>
+            <Text style={[typography.bodyLarge, { color: colors.onSurface }]} numberOfLines={2}>
+              {titleFor(publication)}
+            </Text>
+            <StatusBadge status="failed" />
+            {errors.slice(0, 2).map((error, index) => (
+              <BodyText key={index} numberOfLines={2}>
+                {error.platform ? `${platformLabel(error.platform)}: ` : ""}
+                {error.message ?? "Publication failed"}
+              </BodyText>
+            ))}
+            <BodyText>{relativeTime(publication.updated_at)}</BodyText>
+          </View>
+        </Pressable>
+        <View style={[styles.failedActions, { gap: spacing.extraSmall }]}>
+          <Button
+            title="Retry"
+            intent="ordinary"
+            onPress={onRetry}
+            disabled={pending}
+            loading={pending}
+            style={styles.retryButton}
+          />
+          <Button title="Dismiss" intent="quiet" onPress={onDismiss} />
+        </View>
+      </Card>
+    </Swipeable>
+  );
+}
+
+function titleFor(publication: PublicationListItem): string {
+  if (publication.title) return publication.title;
+  for (const rendition of publication.renditions ?? []) {
+    if (rendition.body) return rendition.body.split("\n")[0];
+  }
+  return "Untitled";
+}
+
+function distinctPlatforms(publication: PublicationListItem): string[] {
+  const platforms = new Set<string>();
+  for (const rendition of publication.renditions ?? []) {
+    if (rendition.platform) platforms.add(platformLabel(rendition.platform));
+  }
+  return [...platforms].slice(0, 4);
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  retryButton: {
+    paddingHorizontal: 12,
+  },
+  failedActions: {
+    alignItems: "stretch",
+  },
+  swipeAction: {
+    alignItems: "flex-start",
+    justifyContent: "center",
+    width: 112,
+  },
+  undoBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    position: "absolute",
+  },
+  undoButton: {
+    minHeight: 48,
+  },
+});

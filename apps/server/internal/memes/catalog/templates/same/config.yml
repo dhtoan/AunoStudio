@@ -1,0 +1,61 @@
+name: They're The Same Picture
+source: https://knowyourmeme.com/memes/theyre-the-same-picture
+keywords:
+  -
+text:
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.06
+    anchor_y: 0.015
+    angle: -12.0
+    scale_x: 0.35
+    scale_y: 0.3
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: none
+    color: black
+    font: thin
+    anchor_x: 0.525
+    anchor_y: 0.06
+    angle: -12.0
+    scale_x: 0.45
+    scale_y: 0.3
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: default
+    color: white
+    font: thick
+    anchor_x: 0.45
+    anchor_y: 0.775
+    angle: 0.0
+    scale_x: 0.4
+    scale_y: 0.15
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - π
+  - '3'
+  - The Bible
+overlay:
+  - center_x: 0.275
+    center_y: 0.19
+    angle: -12.0
+    scale: 0.3
+    start: 0.0
+    stop: 1.0
+  - center_x: 0.8
+    center_y: 0.25
+    angle: -12.0
+    scale: 0.32
+    start: 0.0
+    stop: 1.0
+  - center_x: 0.665
+    center_y: 0.65
+    angle: 0.0
+    scale: 0.3
+    start: 0.0
+    stop: 1.0

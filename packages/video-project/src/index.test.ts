@@ -1,0 +1,294 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  createCapturedVideoProjectDocumentFromAssets,
+  createCapturedVideoProjectDocument,
+  overlappingTargets,
+  portableVideoProjectDocument,
+  videoProjectMutationOperations,
+  VideoProjectMutationOutbox,
+  type PendingVideoProjectMutation,
+} from "./index";
+
+function mutation(id: string): PendingVideoProjectMutation {
+  return {
+    projectId: "project-1",
+    batch: {
+      workspace_id: "workspace-1",
+      mutation_id: id,
+      base_revision: 1,
+      device_id: "phone-a",
+      operations: [
+        {
+          kind: "set",
+          target: "clip:one",
+          path: "/timeline/items/0/label",
+          value: "Cut",
+        },
+      ],
+    },
+    queuedAt: 1,
+    attempts: 0,
+  };
+}
+
+describe("portable Video Project contract", () => {
+  it("saves reactive documents without retaining mutable state or device handles", () => {
+    const title = { id: "title", text: "Before" };
+    const document = new Proxy(
+      {
+        id: "project-1",
+        rootFolderHandle: { requestPermission() {} },
+        timeline: { items: [new Proxy(title, {})] },
+      },
+      {},
+    );
+    const portable = portableVideoProjectDocument(document);
+    title.text = "After";
+    expect(portable).toEqual({
+      id: "project-1",
+      timeline: { items: [{ id: "title", text: "Before" }] },
+    });
+    expect(structuredClone(portable)).toEqual(portable);
+  });
+
+  it("creates a web-editable timeline clip from a prepared mobile capture", () => {
+    const document = createCapturedVideoProjectDocument({
+      id: "capture-1",
+      name: "Launch clip",
+      fileName: "launch.mp4",
+      durationSeconds: 12,
+      width: 1920,
+      height: 1080,
+      preparation: {
+        source_range: { start_seconds: 2, end_seconds: 8 },
+        crop: { x: 0.2, y: 0, width: 0.6, height: 1 },
+        rotation: 90,
+        gain: 0.5,
+        muted: false,
+        cover_frame_seconds: 3,
+      },
+      createdAt: 100,
+    });
+    expect(document.timeline.items).toEqual([
+      expect.objectContaining({
+        mediaId: "capture-1",
+        trackId: "track-video-main",
+        durationInFrames: 180,
+        sourceStart: 60,
+        sourceEnd: 240,
+        volume: 0.5,
+        crop: { top: 0, right: 0.2, bottom: 0, left: 0.2 },
+        transform: expect.objectContaining({ rotation: 90 }),
+      }),
+    ]);
+    expect(document.thumbnailId).toBe("capture-1");
+  });
+
+  it("creates aligned editor tracks from a multi-source recorder capture", () => {
+    const document = createCapturedVideoProjectDocumentFromAssets({
+      id: "recording-project",
+      name: "Product demo",
+      createdAt: 100,
+      assets: [
+        {
+          id: "screen-asset",
+          kind: "screen",
+          fileName: "screen.webm",
+          durationSeconds: 8,
+          startOffsetSeconds: 0,
+          width: 1920,
+          height: 1080,
+          preparation: {},
+        },
+        {
+          id: "mic-asset",
+          kind: "microphone",
+          fileName: "mic.webm",
+          durationSeconds: 7.5,
+          startOffsetSeconds: 0.25,
+          width: 0,
+          height: 0,
+          preparation: {},
+        },
+      ],
+    });
+
+    expect(document.metadata).toMatchObject({
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    });
+    expect(document.timeline.tracks).toEqual([
+      expect.objectContaining({
+        id: "track-screen-screen-asset",
+        kind: "video",
+        order: 0,
+      }),
+      expect.objectContaining({
+        id: "track-microphone-mic-asset",
+        kind: "audio",
+        order: 1,
+      }),
+    ]);
+    expect(document.timeline.items).toEqual([
+      expect.objectContaining({
+        id: "clip-screen-asset",
+        mediaId: "screen-asset",
+        trackId: "track-screen-screen-asset",
+        from: 0,
+        type: "video",
+      }),
+      expect.objectContaining({
+        id: "clip-mic-asset",
+        mediaId: "mic-asset",
+        trackId: "track-microphone-mic-asset",
+        from: 8,
+        type: "audio",
+      }),
+    ]);
+    expect(document.duration).toBe(8);
+  });
+
+  it("removes filesystem handles and device view state at every depth", () => {
+    const portable = portableVideoProjectDocument({
+      id: "project-1",
+      rootFolderHandle: { opaque: true },
+      timeline: {
+        currentFrame: 18,
+        zoomLevel: 2,
+        items: [{ id: "clip-1", panelLayout: "wide" }],
+      },
+    });
+    expect(portable).toEqual({
+      id: "project-1",
+      timeline: { items: [{ id: "clip-1" }] },
+    });
+  });
+
+  it("classifies only overlapping stable targets as conflicts", () => {
+    expect(overlappingTargets(mutation("one").batch, ["track:two"])).toEqual([]);
+    expect(overlappingTargets(mutation("one").batch, ["clip:one", "track:two"])).toEqual([
+      "clip:one",
+    ]);
+  });
+
+  it("splits independent timeline property edits into stable mutation targets", () => {
+    const previous = {
+      id: "project-1",
+      name: "Launch",
+      timeline: {
+        currentFrame: 10,
+        tracks: [{ id: "video", name: "Video", muted: false }],
+        items: [
+          { id: "title", type: "text", text: "Original", from: 0 },
+          { id: "clip", type: "video", durationInFrames: 60, from: 0 },
+        ],
+      },
+    };
+    const next = structuredClone(previous);
+    next.timeline.currentFrame = 99;
+    next.timeline.items[0]!.text = "Desktop title";
+    next.timeline.items[1]!.durationInFrames = 120;
+
+    expect(videoProjectMutationOperations(previous, next)).toEqual([
+      {
+        kind: "set",
+        target: "item:title.text",
+        path: "/timeline/items/0/text",
+        value: "Desktop title",
+      },
+      {
+        kind: "set",
+        target: "item:clip.durationInFrames",
+        path: "/timeline/items/1/durationInFrames",
+        value: 120,
+      },
+    ]);
+  });
+
+  it("treats timeline membership and ordering as one shared region", () => {
+    const previous = {
+      id: "project-1",
+      timeline: { items: [{ id: "one", text: "One" }] },
+    };
+    const next = {
+      id: "project-1",
+      timeline: {
+        items: [
+          { id: "one", text: "One" },
+          { id: "two", text: "Two" },
+        ],
+      },
+    };
+
+    expect(videoProjectMutationOperations(previous, next)).toEqual([
+      {
+        kind: "set",
+        target: "timeline:items",
+        path: "/timeline/items",
+        value: next.timeline.items,
+      },
+    ]);
+  });
+
+  it("keeps independent Quick Cut segment edits on stable conflict targets", () => {
+    const previous = {
+      id: "quick-cut-1",
+      timeline: {
+        segments: [{ id: "intro", start: 0, end: 3 }],
+        sources: [{ id: "source", name: "launch.mp4" }],
+      },
+    };
+    const next = structuredClone(previous);
+    next.timeline.segments[0]!.end = 4;
+    next.timeline.sources[0]!.name = "launch-final.mp4";
+
+    expect(videoProjectMutationOperations(previous, next)).toEqual([
+      {
+        kind: "set",
+        target: "segment:intro.end",
+        path: "/timeline/segments/0/end",
+        value: 4,
+      },
+      {
+        kind: "set",
+        target: "source:source.name",
+        path: "/timeline/sources/0/name",
+        value: "launch-final.mp4",
+      },
+    ]);
+  });
+
+  it("keeps failed offline work, retries in order, and never redelivers settled mutations", async () => {
+    let entries: PendingVideoProjectMutation[] = [];
+    const storage = {
+      load: async () => structuredClone(entries),
+      save: async (next: PendingVideoProjectMutation[]) => {
+        entries = structuredClone(next);
+      },
+    };
+    const outbox = new VideoProjectMutationOutbox(storage);
+    await outbox.enqueue(mutation("one"));
+    await outbox.enqueue(mutation("one"));
+    await outbox.enqueue(mutation("two"));
+
+    const offline = vi.fn().mockRejectedValueOnce(new TypeError("offline"));
+    await expect(outbox.drain(offline)).rejects.toThrow("offline");
+    expect(entries.map((entry) => [entry.batch.mutation_id, entry.attempts])).toEqual([
+      ["one", 1],
+      ["two", 0],
+    ]);
+
+    const online = vi.fn(async (entry: PendingVideoProjectMutation) => ({
+      outcome: "applied" as const,
+      revision: entry.batch.base_revision + 1,
+    }));
+    await expect(outbox.drain(online)).resolves.toEqual([
+      { outcome: "applied", revision: 2 },
+      { outcome: "applied", revision: 3 },
+    ]);
+    expect(entries).toEqual([]);
+    expect(online).toHaveBeenCalledTimes(2);
+    expect(online.mock.calls[1]?.[0].batch.base_revision).toBe(2);
+  });
+});

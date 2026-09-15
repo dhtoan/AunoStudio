@@ -1,0 +1,1316 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-09-06",
+  "next_review_on": "2026-12-01",
+  "summary_notice": "This plain-language summary is a guide, not a replacement for the Privacy Policy. If it differs from the full policy, the full policy controls.",
+  "summary_points": [
+    "The managed service stores the account, workspace, publishing, media, security, billing, and support data needed to provide OpenPost.",
+    "Social credentials are encrypted. Passwords are hashed. OpenPost does not receive full payment-card details.",
+    "OpenPost sends data to a social network, identity provider, stock-media service, or AI provider only for the connection or action described in the full policy.",
+    "You can export or request deletion of account data. Shared ownership, active billing, legal duties, security needs, and short-lived recovery copies can delay or limit deletion.",
+    "Signed-in Cloud Video Projects store authored project state and required Project Assets in the workspace. Local-only Video Editor projects, device view state, recovery data, preferences, and downloaded models stay on the device until you clear them or choose an explicit OpenPost save or upload."
+  ],
+  "managed_retention": [
+    {
+      "id": "account-profile-legal",
+      "category": "Account, profile, and legal acceptance",
+      "owner": "Managed OpenPost service",
+      "purpose": "Create and administer the account, apply user settings, show an optional public profile, and record the policy terms accepted by the user.",
+      "includes": "Email, display name, username, avatar, public-profile choice, account settings, accepted Terms and Privacy versions, and acceptance time.",
+      "duration": "For the account lifetime. The managed service has no separate age-based purge while the account remains open.",
+      "deletion_trigger": "A completed account-deletion request removes the user row and personal profile data after required ownership, billing, and administrator blockers are resolved.",
+      "exceptions": "Content in a shared organization can remain after ownership is transferred. Minimal records can be retained when required for law, security, fraud prevention, or legal claims.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "organizations-workspaces-membership",
+      "category": "Organizations, workspaces, members, and invitations",
+      "owner": "Managed OpenPost service",
+      "purpose": "Separate customer work, authorize members, support collaboration, and apply organization and workspace settings.",
+      "includes": "Organization and workspace names, roles, membership, settings, invitations, schedules, and usage configuration.",
+      "duration": "Until the organization, workspace, membership, or invitation is removed. Accepted and expired invitation rows do not have a general age-based purge.",
+      "deletion_trigger": "Workspace or organization deletion removes owned records. Account deletion removes the user's memberships and personal organizations, or transfers shared ownership when another owner must retain the organization.",
+      "exceptions": "A shared organization and its content remain for its other members. Invitation records can remain for operational history until their parent workspace or organization is deleted.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/workspaces.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "cloud-video-projects",
+      "category": "Cloud Video Projects and Project Assets",
+      "owner": "Managed OpenPost service",
+      "purpose": "Keep authored video edits, required source assets, revisions, checkpoints, trash, and named conflict branches available to authorized workspace members across devices.",
+      "includes": "Portable project documents, mutation identifiers, revision authorship and device labels, preparation recipes, source media files, checksums, sync state, checkpoints, conflicts, and trash timestamps. Browser file handles and device view state are excluded.",
+      "duration": "Current project state and required assets remain until the project or workspace is deleted. Autosave revisions and trashed projects expire after 30 days; named checkpoints remain until removed.",
+      "deletion_trigger": "Project or workspace deletion removes owned cloud project records and Project Assets. Signing out removes local synced copies and pending credentials from that device but does not delete shared workspace data.",
+      "exceptions": "Authorized workspace collaborators can retain access while the project belongs to their workspace. Storage and legal recovery copies follow the service retention terms.",
+      "evidence": [
+        "apps/server/internal/models/video_projects.go",
+        "apps/server/internal/services/videoprojects/service.go",
+        "apps/server/internal/database/migrations/131_cloud_video_projects.sql"
+      ]
+    },
+    {
+      "id": "sign-in-credentials",
+      "category": "Sign-in credentials and identity links",
+      "owner": "Managed OpenPost service",
+      "purpose": "Authenticate users, provide optional stronger sign-in methods, enforce organization identity policy, and recover access safely.",
+      "includes": "Password hashes, passkey public-key material, encrypted TOTP secrets, hashed MFA recovery codes, linked OIDC identities, identity-assurance records, and hashed action-bound reauthentication grants.",
+      "duration": "Credentials and linked identities remain until removed, replaced, or the account is deleted. Session identity assurance expires at its policy time and has no separate age purge; a new assurance for the same session and provider replaces it. Expired reauthentication grants are pruned when another grant is created.",
+      "deletion_trigger": "Credential removal, recovery-code replacement, identity unlinking, password replacement where applicable, related session or provider deletion, or completed account deletion.",
+      "exceptions": "OpenPost never stores a readable password. Provider-side identity records remain subject to the selected identity provider's policy.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/auth.go",
+        "apps/server/internal/api/handlers/oidc.go",
+        "apps/server/internal/services/identity/assurance.go",
+        "apps/server/internal/services/mfarecovery/service.go"
+      ]
+    },
+    {
+      "id": "identity-administration-audit",
+      "category": "Organization identity administration and audit",
+      "owner": "Managed OpenPost service",
+      "purpose": "Configure organization sign-in policy, verify identity-provider domains, authorize tightly scoped administrator actions, and explain identity-policy changes.",
+      "includes": "OIDC provider and organization policy settings, encrypted provider client secrets, verified domains, actor and subject identifiers, safe audit details, and hashed time-limited impersonation grants with creation and use metadata.",
+      "duration": "Identity-provider and policy settings remain until removed or their organization is deleted. Identity audit events and used or expired impersonation grants have no general age-based purge.",
+      "deletion_trigger": "Provider, domain, policy, organization, or account deletion removes related records according to their stored relationship. Expiry prevents an unused impersonation grant from being accepted even if its row remains.",
+      "exceptions": "When an actor or subject account is deleted, an organization identity audit event can remain with that user reference cleared. These application records are not a complete host command log.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/services/identity/admin.go",
+        "apps/server/internal/api/handlers/instance_admin.go",
+        "apps/server/internal/database/migrations/051_oidc_sso.sql",
+        "apps/server/internal/database/migrations/052_user_impersonation_grants.sql"
+      ]
+    },
+    {
+      "id": "operator-provider-configuration",
+      "category": "Instance settings, provider applications, and provider-safety evidence",
+      "owner": "Managed OpenPost service operator",
+      "purpose": "Configure the hosted instance and provider applications, register supported Mastodon instances, and fail closed when a provider approval, certification result, or runtime safety control is missing or stale.",
+      "includes": "Encrypted instance-setting values and provider client secrets, provider application metadata, dynamic Mastodon registrations, one-way app and instance fingerprints, approval reviews, normalized certification checks, and append-only runtime control events.",
+      "duration": "Current settings and application registrations remain until replaced, removed, deactivated, or the instance is retired. Approval reviews, certification runs and checks, and runtime control events have no general age-based purge. Their stored time and state fields control whether they still satisfy readiness or restrict an operation.",
+      "deletion_trigger": "An administrator can delete a database-backed provider application or replace and clear supported instance settings. Dynamic Mastodon registrations and expired provider-safety evidence remain until verified operator maintenance or database retirement.",
+      "exceptions": "Environment-managed configuration is controlled outside the application database. Provider-safety evidence stores app and instance fingerprints, an approval-source URL, normalized scope sets and results, and external-reference hashes rather than plaintext client secrets, instance URLs, granted tokens, or provider response bodies.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/services/providerapps/service.go",
+        "apps/server/internal/services/instancesettings/service.go",
+        "apps/server/internal/services/mastodonapps/service.go",
+        "apps/server/internal/services/providerreadiness/repository.go",
+        "apps/server/internal/database/migrations/077_provider_readiness_certification.sql"
+      ]
+    },
+    {
+      "id": "browser-sessions",
+      "category": "Authenticated browser sessions",
+      "owner": "Managed OpenPost service",
+      "purpose": "Keep a user signed in, show and revoke active sessions, and investigate suspicious session use.",
+      "includes": "Opaque server-side session ID, creation and expiry times, IP address, browser details, last use, and revocation state.",
+      "duration": "Each session expires after seven days. Revoked and expired session rows have no separate scheduled age purge before account deletion.",
+      "deletion_trigger": "Expiry ends authorization. Logout, password-reset session revocation, manual session revocation, or account deletion ends or removes session access.",
+      "exceptions": "The browser cookie follows the separate browser-storage inventory. Security records can remain in size-bounded operational logs after a session row expires.",
+      "evidence": [
+        "apps/server/internal/services/auth/auth.go",
+        "apps/server/internal/services/sessions/service.go",
+        "apps/server/internal/models/models.go"
+      ]
+    },
+    {
+      "id": "one-time-auth-records",
+      "category": "One-time verification, reset, and sign-in records",
+      "owner": "Managed OpenPost service",
+      "purpose": "Complete time-limited identity, account recovery, authorization, native sign-in, and editor-return operations without storing reusable plaintext secrets.",
+      "includes": "Email verification challenges, email-change challenges with old and new addresses and keyed code hashes, password-reset token hashes, MFA or passkey authentication challenges, OIDC authorization requests, native handoffs, logout events, social OAuth request tokens and account selections, CLI authorization sessions, OAuth codes, and short-lived Image Editor return tokens.",
+      "duration": "Email verification codes are valid for 10 minutes and records more than 24 hours past expiry are pruned when a later challenge is created. Email-change codes are valid for 15 minutes; records more than 24 hours past expiry are pruned when a later email-change challenge is created. Password-reset tokens are valid for one hour and the prior unused token is replaced by a new request. OIDC authorization requests are valid for 10 minutes. Image Editor return tokens are valid for two hours. Other one-time records use their stored expiry.",
+      "deletion_trigger": "Use or expiry ends authorization. Replacement, explicit cancellation where supported, cleanup during a later related operation, or account/workspace deletion can remove the stored row.",
+      "exceptions": "Use and expiry do not always physically remove a row immediately, but they prevent the one-time record from being accepted again.",
+      "evidence": [
+        "apps/server/internal/services/emailverification/service.go",
+        "apps/server/internal/services/emailchange/service.go",
+        "apps/server/internal/api/handlers/passwords.go",
+        "apps/server/internal/services/identity/service.go",
+        "apps/server/internal/services/cli_auth/service.go",
+        "apps/server/internal/api/handlers/oauth.go",
+        "apps/server/internal/api/handlers/image_editor.go"
+      ]
+    },
+    {
+      "id": "connected-social-accounts",
+      "category": "Connected social accounts and grants",
+      "owner": "Managed OpenPost service",
+      "purpose": "Connect the selected social account, show its supported capabilities, and perform only the publishing or reading actions authorized for it.",
+      "includes": "Network, account and profile identifiers, capabilities, granted scopes, encrypted access and refresh tokens, token expiry, connection selections, and connection health.",
+      "duration": "Connection metadata has no general age-based purge and can remain after a destination is disconnected or its grant is revoked. Active credentials remain until the grant is revoked, its workspace is deleted, or the owning personal account is deleted. Refresh-token jobs are replaced as token schedules change.",
+      "deletion_trigger": "Disconnecting one destination disables it while retaining a shared provider grant. Revoking the grant clears its managed credentials and disables every destination that uses it. Workspace or account deletion removes the stored connection rows.",
+      "exceptions": "The social network controls its own records, published content, logs, and revocation behavior. Disconnecting OpenPost does not delete provider-side content.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/services/tokenmanager/manager.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "api-cli-mcp-access",
+      "category": "API, CLI, MCP, and automation access",
+      "owner": "Managed OpenPost service",
+      "purpose": "Authorize scoped non-browser clients, enforce access limits, and retain a safe record of MCP operations.",
+      "includes": "Hashed access tokens, prefixes, names, scopes, workspace limits, expiry and revocation state, OAuth client metadata, and MCP tool-call audit records.",
+      "duration": "API-family tokens default to 90 days unless a supported caller chooses another expiry. Expiry or revocation blocks use; token metadata and tool-call records otherwise remain until account or workspace deletion.",
+      "deletion_trigger": "Manual revocation, expiry for authorization, OAuth-code consumption, or account/workspace deletion for stored records.",
+      "exceptions": "Tool-call records contain operation metadata and safe error text, not social access tokens or full provider responses.",
+      "evidence": [
+        "apps/server/internal/services/apitokens/service.go",
+        "apps/server/internal/services/cli_auth/service.go",
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "publishing-content",
+      "category": "Drafts, schedules, publications, and automation",
+      "owner": "Managed OpenPost service",
+      "purpose": "Draft, adapt, schedule, publish, and automate the customer content and destinations selected by the user.",
+      "includes": "Post and thread text, segments, destination settings, schedules, renditions, prompts, social sets, repost rules, publication state, and provider identifiers for published results.",
+      "duration": "Until the user deletes the item or its workspace or personal account is deleted. Published-result metadata and failed history have no general age-based purge.",
+      "deletion_trigger": "Item deletion where offered, workspace deletion, or completed deletion of the owning personal account and workspace.",
+      "exceptions": "Content already sent to a social network remains under that network's controls. Shared-workspace content can remain after the user leaves or transfers ownership.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/publications.go",
+        "apps/server/internal/services/reposts/runtime.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "publishing-history-jobs",
+      "category": "Publishing history, authorizations, delivery state, and jobs",
+      "owner": "Managed OpenPost service",
+      "purpose": "Execute durable work, prevent unsafe duplicate provider writes, explain delivery outcomes, and preserve authorization evidence.",
+      "includes": "Lifecycle events, consent fingerprints, provider write attempts, delivery state, job payloads, status, safe errors, run times, and retry history.",
+      "duration": "The database has no general age-based purge for completed or failed history. Records remain with the related publication, workspace, account, or job until that parent data is deleted.",
+      "deletion_trigger": "Publication, workspace, social-account, or account deletion removes related rows and jobs where the stored references can be identified. Pending schedule replacement removes only the matching pending primary publication job.",
+      "exceptions": "Authorization records retain hashes instead of plaintext publication payloads. A completed job without a removable parent reference can remain until operator maintenance or database retirement.",
+      "evidence": [
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/queue/worker.go",
+        "apps/server/internal/api/handlers/publication_history.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "managed-editor-brand-data",
+      "category": "Cloud-saved Image Editor projects, templates, and brand data",
+      "owner": "Managed OpenPost service",
+      "purpose": "Restore explicitly cloud-saved Image Editor work, provide reusable customer templates and brand resources, and support safe revision recovery.",
+      "includes": "Image Editor designs and assets, templates, brand kits, licensed font records, saved revisions, previews, and handoff results explicitly saved to OpenPost.",
+      "duration": "Current designs, named checkpoints, templates, and brand data remain until the user deletes the item or its workspace or account is deleted. Image Editor autosaves are capped at the 20 most recent during later saves and receive a 30-day expiry timestamp, but there is no separate age-based purge for that timestamp.",
+      "deletion_trigger": "Design, template, brand item, workspace, or account deletion. Later saves remove excess Image Editor autosaves.",
+      "exceptions": "Browser-only designs are covered by the browser-storage inventory. Disk-backed Video Editor projects remain outside managed-service retention; their browser-held handles, preferences, caches, and scratch data are inventoried below. Referenced Media follows the managed Media lifecycle.",
+      "evidence": [
+        "apps/server/internal/api/handlers/image_editor.go",
+        "apps/server/internal/models/models.go"
+      ]
+    },
+    {
+      "id": "managed-media",
+      "category": "Uploaded, generated, and saved media",
+      "owner": "Managed OpenPost service",
+      "purpose": "Store, organize, edit, preview, deliver, and recover media used in OpenPost publications and customer libraries.",
+      "includes": "Original media, generated previews and thumbnails, alternative text, technical metadata, provenance, tags, collections, editor exports, and storage object keys.",
+      "duration": "Library, favorited, tagged, or actively referenced media remains until the user removes it or its workspace is deleted. Eligible temporary media moves to Trash after publication or 14 days without use. Trashed media becomes eligible for permanent deletion after seven more days.",
+      "deletion_trigger": "Manual trash, temporary-media publication, the daily inactivity sweep, permanent purge after the trash window, workspace deletion, or completed account deletion.",
+      "exceptions": "Editable, retryable, organized, favorited, brand, template, and active-publication references block automatic trash or purge. Recovery copies can retain deleted objects for the separate recovery-copy period.",
+      "evidence": [
+        "apps/server/internal/services/medialifecycle/service.go",
+        "apps/server/internal/api/handlers/media.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "analytics-usage",
+      "category": "Social analytics, usage, limits, and provider cost records",
+      "owner": "Managed OpenPost service",
+      "purpose": "Show normalized whole-account performance results, explain measured evidence, prepare user-reviewed repurpose sources, schedule safe refreshes, enforce plan limits, and reconcile confirmed provider usage.",
+      "includes": "Normalized account, Publication, Rendition, and discovered account-content metric snapshots; bounded titles and text for eligible provider content published outside OpenPost; safe provider-content references and external URLs; discovery coverage and checkpoints; sync status; usage counters; immutable confirmed provider-usage events; reservations; and monthly projections.",
+      "duration": "Analytics snapshots, discovered account content, discovery state, general usage counters, and period counters have no general age-based purge. Confirmed provider-cost events and unresolved reservations become eligible after the configured 180-day managed-service window; each service start prunes up to 1,000 eligible rows of each type and never prunes current-month rows. Confirmed or released reservations are removed when settled.",
+      "deletion_trigger": "Social-account or workspace deletion removes discovered content, snapshots, observations, and discovery state owned by that account or workspace. Completed deletion of the owning personal workspace removes its scoped records. Reservation settlement removes the in-flight row; bounded startup pruning removes eligible provider-cost events and unresolved reservations.",
+      "exceptions": "Because startup pruning is bounded, eligible rows can remain until a later start or operator run. Analytics tables do not retain raw provider responses, remote media bytes, access tokens, bot tokens, or webhook secrets. Provider-side content and analytics remain controlled by each social network.",
+      "evidence": [
+        "apps/server/internal/services/analytics/service.go",
+        "apps/server/internal/services/analytics/account_content.go",
+        "apps/server/internal/services/analytics/discovery.go",
+        "apps/server/internal/services/usage/provider_costs.go",
+        "apps/server/cmd/openpost/main.go",
+        "apps/server/internal/config/config.go",
+        "apps/server/internal/models/models.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "communications-notifications",
+      "category": "Comments, engagement, inbox, messages, and notifications",
+      "owner": "Managed OpenPost service",
+      "purpose": "Provide opted-in engagement and inbox views, send authorized replies, and notify users about relevant workspace activity.",
+      "includes": "Normalized engagement items, attachments, opted-in conversations and direct messages, sync state, in-app notifications, actions, and delivery preferences.",
+      "duration": "There is no general age-based purge. User notifications remain until the user deletes them or the account is deleted. Normalized engagement, conversation, message, and sync records remain until the related social account, workspace, or account is deleted; provider-deleted engagement remains as a deletion-marked record.",
+      "deletion_trigger": "Notification deletion removes selected notifications. Social-account, workspace, or completed account deletion removes related communication records. Provider synchronization can mark an engagement item deleted without removing its stored row.",
+      "exceptions": "Disabling inbox collection stops future reads but does not by itself delete records already stored. Page requests read stored data and do not call provider APIs. Provider copies of comments and messages remain under the provider's controls.",
+      "evidence": [
+        "apps/server/internal/services/engagement/service.go",
+        "apps/server/internal/services/messaging/service.go",
+        "apps/server/internal/services/notifications/service.go",
+        "apps/server/internal/models/models.go"
+      ]
+    },
+    {
+      "id": "outbound-email",
+      "category": "Account, security, and opted-in notification email",
+      "owner": "Managed OpenPost service and Purelymail within their stated roles",
+      "purpose": "Deliver verification, recovery, security, invitation, and opted-in activity messages to the intended recipient.",
+      "includes": "Recipient and sender addresses, message content, related user or workspace identifiers, queue state, safe delivery errors, and provider delivery metadata.",
+      "duration": "OpenPost has no general age-based purge for completed or failed email-job payloads. Purelymail controls its own message and delivery records under its policy.",
+      "deletion_trigger": "Related account or workspace deletion removes identifiable queued jobs where supported. The operator can remove delivery history after support, security, and legal needs end.",
+      "exceptions": "Email already delivered to the recipient's mailbox is controlled by the recipient and their email provider. Required account and security messages are distinct from optional activity email.",
+      "evidence": [
+        "apps/server/internal/services/passwordmail/smtp.go",
+        "apps/server/internal/services/notifications/service.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go",
+        "packages/legal-policy/src/managed-service.json"
+      ]
+    },
+    {
+      "id": "billing-records",
+      "category": "Billing and subscription records",
+      "owner": "Managed OpenPost service and Paddle within their stated roles",
+      "purpose": "Start and reconcile checkout, provide subscription access, prevent duplicate webhook handling, and support billing, tax, fraud, dispute, and refund work.",
+      "includes": "Organization plan and entitlement state, Paddle customer and subscription identifiers, normalized checkout attempts, webhook event IDs, status, period dates, and provider reconciliation payloads.",
+      "duration": "OpenPost has no general age-based purge for billing customer, checkout, webhook-idempotency, or subscription records. A personal organization's subscription and checkout records are removed with that organization; shared-organization records remain with it.",
+      "deletion_trigger": "Organization deletion where foreign-key ownership applies, account deletion for a personal organization, or a verified operator deletion request where law, fraud prevention, dispute, tax, and reconciliation needs allow it.",
+      "exceptions": "Paddle is Merchant of Record and keeps its own transaction, tax, fraud, and customer records under its policies. OpenPost does not receive or store full payment-card details.",
+      "evidence": [
+        "apps/server/internal/services/billing/service.go",
+        "apps/server/internal/database/migrations/060_whop_billing.sql",
+        "apps/server/internal/database/migrations/065_paddle_billing.sql",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "support-feedback",
+      "category": "Support and in-app feedback",
+      "owner": "Managed OpenPost service and the disclosed feedback recipient",
+      "purpose": "Deliver a user-requested report with the exact optional evidence shown before submission and prevent feedback abuse.",
+      "includes": "User-written report text, optional approved screenshot, allowlisted diagnostics, recipient, delivery status, and a database rate-limit window.",
+      "duration": "The feedback rate-limit window is removed after it is more than 24 hours behind a later accepted submission. Delivered or failed feedback job payloads have no general age-based purge and can remain until account deletion or operator maintenance.",
+      "deletion_trigger": "Account deletion removes jobs that contain the user reference when detectable. The operator can delete retained delivery history after support, security, and legal needs end.",
+      "exceptions": "The configured feedback recipient receives a separate copy and controls that copy under its own policy. Sensitive-looking values and private paths are sanitized before queueing.",
+      "evidence": [
+        "apps/server/internal/services/feedback/feedback.go",
+        "apps/server/internal/api/handlers/feedback.go",
+        "apps/server/internal/api/handlers/account_lifecycle.go"
+      ]
+    },
+    {
+      "id": "stock-search-cache",
+      "category": "Stock-media searches and provenance",
+      "owner": "Managed OpenPost service",
+      "purpose": "Return a requested stock-media search efficiently and retain the source and attribution facts needed for imported media.",
+      "includes": "A hash of normalized search parameters, normalized provider results, cache expiry, and provenance for media the user imports.",
+      "duration": "Search results are usable for 15 minutes, or 24 hours for Pixabay. Expired rows are ignored but have no separate age-based purge; a repeat of the same query replaces the row. Imported provenance remains with the media item.",
+      "deletion_trigger": "Replacement by the same query, operator database maintenance, media deletion for attached provenance, or workspace/account deletion where the related media is removed.",
+      "exceptions": "The cache stores a query hash rather than the plaintext query. Stock providers keep their own request and selection records under their policies.",
+      "evidence": [
+        "apps/server/internal/api/handlers/stock_media.go",
+        "apps/server/internal/models/models.go"
+      ]
+    },
+    {
+      "id": "automatic-image-captions",
+      "category": "Automatic image-caption requests",
+      "owner": "Managed OpenPost service, OpenRouter, and the selected model host within their stated roles",
+      "purpose": "Generate a draft image description after the user requests or permits the automatic captioning feature.",
+      "includes": "A 400-pixel JPEG thumbnail, up to 1,000 characters of relevant post context, locale, instructions, model, and limited request metadata sent through OpenRouter when requested.",
+      "duration": "OpenPost keeps the generated alternative text with the media item but does not write the request image or prompt to a separate application table. The managed request requires an OpenRouter zero-data-retention endpoint; OpenRouter can retain non-content request metadata under its policy.",
+      "deletion_trigger": "OpenPost does not persist the request thumbnail or prompt after the provider request completes. The saved alternative text is replaced manually or removed with its media item.",
+      "exceptions": "The original image is not sent for captioning. Provider-side request metadata follows the provider disclosures in the managed-service trust register.",
+      "evidence": [
+        "apps/server/internal/ai/ai.go",
+        "apps/server/internal/ai/openrouter.go",
+        "apps/server/internal/api/handlers/media_caption.go"
+      ]
+    },
+    {
+      "id": "website-analytics",
+      "category": "Product, marketing, documentation, and service telemetry",
+      "owner": "Managed OpenPost service and PostHog",
+      "purpose": "Measure public-site use, understand product workflows, diagnose failures, and improve the managed service without advertising profiles, cross-site tracking, or session replay.",
+      "includes": "For visitors who allow analytics cookies: first-party identifiers and sessions shared across OpenPost sibling subdomains, country derived before raw IP discard, referrer and approved campaign facts, page views, Web Vitals, selected interactions, and sanitized browser failures. For visitors who continue without analytics cookies: limited personless events with daily server-hashed identity and no geography. Managed product and service telemetry can include opaque user, workspace, publication, rendition, and job identifiers plus release, route-template, status, error type, and sanitized exception context. OpenPost does not send email addresses, names, usernames, post text, media, request bodies, credentials, query strings, raw URLs, or raw IP addresses as telemetry properties.",
+      "duration": "Managed PostHog event data is configured for a maximum 12-month retention window. OpenPost does not keep a separate telemetry copy after PostHog deletes or expires the event data.",
+      "deletion_trigger": "Expiry under the managed PostHog retention window, operator deletion of an event or person, a supported account-deletion request for linked identified data, or retirement of the analytics project.",
+      "exceptions": "No optional browser telemetry is sent before a choice or after full opt-out. Do Not Track or Global Privacy Control forces full browser opt-out. Persistent analytics is limited to visitors who allow first-party analytics cookies; cookieless mode remains personless and cannot provide reliable multi-day identity, country, or server-side IP bot enrichment. Backend service telemetry is separately disclosed and is not controlled by the browser choice. Autocapture, session replay, heatmaps, surveys, console capture, network timing and bodies, advertising profiles, and cross-site tracking are disabled.",
+      "evidence": [
+        "packages/telemetry/src/index.ts",
+        "apps/server/internal/telemetry/telemetry.go",
+        "docs/reference/configuration/telemetry.md"
+      ]
+    },
+    {
+      "id": "operational-logs",
+      "category": "Operational and security logs",
+      "owner": "Managed OpenPost service operator",
+      "purpose": "Operate the service, diagnose failures, detect abuse, and investigate security or reliability events.",
+      "includes": "Service and authentication events, errors, request timing, container and system events, and limited infrastructure metadata.",
+      "duration": "Managed host journals are size-bounded to 50 MiB of persistent storage and 10 MiB of runtime storage rather than retained for a fixed number of days.",
+      "deletion_trigger": "System journal rotation removes older entries as the configured size bounds are reached. The operator can remove logs when incident, reliability, legal, or security needs end.",
+      "exceptions": "The host does not provide a complete command-level audit trail. Account deletion does not selectively remove entries already written to shared operational logs.",
+      "evidence": [
+        "docs/reference/operations/logs.md",
+        "packages/legal-policy/src/managed-service.json"
+      ]
+    },
+    {
+      "id": "recovery-copies",
+      "category": "Database and media recovery copies",
+      "owner": "Managed OpenPost service operator",
+      "purpose": "Restore customer data after service failure, operator error, or a validated recovery need.",
+      "includes": "Daily PostgreSQL dumps, the current media mirror, changed or deleted media versions, and separately reviewed repair or incident snapshots.",
+      "duration": "Routine database dumps and changed or deleted media versions are pruned by the first daily run after they are more than 14 days old. The current mirror follows live media. Exceptional snapshots remain only while their stated recovery, security, legal, fraud, or claims purpose continues.",
+      "deletion_trigger": "Daily age-based pruning for routine copies; purpose review and operator deletion for exceptional snapshots.",
+      "exceptions": "Deletion from the live service can remain in a routine recovery copy through this window. OpenPost does not add a separate application-level encryption layer to each backup artifact.",
+      "evidence": [
+        "docs/reference/operations/backups.md",
+        "packages/legal-policy/src/managed-service.json"
+      ]
+    }
+  ],
+  "browser_storage": [
+    {
+      "id": "local-video-project-outbox",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Video Editor cloud sync",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-project-sync",
+      "purpose": "Keeps authored project mutations until the managed service accepts them, including while the browser is offline.",
+      "scope": "Application origin and browser profile; the mutation-outbox-v1 record includes Workspace and project identifiers.",
+      "duration": "Each entry is removed after the server accepts it, or when site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video-editor/cloud/project-repository.ts"]
+    },
+    {
+      "id": "local-video-project-device-id",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor cloud sync",
+      "identifier_kind": "exact",
+      "identifier": "openpost:video-project-device-id:v1",
+      "purpose": "Labels revision authorship and conflict branches with a stable browser installation identifier.",
+      "scope": "Application origin and browser profile.",
+      "duration": "Until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/cloud/project-repository.ts"]
+    },
+    {
+      "id": "local-video-project-import-ids",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor cloud import",
+      "identifier_kind": "exact",
+      "identifier": "openpost:video-project-local-imports:v1",
+      "purpose": "Keeps one generated cloud project ID for each Workspace and Local-only project pair so a resumed import updates the same Cloud Video Project instead of creating a duplicate.",
+      "scope": "Application origin and current browser profile; keys contain Workspace and Local-only project IDs, and values are generated cloud project IDs.",
+      "duration": "Until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/cloud/import-local-project.ts"]
+    },
+    {
+      "id": "local-video-project-offline-cache",
+      "technology": "Cache Storage",
+      "owner": "OpenPost Video Editor cloud sync",
+      "identifier_kind": "exact",
+      "identifier": "openpost-cloud-video-projects-v1",
+      "purpose": "Keeps a validated Cloud Video Project document and its required source media available when the user chooses offline access.",
+      "scope": "Application origin and current browser profile; entries are separated by Workspace, project, and media ID.",
+      "duration": "Until the user removes the offline copy, signs out, or clears site data.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/cloud/offline-project-cache.ts"]
+    },
+    {
+      "id": "local-video-project-outbox-store",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Video Editor cloud sync",
+      "identifier_kind": "exact",
+      "identifier": "state",
+      "purpose": "Stores the mutation-outbox-v1 record inside the openpost-video-project-sync database while authored Cloud Video Project changes are waiting for the managed service.",
+      "scope": "Application origin and current browser profile; the record includes Workspace and project identifiers.",
+      "duration": "Accepted mutations are removed from the record. The database is removed on sign-out or when site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video-editor/cloud/project-repository.ts"]
+    },
+    {
+      "id": "cookie-session",
+      "technology": "cookie",
+      "owner": "OpenPost authentication service",
+      "identifier_kind": "exact",
+      "identifier": "openpost_session",
+      "purpose": "Authenticates a browser session without exposing the token to application JavaScript.",
+      "scope": "Application origin; Path=/; HttpOnly; SameSite=Lax; Secure on HTTPS.",
+      "duration": "Seven days unless logout, revocation, password reset, or account deletion ends it sooner.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/server/internal/api/handlers/auth.go",
+        "apps/server/internal/services/auth/auth.go"
+      ]
+    },
+    {
+      "id": "cookie-oidc-binding",
+      "technology": "cookie",
+      "owner": "OpenPost identity service",
+      "identifier_kind": "exact",
+      "identifier": "openpost_oidc_binding",
+      "purpose": "Binds an OIDC sign-in, link, or reauthentication callback to the browser that started it.",
+      "scope": "Application origin; Path=/api/v1/auth/oidc/; HttpOnly; SameSite=Lax; Secure on HTTPS.",
+      "duration": "Expires after ten minutes and is cleared after a successfully completed callback; browser site-data clearing can remove it sooner.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/server/internal/api/handlers/oidc.go",
+        "apps/server/internal/services/identity/service.go"
+      ]
+    },
+    {
+      "id": "cookie-locale",
+      "technology": "cookie",
+      "owner": "Paraglide localization runtime",
+      "identifier_kind": "exact",
+      "identifier": "PARAGLIDE_LOCALE",
+      "purpose": "Keeps the selected interface language across visits.",
+      "scope": "Application and marketing origins separately; Path=/; readable by the page.",
+      "duration": "400 days or until the user changes the language or clears site data.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/project.inlang/settings.json",
+        "apps/web/vite.config.ts",
+        "apps/marketing/vite.config.ts"
+      ]
+    },
+    {
+      "id": "cookie-sidebar",
+      "technology": "cookie",
+      "owner": "OpenPost browser shells",
+      "identifier_kind": "exact",
+      "identifier": "sidebar:state",
+      "purpose": "Keeps the application sidebar expanded or collapsed.",
+      "scope": "Application origin; Path=/; readable by the page.",
+      "duration": "Seven days after the last sidebar change or until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/lib/components/ui/sidebar/constants.ts",
+        "apps/web/src/lib/components/ui/sidebar/sidebar-provider.svelte"
+      ]
+    },
+    {
+      "id": "cookie-telemetry-preference",
+      "technology": "cookie",
+      "owner": "OpenPost telemetry preference control",
+      "identifier_kind": "exact",
+      "identifier": "openpost_analytics",
+      "purpose": "Keeps the visitor’s persistent, cookieless, or fully off browser-analytics choice and prevents repeated prompts.",
+      "scope": "Hosted OpenPost sibling subdomains through Domain=.openpo.st; host-only on self-hosted domains; Path=/; SameSite=Lax; Secure on HTTPS.",
+      "duration": "One year after the latest choice, or until the visitor changes the choice or clears site data.",
+      "necessity": "functional",
+      "source_refs": ["packages/telemetry/src/index.ts"]
+    },
+    {
+      "id": "cookie-posthog-analytics",
+      "technology": "cookie",
+      "owner": "PostHog browser analytics SDK",
+      "identifier_kind": "prefix",
+      "identifier": "ph_",
+      "purpose": "Keeps first-party visitor and session identity across OpenPost sibling subdomains only after the visitor allows analytics cookies.",
+      "scope": "Hosted OpenPost sibling subdomains through Domain=.openpo.st; host-only on self-hosted domains; used only in persistent analytics mode.",
+      "duration": "Up to one year under the PostHog SDK setting, or until full opt-out, site-data clearing, or SDK expiry removes it.",
+      "necessity": "analytics",
+      "source_refs": ["packages/telemetry/src/index.ts"]
+    },
+    {
+      "id": "local-color-mode",
+      "technology": "localStorage",
+      "owner": "mode-watcher theme runtime",
+      "identifier_kind": "exact",
+      "identifier": "mode-watcher-mode",
+      "purpose": "Keeps the light, dark, or system color-mode preference.",
+      "scope": "Application and marketing origins separately.",
+      "duration": "Until the preference is changed or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/routes/+layout.svelte",
+        "apps/marketing/src/routes/+layout.svelte",
+        "apps/marketing/src/app.html"
+      ]
+    },
+    {
+      "id": "local-theme-name",
+      "technology": "localStorage",
+      "owner": "mode-watcher theme runtime",
+      "identifier_kind": "exact",
+      "identifier": "mode-watcher-theme",
+      "purpose": "Library-owned theme name storage; OpenPost currently uses the default unnamed theme.",
+      "scope": "Application and marketing origins separately.",
+      "duration": "Until the theme changes, the library removes the key, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/routes/+layout.svelte",
+        "apps/marketing/src/routes/+layout.svelte"
+      ]
+    },
+    {
+      "id": "local-docs-color-mode",
+      "technology": "localStorage",
+      "owner": "Fumadocs next-themes runtime",
+      "identifier_kind": "exact",
+      "identifier": "theme",
+      "purpose": "Keeps the documentation site's light, dark, or system color-mode preference.",
+      "scope": "Documentation origin and current browser profile.",
+      "duration": "Until the preference changes or documentation site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/docs/components/providers.tsx"]
+    },
+    {
+      "id": "local-current-workspace",
+      "technology": "localStorage",
+      "owner": "OpenPost application shell",
+      "identifier_kind": "exact",
+      "identifier": "openpost_current_workspace",
+      "purpose": "Restores the last selected workspace and its safe display metadata.",
+      "scope": "Application origin for the current browser profile.",
+      "duration": "Until another workspace is selected, the account loses access, logout/account cleanup removes it, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/stores/workspace.svelte.ts"]
+    },
+    {
+      "id": "local-interface-sounds",
+      "technology": "localStorage",
+      "owner": "OpenPost application shell",
+      "identifier_kind": "exact",
+      "identifier": "openpost:interface-sounds",
+      "purpose": "Keeps the interface-sound on or off preference.",
+      "scope": "Application and marketing origins separately.",
+      "duration": "Until the preference changes or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/stores/sound-preferences.svelte.ts"]
+    },
+    {
+      "id": "local-oauth-workspace",
+      "technology": "localStorage",
+      "owner": "OpenPost social-account connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_workspace_id",
+      "purpose": "Carries the selected workspace through browser-staged Fediverse code exchanges. Other social OAuth starts currently also write this key but rely on server callback state.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful Fediverse exchange or account-data cleanup; otherwise retained until replaced or site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/web/src/lib/account-management-route.ts",
+        "apps/web/src/routes/accounts/mastodon/callback/+page.svelte",
+        "apps/web/src/lib/components/account-data-card.svelte"
+      ]
+    },
+    {
+      "id": "local-oauth-mastodon-server",
+      "technology": "localStorage",
+      "owner": "OpenPost Mastodon connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_mastodon_server",
+      "purpose": "Restores the named configured Mastodon server after its OAuth redirect.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful exchange, when another Mastodon connection mode replaces it, or when account/site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/web/src/lib/account-management-route.ts",
+        "apps/web/src/routes/accounts/mastodon/callback/+page.svelte"
+      ]
+    },
+    {
+      "id": "local-oauth-mastodon-instance",
+      "technology": "localStorage",
+      "owner": "OpenPost Mastodon connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_mastodon_instance_url",
+      "purpose": "Restores a custom Mastodon instance URL after its OAuth redirect.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful exchange, when another Mastodon connection mode replaces it, or when account/site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/web/src/lib/account-management-route.ts",
+        "apps/web/src/routes/accounts/mastodon/callback/+page.svelte"
+      ]
+    },
+    {
+      "id": "local-oauth-fediverse-provider",
+      "technology": "localStorage",
+      "owner": "OpenPost Fediverse connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_fediverse_provider",
+      "purpose": "Restores whether a browser-staged Fediverse code exchange is connecting Mastodon or Pixelfed.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful exchange or account-data cleanup; otherwise retained until replaced or site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/account-management-route.ts"]
+    },
+    {
+      "id": "local-oauth-fediverse-server",
+      "technology": "localStorage",
+      "owner": "OpenPost Fediverse connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_fediverse_server",
+      "purpose": "Restores the named preconfigured Mastodon or Pixelfed server after its OAuth redirect.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful exchange, when another Fediverse connection mode replaces it, or when account/site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/account-management-route.ts"]
+    },
+    {
+      "id": "local-oauth-fediverse-instance",
+      "technology": "localStorage",
+      "owner": "OpenPost Fediverse connection flow",
+      "identifier_kind": "exact",
+      "identifier": "oauth_fediverse_instance_url",
+      "purpose": "Restores a custom Mastodon or Pixelfed instance URL after its OAuth redirect.",
+      "scope": "Application origin.",
+      "duration": "Removed after a successful exchange, when another Fediverse connection mode replaces it, or when account/site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/account-management-route.ts"]
+    },
+    {
+      "id": "local-first-account-celebration",
+      "technology": "localStorage",
+      "owner": "OpenPost account-connection interface",
+      "identifier_kind": "prefix",
+      "identifier": "openpost:first-account-celebrated:",
+      "purpose": "Prevents replaying the first-connected-account celebration for the same workspace.",
+      "scope": "Application origin; one suffix per workspace ID.",
+      "duration": "Until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/routes/accounts/callback/+page.svelte"]
+    },
+    {
+      "id": "local-image-tools",
+      "technology": "localStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-tools-v1",
+      "purpose": "Keeps Image Editor tool sizes, tolerances, smoothing, pressure, sampling, and related preferences.",
+      "scope": "Application origin and public Image Editor on that origin.",
+      "duration": "Until preferences are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/components/image-editor-shell.svelte"]
+    },
+    {
+      "id": "local-image-first-edit",
+      "technology": "localStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-first-edit-v1",
+      "purpose": "Records that first-edit guidance was dismissed.",
+      "scope": "Application origin and public Image Editor on that origin.",
+      "duration": "Until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/components/image-editor-shell.svelte"]
+    },
+    {
+      "id": "local-image-colors",
+      "technology": "localStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-recent-colors-v1",
+      "purpose": "Keeps up to eight recent Image Editor color choices.",
+      "scope": "Application origin and public Image Editor on that origin.",
+      "duration": "Until colors are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/lib/image-editor/editor.svelte.ts",
+        "apps/web/src/lib/image-editor/components/image-editor-shell.svelte"
+      ]
+    },
+    {
+      "id": "local-image-layout",
+      "technology": "localStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-layout-v1",
+      "purpose": "Keeps Image Editor asset, inspector, and layer panel sizes.",
+      "scope": "Application origin and public Image Editor on that origin.",
+      "duration": "Until layout values are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/components/image-editor-shell.svelte"]
+    },
+    {
+      "id": "local-image-view",
+      "technology": "localStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-view-v1",
+      "purpose": "Keeps Image Editor snapping, rulers, guides, and grid preferences.",
+      "scope": "Application origin and public Image Editor on that origin.",
+      "duration": "Until view values are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/components/image-editor-shell.svelte"]
+    },
+    {
+      "id": "local-video-playback",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-playback",
+      "purpose": "Keeps the Video Editor preview zoom, monitor volume, and mute settings.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the settings are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/preview/playback-settings.svelte.ts"]
+    },
+    {
+      "id": "local-video-color-keyframe-view",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "timeline:keyframeEditorMode",
+      "purpose": "Keeps the user's Color keyframe editor in the dope-sheet or graph view they last selected.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the view is replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/components/color-keyframe-panel.svelte"]
+    },
+    {
+      "id": "local-video-color-scope-view",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "timeline:scopes:stackLayout",
+      "purpose": "Keeps the user's selected Color scope, such as RGB Parade, waveform, vectorscope, or histogram.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the scope is replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/components/color-scopes.svelte"]
+    },
+    {
+      "id": "local-video-color-scope-layout",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "timeline:scopes:layout",
+      "purpose": "Keeps the Color scopes in the single-scope or grid layout the user last selected.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the layout is replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/components/color-scopes.svelte"]
+    },
+    {
+      "id": "local-video-grade-presets",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-grade-presets",
+      "purpose": "Keeps the user's named color-grade presets for reuse across browser-local Video Editor projects.",
+      "scope": "Application origin and current browser profile; at most 64 presets.",
+      "duration": "Until a preset is removed or replaced, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/effects/color-grade-presets.ts"]
+    },
+    {
+      "id": "local-video-effect-presets",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-effect-presets",
+      "purpose": "Keeps the user's named visual-effect presets for reuse across browser-local Video Editor projects.",
+      "scope": "Application origin and current browser profile; the stored catalogue and each preset are size-bounded.",
+      "duration": "Until a preset is removed or replaced, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/effects/effect-presets.ts"]
+    },
+    {
+      "id": "local-video-diagnostics",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-diagnostics",
+      "purpose": "Keeps the user's performance-overlay and clip-timing-overlay choices. It does not store project names, media identifiers, clip labels, or file paths.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the choices are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/preview/diagnostics.svelte.ts"]
+    },
+    {
+      "id": "local-video-voiceover",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor voiceover recorder",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-voiceover-v1",
+      "purpose": "Keeps voiceover input, noise suppression, automatic gain, timeline mute, and sync-offset preferences. It does not store recorded audio.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until the preferences are replaced or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/recorder/voiceover-recorder.svelte.ts"]
+    },
+    {
+      "id": "local-video-easing-presets",
+      "technology": "localStorage",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-editor-easing-presets",
+      "purpose": "Keeps the user's named cubic-Bezier and spring easing presets for reuse across browser-local Video Editor projects.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "Until a preset is removed or replaced, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/timeline/custom-easing-presets.ts"]
+    },
+    {
+      "id": "local-posthog-analytics",
+      "technology": "localStorage",
+      "owner": "PostHog browser analytics SDK",
+      "identifier_kind": "prefix",
+      "identifier": "ph_",
+      "purpose": "Keeps first-party analytics state on the current origin only after the visitor allows persistent analytics.",
+      "scope": "Current application, marketing, or documentation origin; used only in persistent analytics mode and synchronized through the cookie identity.",
+      "duration": "Until full opt-out, site-data clearing, browser eviction, or SDK expiry removes the state.",
+      "necessity": "analytics",
+      "source_refs": ["packages/telemetry/src/index.ts"]
+    },
+    {
+      "id": "session-chunk-reload",
+      "technology": "sessionStorage",
+      "owner": "OpenPost application shell",
+      "identifier_kind": "exact",
+      "identifier": "openpost:chunk-reload",
+      "purpose": "Retries transient Vite chunk load failures with exponential back-off and a session retry budget so a stale deployment or first-load dev race recovers without an infinite reload loop.",
+      "scope": "Application and marketing origins separately, within the current browser tab session.",
+      "duration": "Entries older than 15 seconds are treated as expired; the budget allows three retries and ends after a successful application load, when the tab session ends, or when site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/hooks.client.ts",
+        "apps/marketing/src/lib/stale-module-recovery.ts"
+      ]
+    },
+    {
+      "id": "session-reauth-action",
+      "technology": "sessionStorage",
+      "owner": "OpenPost reauthentication flow",
+      "identifier_kind": "exact",
+      "identifier": "openpost_reauth_pending_action",
+      "purpose": "Matches an OIDC reauthentication return to the sensitive action that requested it.",
+      "scope": "Application origin and current browser tab session.",
+      "duration": "Removed after the returned grant is stored or when the start request fails; otherwise removed when the tab session ends or site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/auth/reauth.ts"]
+    },
+    {
+      "id": "session-reauth-grants",
+      "technology": "sessionStorage",
+      "owner": "OpenPost reauthentication flow",
+      "identifier_kind": "exact",
+      "identifier": "openpost_reauth_grants",
+      "purpose": "Temporarily holds action-bound reauthentication grants until the requested sensitive action consumes them.",
+      "scope": "Application origin and current browser tab session.",
+      "duration": "Each grant is accepted for at most five minutes and is removed when consumed; storage also ends with the tab session or site-data clearing.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/auth/reauth.ts"]
+    },
+    {
+      "id": "session-editor-handoff",
+      "technology": "sessionStorage",
+      "owner": "OpenPost editor handoff",
+      "identifier_kind": "prefix",
+      "identifier": "openpost:editor-handoff:return:",
+      "purpose": "Restores the composer destination and unsaved snapshot after an Image or Video Editor handoff.",
+      "scope": "Application origin and current browser tab session; one random-token suffix per handoff.",
+      "duration": "It becomes unusable at its stored expiry and is removed on a later read. Explicit clearing, the end of the tab session, or site-data clearing can remove it sooner.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/editor-handoff.ts"]
+    },
+    {
+      "id": "session-image-export-resume",
+      "technology": "sessionStorage",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "prefix",
+      "identifier": "openpost-image-editor-export-v1:",
+      "purpose": "Resumes a multi-page Image Editor save or attachment without re-uploading successful pages.",
+      "scope": "Application origin and current tab; suffix contains design ID, export mode, and format.",
+      "duration": "Removed after the export is cleared or when the tab session ends or site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/image-editor/components/image-editor-shell.svelte"]
+    },
+    {
+      "id": "session-marketing-motion",
+      "technology": "sessionStorage",
+      "owner": "OpenPost marketing site",
+      "identifier_kind": "exact",
+      "identifier": "openpost:marketing-motion",
+      "purpose": "Keeps the visitor's pause or play choice for marketing-page motion during the current tab session.",
+      "scope": "Marketing origin and current browser tab session.",
+      "duration": "Until the tab session ends or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/marketing/src/routes/_components/HeroResultsCarousel.svelte"]
+    },
+    {
+      "id": "idb-image-editor",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-studio",
+      "purpose": "Stores unsynced authenticated recovery documents and public Image Editor designs and media in the documents, guest-designs, and guest-media object stores.",
+      "scope": "Application origin; browser profile. The original database name is retained for compatibility.",
+      "duration": "Authenticated recovery becomes unusable after seven days and is removed on a later load; a newer recovery or explicit clear can remove it sooner. Guest designs remain until the user deletes them, the browser evicts data, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "idb-image-documents-store",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "documents",
+      "purpose": "Stores authenticated unsynced Image Editor recovery documents inside the openpost-studio database.",
+      "scope": "Application origin; openpost-studio database.",
+      "duration": "A recovery becomes unusable after seven days and is removed on a later load. A newer recovery, explicit clear, browser eviction, or site-data clearing can remove it sooner.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "idb-image-guest-designs-store",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "guest-designs",
+      "purpose": "Stores public Image Editor design documents inside the openpost-studio database.",
+      "scope": "Application origin; openpost-studio database.",
+      "duration": "Until the user deletes the design, the browser evicts data, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "idb-image-guest-media-store",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "guest-media",
+      "purpose": "Indexes public Image Editor media and its IndexedDB or OPFS storage location inside the openpost-studio database.",
+      "scope": "Application origin; openpost-studio database.",
+      "duration": "Until the linked guest design or media is deleted, the browser evicts data, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "idb-video-editor-handles",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-handles-db",
+      "purpose": "Stores browser permission handles and metadata for local Video Editor workspaces, media, and project folders so the editor can reopen user-selected files.",
+      "scope": "Application origin and browser profile; access remains subject to browser file-permission checks.",
+      "duration": "Until the user removes the related workspace, media, or project, the browser evicts the database, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/workspace-fs/handles-db.ts"]
+    },
+    {
+      "id": "idb-video-editor-handles-store",
+      "technology": "IndexedDB",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "handles",
+      "purpose": "Stores local workspace, media, and project-folder handle records inside the openpost-video-handles-db database.",
+      "scope": "Application origin; openpost-video-handles-db database and the browser profile that granted file access.",
+      "duration": "Until the related record is removed, the browser evicts the database, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/workspace-fs/handles-db.ts"]
+    },
+    {
+      "id": "idb-workbox-expiration",
+      "technology": "IndexedDB",
+      "owner": "Workbox service-worker runtime",
+      "identifier_kind": "exact",
+      "identifier": "workbox-expiration",
+      "purpose": "Workbox stores URL timestamps in its cache-entries object store to enforce the declared PWA cache limits.",
+      "scope": "Application origin service worker.",
+      "duration": "Metadata follows the related runtime-cache entry and is removed when Workbox expires or deletes that cache metadata, or when site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "idb-workbox-cache-entries-store",
+      "technology": "IndexedDB",
+      "owner": "Workbox service-worker runtime",
+      "identifier_kind": "exact",
+      "identifier": "cache-entries",
+      "purpose": "Stores runtime-cache URL timestamps inside the workbox-expiration database.",
+      "scope": "Application origin; workbox-expiration database.",
+      "duration": "Metadata follows the related runtime-cache entry and is removed during Workbox expiry or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "opfs-image-media",
+      "technology": "OPFS",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-media",
+      "purpose": "Stores browser-local media blobs for public Image Editor designs when OPFS is available.",
+      "scope": "Application origin and browser profile.",
+      "duration": "A media file is removed with its guest design; otherwise it remains until browser eviction or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "opfs-image-media-files",
+      "technology": "OPFS",
+      "owner": "OpenPost Image Editor",
+      "identifier_kind": "prefix",
+      "identifier": "openpost-image-editor-media/",
+      "purpose": "Describes the browser-generated media files stored beneath the Image Editor OPFS root.",
+      "scope": "Application origin and browser profile; one generated filename per guest-media record.",
+      "duration": "A file is removed with its guest design or media; otherwise it remains until browser eviction or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/image-editor/local-persistence.ts"]
+    },
+    {
+      "id": "opfs-cloud-video-exports",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor export history",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-exports",
+      "purpose": "Keeps completed Cloud Video Project exports available to download from this browser.",
+      "scope": "Application origin and browser profile; exports are grouped by Workspace and project.",
+      "duration": "Until the export is deleted, the browser evicts it, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/workspace-fs/export-storage.ts"]
+    },
+    {
+      "id": "opfs-video-streams",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor export pipeline",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-streams",
+      "purpose": "Holds partial streamed video exports when the browser cannot keep the full result in memory.",
+      "scope": "Application origin and browser profile.",
+      "duration": "Removed when the export is discarded; files older than 24 hours are removed opportunistically when another streamed output starts; site-data clearing also removes them.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video/stream-target.ts"]
+    },
+    {
+      "id": "opfs-video-editor-cache",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor",
+      "identifier_kind": "exact",
+      "identifier": "openpost-video-cache-v1",
+      "purpose": "Caches derived waveform samples and filmstrip frames so local Video Editor projects reopen and scrub without repeating media analysis.",
+      "scope": "Application origin and browser profile; entries are grouped by derived-media kind and local media identifier.",
+      "duration": "Until the browser evicts the cache, site data is cleared, or a later cache version replaces it. The source media remains in the user-selected workspace and does not enter this cache.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/media/opfs-cache.ts"]
+    },
+    {
+      "id": "opfs-video-moss-model-root",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor local voice generator",
+      "identifier_kind": "exact",
+      "identifier": "nano-reader-browser-model-store",
+      "purpose": "Holds the browser-local directory used by the MOSS text-to-speech runtime.",
+      "scope": "Application origin and current browser profile.",
+      "duration": "The selected MOSS model remains until the user clears that local model, the browser evicts it, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/local-ai/tts/moss-model-storage.ts"]
+    },
+    {
+      "id": "opfs-video-moss-model",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor local voice generator",
+      "identifier_kind": "exact",
+      "identifier": "openpost-moss-tts-f52645-ceff0d",
+      "purpose": "Stores the versioned MOSS speech and audio-tokenizer model files beneath the local voice-model root.",
+      "scope": "Application origin and current browser profile; 16 model files with an expected total size of about 763 MB.",
+      "duration": "Until the user clears the MOSS local model, the browser evicts it, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/video-editor/local-ai/tts/moss-model-storage.ts"]
+    },
+    {
+      "id": "opfs-video-interpolation-scratch",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor frame interpolation",
+      "identifier_kind": "exact",
+      "identifier": "interpolation-tmp",
+      "purpose": "Temporarily holds generated frame-interpolation output while the editor imports it into the current project.",
+      "scope": "Application origin and current browser profile; one generated file per active interpolation job.",
+      "duration": "The job removes its file after import, cancellation, or failure when possible. Browser eviction or site-data clearing also removes it.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/web/src/lib/video-editor/media/processing/interpolation/frame-interpolation-service.svelte.ts"
+      ]
+    },
+    {
+      "id": "opfs-video-upscale-scratch",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor upscaling",
+      "identifier_kind": "exact",
+      "identifier": "upscale-tmp",
+      "purpose": "Temporarily holds generated video-upscale output while the editor imports it into the current project.",
+      "scope": "Application origin and current browser profile; one generated file per active upscale job.",
+      "duration": "The job removes its file after import, cancellation, or failure when possible. Browser eviction or site-data clearing also removes it.",
+      "necessity": "strictly_necessary",
+      "source_refs": [
+        "apps/web/src/lib/video-editor/media/processing/upscale/upscale-service.svelte.ts"
+      ]
+    },
+    {
+      "id": "opfs-video-export-scratch",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor export pipeline",
+      "identifier_kind": "exact",
+      "identifier": "openpost-export-scratch",
+      "purpose": "Holds a completed or partial local export when the browser cannot keep the encoded result in memory.",
+      "scope": "Application origin and current browser profile; one randomly named file per OPFS-backed export.",
+      "duration": "Aborted outputs are removed when possible. Completed files older than 24 hours are pruned when another export starts; browser eviction or site-data clearing can remove them sooner.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video-editor/media/render-export.ts"]
+    },
+    {
+      "id": "opfs-video-recorder-scratch",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor recorder",
+      "identifier_kind": "exact",
+      "identifier": "recorder-scratch",
+      "purpose": "Holds bounded screen, camera, and microphone recording chunks plus recovery manifests until the editor imports or discards the capture.",
+      "scope": "Application origin and current browser profile; generated names are tied to a recorder session when recovery is enabled.",
+      "duration": "Imported, discarded, and rejected captures are removed when possible. Recoverable sessions remain until the user recovers or discards them, the browser evicts them, or site data is cleared.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video-editor/recorder/recorder-scratch.ts"]
+    },
+    {
+      "id": "opfs-video-stream-files",
+      "technology": "OPFS",
+      "owner": "OpenPost Video Editor export pipeline",
+      "identifier_kind": "prefix",
+      "identifier": "openpost-video-streams/render-",
+      "purpose": "Describes timestamped and randomly suffixed partial video-export files beneath the streaming-output OPFS root.",
+      "scope": "Application origin and browser profile; one generated file per streamed export.",
+      "duration": "Removed when discarded; files older than 24 hours are removed when another streamed output starts; site-data clearing also removes them.",
+      "necessity": "strictly_necessary",
+      "source_refs": ["apps/web/src/lib/video/stream-target.ts"]
+    },
+    {
+      "id": "local-install-invitation",
+      "technology": "localStorage",
+      "owner": "OpenPost installation prompt",
+      "identifier_kind": "exact",
+      "identifier": "openpost:install-invitation-seen",
+      "purpose": "Remembers that the desktop installation invitation was shown so it is not repeated.",
+      "scope": "Application origin and browser profile.",
+      "duration": "Until site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/components/pwa-manager.svelte"]
+    },
+    {
+      "id": "cache-pages",
+      "technology": "Cache Storage",
+      "owner": "OpenPost application service worker",
+      "identifier_kind": "exact",
+      "identifier": "openpost-pages-2",
+      "purpose": "Provides a short offline fallback for recently visited application pages.",
+      "scope": "Application origin service worker; at most 32 entries.",
+      "duration": "Up to seven days, subject to entry-count eviction, service-worker replacement, browser pressure, or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "cache-app-assets",
+      "technology": "Cache Storage",
+      "owner": "OpenPost application service worker",
+      "identifier_kind": "exact",
+      "identifier": "openpost-app-assets-1",
+      "purpose": "Caches immutable application JavaScript, CSS, and assets for faster repeat loads and offline use.",
+      "scope": "Application origin service worker; at most 400 entries.",
+      "duration": "Up to 30 days, subject to entry-count eviction, service-worker replacement, browser pressure, or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "cache-image-models",
+      "technology": "Cache Storage",
+      "owner": "OpenPost Image Editor service-worker route",
+      "identifier_kind": "exact",
+      "identifier": "openpost-image-editor-models-1.7.0",
+      "purpose": "Caches Image Editor background-removal model and runtime files after the related tool is used.",
+      "scope": "Application origin service worker; at most 32 entries.",
+      "duration": "Up to 365 days, subject to versioned-cache replacement, entry-count eviction, browser pressure, or site-data clearing.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "cache-video-transformers-models",
+      "technology": "Cache Storage",
+      "owner": "OpenPost Video Editor local AI tools",
+      "identifier_kind": "exact",
+      "identifier": "transformers-cache",
+      "purpose": "Stores model, tokenizer, and configuration files downloaded for local transcription, captions, semantic and visual search, voice generation, and the on-device editing assistant.",
+      "scope": "Application origin and current browser profile; cache entries are separated by model URL.",
+      "duration": "A model remains until the user clears that local model, the browser evicts it, its version changes, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/lib/video-editor/agent/storage.ts",
+        "apps/web/src/lib/video-editor/local-ai/model-cache.ts"
+      ]
+    },
+    {
+      "id": "cache-video-onnx-models",
+      "technology": "Cache Storage",
+      "owner": "OpenPost Video Editor local AI tools",
+      "identifier_kind": "exact",
+      "identifier": "openpost-onnx-models-v1",
+      "purpose": "Stores ONNX model files downloaded for local transcription, frame interpolation, and voice generation.",
+      "scope": "Application origin and current browser profile; cache entries are separated by model URL.",
+      "duration": "A model remains until the user clears that local model, the browser evicts it, the cache version changes, or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": [
+        "apps/web/src/lib/video-editor/local-ai/model-cache.ts",
+        "apps/web/src/lib/video-editor/transcript/engine/onnx-model-cache.ts"
+      ]
+    },
+    {
+      "id": "cache-workbox-precache",
+      "technology": "Cache Storage",
+      "owner": "Workbox service-worker runtime",
+      "identifier_kind": "prefix",
+      "identifier": "workbox-precache-v2-",
+      "purpose": "Workbox's scope-suffixed cache for the application icon and web app manifest needed by the installed PWA.",
+      "scope": "Application origin service worker; suffix is the service-worker registration scope.",
+      "duration": "Entries are replaced by a new service-worker build and outdated Workbox precaches are deleted during activation; browser pressure or site-data clearing can remove them earlier.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/vite.config.ts"]
+    },
+    {
+      "id": "local-publication-view",
+      "technology": "localStorage",
+      "owner": "OpenPost application navigation",
+      "identifier_kind": "exact",
+      "identifier": "openpost-publication-view",
+      "purpose": "Restores the last selected List or Calendar view of Publications.",
+      "scope": "Application origin for the current browser profile.",
+      "duration": "Until the view changes or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/stores/publication-view.svelte.ts"]
+    },
+    {
+      "id": "local-publication-list-tab",
+      "technology": "localStorage",
+      "owner": "OpenPost application navigation",
+      "identifier_kind": "exact",
+      "identifier": "openpost-publication-list-tab",
+      "purpose": "Restores the selected Scheduled, Published, Failed, or Drafts tab in the Publications list.",
+      "scope": "Application origin for the current browser profile.",
+      "duration": "Until the tab changes or site data is cleared.",
+      "necessity": "functional",
+      "source_refs": ["apps/web/src/lib/stores/publication-view.svelte.ts"]
+    }
+  ]
+}

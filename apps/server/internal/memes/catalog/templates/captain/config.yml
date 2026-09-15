@@ -1,0 +1,37 @@
+name: I am the Captain Now
+source: https://www.youtube.com/watch?v=dvA-mimf2yg
+keywords:
+  -
+text:
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.0
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+  - style: upper
+    color: white
+    font: thick
+    anchor_x: 0.0
+    anchor_y: 0.8
+    angle: 0.0
+    scale_x: 1.0
+    scale_y: 0.2
+    align: center
+    start: 0.0
+    stop: 1.0
+example:
+  - look at me
+  - i am the captain now
+overlay:
+  - center_x: 0.675
+    center_y: 0.5
+    angle: 0.0
+    scale: 0.35
+    start: 0.0
+    stop: 1.0

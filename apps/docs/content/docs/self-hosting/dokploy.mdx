@@ -1,0 +1,45 @@
+---
+title: Install on Dokploy
+description: Deploy OpenPost on Dokploy as a Docker Compose service.
+icon: dokploy
+---
+
+Deploy OpenPost as a Dokploy Compose service with the supplied [`deploy/dokploy/docker-compose.yml`](https://github.com/getopenpost/openpost/blob/main/deploy/dokploy/docker-compose.yml). The image supports x86_64 servers. Other architectures need amd64 emulation.
+
+## Deploy
+
+1. In Dokploy, create a **Compose** service.
+2. Paste [`deploy/dokploy/docker-compose.yml`](https://github.com/getopenpost/openpost/blob/main/deploy/dokploy/docker-compose.yml) into the Compose definition.
+3. Add a domain pointing at the service's port `8080`, then set these environment variables:
+
+| Variable                         | What to enter                                             |
+| -------------------------------- | --------------------------------------------------------- |
+| `OPENPOST_APP_URL`               | `https://post.example.com`                                |
+| `OPENPOST_PUBLIC_URL`            | `https://post.example.com`                                |
+| `OPENPOST_MEDIA_URL`             | `https://post.example.com/media`                          |
+| `OPENPOST_JWT_SECRET`            | Fresh output of `openssl rand -base64 32`                 |
+| `OPENPOST_ENCRYPTION_KEY`        | A second, independent `openssl rand -base64 32` value     |
+| `OPENPOST_DISABLE_REGISTRATIONS` | `true` after creating the first administrator, or `false` |
+
+Generate each secret with `openssl rand -base64 32` and keep both stable across restarts and restores.
+
+4. Deploy, then verify readiness:
+
+```sh
+curl https://post.example.com/api/v1/ready
+```
+
+Expect `"status":"ready"` and `"database":"ok"`. If it fails, inspect the service logs and confirm that all three URL variables use the same public origin.
+
+Open the app and create the first account. It becomes the instance administrator. Set `OPENPOST_DISABLE_REGISTRATIONS=true` afterward if you do not want public signups. The service stores SQLite and media in the `openpost_data` volume.
+
+## Updates and backups
+
+Pin `image:` to a release tag. To upgrade, change the tag and redeploy, then check `/api/v1/ready`. Back up the `openpost_data` volume and environment values first, and record the current image tag.
+
+Keep backups private and off the server. A rollback may require the backup made for the previous version. Follow the [maintenance checklist](/self-hosting/maintenance).
+
+## Next steps
+
+- [Configure integrations](/self-hosting/integrations) for your social platforms.
+- [Back up your instance](/self-hosting/maintenance) before relying on it for scheduled posts.
