@@ -4,6 +4,7 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import MotionStyleCustomizer from '$lib/components/auno-motion/motion-style-customizer.svelte';
+	import DocumentaryWizard from '$lib/components/auno-documentary/documentary-wizard.svelte';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import {
@@ -38,6 +39,7 @@
 	} from '$lib/auno/auto-video/types';
 
 	const gate = createWorkspaceGate();
+	let creationMode = $state<'short-form' | 'documentary-long-form'>('short-form');
 	let sourceKind = $state<'text' | 'url' | 'markdown' | 'txt' | 'pdf' | 'image' | 'video' | 'media'>('text');
 	let sourceValue = $state('');
 	let sourceMediaId = $state('');
@@ -169,7 +171,7 @@
 		try {
 			const content = await file.text();
 			if (!content.trim()) throw new Error('The selected text file is empty.');
-			sourceValue = content.slice(0, 200_000);
+			sourceValue = content.slice(0, 50_000);
 			sourceKind = /\.(md|markdown)$/i.test(file.name) ? 'markdown' : 'txt';
 			if (!title.trim()) title = file.name.replace(/\.[^.]+$/, '');
 			storyboard = null;
@@ -358,6 +360,28 @@
 		</p>
 	</header>
 
+	<div class="flex w-fit rounded-lg border bg-muted/20 p-1" aria-label="Auto Video mode">
+		<Button
+			type="button"
+			size="sm"
+			variant={creationMode === 'short-form' ? 'default' : 'ghost'}
+			onclick={() => (creationMode = 'short-form')}
+		>
+			Short-form
+		</Button>
+		<Button
+			type="button"
+			size="sm"
+			variant={creationMode === 'documentary-long-form' ? 'default' : 'ghost'}
+			onclick={() => (creationMode = 'documentary-long-form')}
+		>
+			Documentary Long-form
+		</Button>
+	</div>
+
+	{#if creationMode === 'documentary-long-form'}
+		<DocumentaryWizard />
+	{:else}
 	{#if error}<InlineNotice tone="error">{error}</InlineNotice>{/if}
 
 	<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,0.8fr)]">
@@ -396,7 +420,7 @@
 					Choose TXT / Markdown
 					<input type="file" class="sr-only" accept=".txt,.md,.markdown,text/plain,text/markdown" onchange={loadTextSourceFile} />
 				</label>
-				<span class="text-xs text-muted-foreground">Read locally · up to 1 MB · planner text capped at 200k characters</span>
+				<span class="text-xs text-muted-foreground">Read locally · up to 1 MB · planner text capped at 50k characters</span>
 			</div>
 
 			<div class="flex flex-wrap items-center gap-2">
@@ -541,5 +565,6 @@
 				{/each}
 			</div>
 		</section>
+	{/if}
 	{/if}
 </div>

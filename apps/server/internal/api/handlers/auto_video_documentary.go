@@ -209,9 +209,22 @@ func (h *DocumentaryHandler) update(ctx context.Context, input *UpdateDocumentar
 		markDocumentaryStepStale(&next, documentary.StepScript)
 	}
 	if patch.Script != nil && !reflect.DeepEqual(current.Script, patch.Script) {
-		next.Script = patch.Script
+		previous := documentary.Script{}
+		if current.Script != nil {
+			previous = *current.Script
+		}
+		normalized, normalizeErr := documentary.NormalizeEditedScript(
+			current.ID,
+			next.TargetDurationSeconds,
+			previous,
+			patch.Script.Text,
+		)
+		if normalizeErr != nil {
+			return nil, documentaryHTTPError(normalizeErr)
+		}
+		next.Script = &normalized
 		documentary.InvalidateFrom(&next, documentary.StepScript)
-		markDocumentaryStep(&next, documentary.StepScript, patch.Script.Fingerprint)
+		markDocumentaryStep(&next, documentary.StepScript, normalized.Fingerprint)
 	}
 	if patch.Voice != nil && !reflect.DeepEqual(current.Voice, patch.Voice) {
 		next.Voice = patch.Voice
