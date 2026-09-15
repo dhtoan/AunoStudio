@@ -1,0 +1,70 @@
+name: Apply Auno Config Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/auno-config-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply Auno self-host defaults
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/server/internal/config/config.go')
+          text = path.read_text()
+          replacements = {
+              'const defaultDiagnosticsReceiverURL = "https://app.openpo.st/api/v1/diagnostics/ingest"': 'const defaultDiagnosticsReceiverURL = ""',
+              'managedPostHogBrowserHostURL = "https://cool.openpo.st"': 'managedPostHogBrowserHostURL = ""',
+              'managedPostHogUIHostURL      = "https://eu.posthog.com"': 'managedPostHogUIHostURL      = ""',
+              'defaultSupportEmail = "hello@openpo.st"': 'defaultSupportEmail = ""',
+              'getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:openpost.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH")': 'getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:auno-studio.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH")',
+              'getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/getopenpost/openpost/issues/new")': 'getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/dhtoan/AunoStudio/issues/new")',
+              'DiagnosticsEnabled:           getEnvBoolWithAliases(true, "OPENPOST_DIAGNOSTICS_ENABLED")': 'DiagnosticsEnabled:           getEnvBoolWithAliases(false, "OPENPOST_DIAGNOSTICS_ENABLED")',
+              'UpdateCheckEnabled:     getEnvBoolWithAliases(true, "OPENPOST_UPDATE_CHECK_ENABLED")': 'UpdateCheckEnabled:     getEnvBoolWithAliases(false, "OPENPOST_UPDATE_CHECK_ENABLED")',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected config fragment: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          env = Path('.env.example')
+          text = env.read_text()
+          replacements = {
+              '# OpenPost Configuration': '# Auno Studio Configuration',
+              'openpost.example.com': 'studio.example.com',
+              'serve OpenPost from in production': 'serve Auno Studio from in production',
+              'OPENPOST_DATABASE_PATH=file:openpost.db?cache=shared&mode=rwc': 'OPENPOST_DATABASE_PATH=file:auno-studio.db?cache=shared&mode=rwc',
+              'OPENPOST_FEEDBACK_SUPPORT_URL=https://github.com/getopenpost/openpost/issues/new': 'OPENPOST_FEEDBACK_SUPPORT_URL=https://github.com/dhtoan/AunoStudio/issues/new',
+              'OPENPOST_UPDATE_CHECK_ENABLED=true': 'OPENPOST_UPDATE_CHECK_ENABLED=false',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected env fragment: {old}')
+              text = text.replace(old, new, 1)
+          marker = 'OPENPOST_UPDATE_CHECK_ENABLED=false\n'
+          insert = marker + 'OPENPOST_DIAGNOSTICS_ENABLED=false\nOPENPOST_DIAGNOSTICS_RECEIVER_URL=\n'
+          if 'OPENPOST_DIAGNOSTICS_ENABLED=' not in text:
+              text = text.replace(marker, insert, 1)
+          env.write_text(text)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/server/internal/config/config.go .env.example
+          git commit -m "fix: make Auno self-host services opt-in"
+          git push origin HEAD:main
