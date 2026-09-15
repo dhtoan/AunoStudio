@@ -41,8 +41,11 @@ jobs:
             echo '::warning::bun.lock is stale on the current main baseline; showing generated lock diff'
             git diff -- bun.lock | head -n 240
           fi
-      - name: Run dev fixture generator contract
-        run: cd apps/server && go test -tags dev ./cmd/openpost -run TestAunoE2EPlannerGeneratorIsOptInAndStructured -count=1 -v
+      - name: Run dev fixture generator contracts
+        run: >-
+          cd apps/server && go test -tags dev ./cmd/openpost
+          -run 'TestAuno(E2EPlannerGeneratorIsOptInAndStructured|PlannerGeneratorUsesE2EFixtureWhenExplicitlyEnabled)'
+          -count=1 -v
       - name: Build production web embed
         run: bun run build -- frontend
       - name: Run production fixture guard contract
