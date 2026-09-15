@@ -17,6 +17,7 @@
 	import type { Project } from '$lib/video-editor/project/types';
 	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, recommendMotionStyle, validateMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';
+	import { inspectAunoMotionVisualQA } from '$lib/auno/motion/visual-qa';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
 		AUTO_VIDEO_CANVAS_SETTINGS,
@@ -271,6 +272,13 @@
 			});
 			const project = applyMotionGraphToProject(baseProject, motionGraph);
 			const motionDiagnostics = validateMotionGraph(motionGraph);
+			const visualDiagnostics = inspectAunoMotionVisualQA({
+				storyboard,
+				items: project.timeline?.items ?? [],
+				width: project.metadata.width,
+				height: project.metadata.height,
+				compositionIds: new Set((project.timeline?.compositions ?? []).map((composition) => composition.id))
+			});
 			const motionProbePlan = createMotionProbePlan(motionGraph, baseProject.metadata.fps);
 			const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
 			const now = Date.now();
@@ -310,6 +318,7 @@
 						seed: motionGraph.seed,
 						brief: motionGraph.brief,
 						diagnostics: motionDiagnostics,
+						visualDiagnostics,
 						probePlan: motionProbePlan,
 						probeSignature: motionProbePlanSignature
 					}
