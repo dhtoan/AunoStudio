@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/openpost/backend/internal/api/middleware"
@@ -204,8 +205,8 @@ func autoVideoProjectResponse(record *autovideoprojects.Record) (AutoVideoProjec
 		WorkspaceID:       record.WorkspaceID,
 		GenerationVersion: record.GenerationVersion,
 		TemplateID:        record.TemplateID,
-		CreatedAt:         record.CreatedAt.UTC().Format(timeFormatRFC3339Nano),
-		UpdatedAt:         record.UpdatedAt.UTC().Format(timeFormatRFC3339Nano),
+		CreatedAt:         record.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	for raw, target := range map[string]*map[string]any{
 		string(record.SourceManifest):   &response.SourceManifest,
