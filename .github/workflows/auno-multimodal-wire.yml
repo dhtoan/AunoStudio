@@ -1,0 +1,104 @@
+name: Wire Auto Video Multimodal Media
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-multimodal-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Auto Video multimodal boundary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          service = Path('apps/server/internal/services/autovideo/service.go')
+          text = service.read_text()
+          text = text.replace(
+              'type Source struct {\n\tID    string `json:"id"`\n\tKind  string `json:"kind"`\n\tLabel string `json:"label"`\n\tValue string `json:"value"`\n\tURL   string `json:"url,omitempty"`\n}',
+              'type Source struct {\n\tID       string `json:"id"`\n\tKind     string `json:"kind"`\n\tLabel    string `json:"label"`\n\tValue    string `json:"value"`\n\tURL      string `json:"url,omitempty"`\n\tMIMEType string `json:"mime_type,omitempty"`\n\tMediaID  string `json:"media_id,omitempty"`\n}'
+          )
+          text = text.replace(
+              'type Input struct {\n\tFormat                string `json:"format"`\n\tTitle                 string `json:"title,omitempty"`\n\tLanguage              string `json:"language"`\n\tTargetDurationSeconds int    `json:"target_duration_seconds"`\n\tSource                 Source `json:"source"`\n}',
+              'type Input struct {\n\tFormat                string              `json:"format"`\n\tTitle                 string              `json:"title,omitempty"`\n\tLanguage              string              `json:"language"`\n\tTargetDurationSeconds int                 `json:"target_duration_seconds"`\n\tSource                 Source              `json:"source"`\n\tParts                  []ai.MultimodalPart `json:"-"`\n}'
+          )
+          old = '\t\tUserPrompt:   string(prompt),\n\t\tResponseSchema: responseSchema(template),\n'
+          new = '\t\tUserPrompt:   string(prompt),\n\t\tParts:        normalized.Parts,\n\t\tResponseSchema: responseSchema(template),\n'
+          if 'Parts:        normalized.Parts' not in text:
+              if old not in text: raise SystemExit('missing GenerateRequest anchor')
+              text = text.replace(old, new, 1)
+          anchor = '\tinput.Source.URL = strings.TrimSpace(input.Source.URL)\n'
+          addition = anchor + '\tinput.Source.MIMEType = strings.ToLower(strings.TrimSpace(input.Source.MIMEType))\n\tinput.Source.MediaID = strings.TrimSpace(input.Source.MediaID)\n'
+          if 'input.Source.MIMEType =' not in text:
+              if anchor not in text: raise SystemExit('missing normalize source URL anchor')
+              text = text.replace(anchor, addition, 1)
+          service.write_text(text)
+
+          handler = Path('apps/server/internal/api/handlers/auto_video.go')
+          text = handler.read_text()
+          import_anchor = '\t"github.com/openpost/backend/internal/services/ratelimit"\n'
+          if '"github.com/openpost/backend/internal/services/mediastore"' not in text:
+              if import_anchor not in text: raise SystemExit('missing handler import anchor')
+              text = text.replace(import_anchor, '\t"github.com/openpost/backend/internal/services/mediastore"\n' + import_anchor, 1)
+          text = text.replace(
+              '\tplanner      autovideo.Planner\n\tsourceLoader sourcecontext.Loader\n',
+              '\tplanner      autovideo.Planner\n\tstorage      mediastore.BlobStorage\n\tsourceLoader sourcecontext.Loader\n'
+          )
+          text = text.replace(
+              '\tURL   string `json:"url,omitempty"`\n}',
+              '\tURL      string `json:"url,omitempty"`\n\tMIMEType string `json:"mime_type,omitempty"`\n\tMediaID  string `json:"media_id,omitempty"`\n}'
+          )
+          text = text.replace(
+              'func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner) *AutoVideoHandler {\n\tloader, _ := sourcecontext.New(sourcecontext.Config{})\n\treturn &AutoVideoHandler{db: db, auth: auth, planner: planner, sourceLoader: loader, limiter: ratelimit.New()}\n}',
+              'func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner, storage mediastore.BlobStorage) *AutoVideoHandler {\n\tloader, _ := sourcecontext.New(sourcecontext.Config{})\n\treturn &AutoVideoHandler{db: db, auth: auth, planner: planner, storage: storage, sourceLoader: loader, limiter: ratelimit.New()}\n}'
+          )
+          text = text.replace(
+              '\t\tValue: source.Value, URL: source.URL,\n',
+              '\t\tValue: source.Value, URL: source.URL, MIMEType: source.MIMEType, MediaID: source.MediaID,\n'
+          )
+          old = '''\tresult, err := h.planner.Plan(ctx, autovideo.Input{\n\t\tFormat:                input.Body.Format,\n\t\tTitle:                 input.Body.Title,\n\t\tLanguage:              input.Body.Language,\n\t\tTargetDurationSeconds: input.Body.TargetDurationSeconds,\n\t\tSource:                sourceFromBody(input.Body.Source),\n\t})\n'''
+          new = '''\tsource := sourceFromBody(input.Body.Source)\n\tsource, parts, mediaErr := resolveAutoVideoMediaSource(ctx, h.db, h.storage, input.Body.WorkspaceID, source)\n\tif mediaErr != nil {\n\t\tif errors.Is(mediaErr, errAutoVideoMediaInvalid) {\n\t\t\treturn nil, huma.Error400BadRequest("Auto Video media source is invalid, unavailable, too large, or unsupported")\n\t\t}\n\t\treturn nil, huma.Error503ServiceUnavailable("Auto Video media source could not be read")\n\t}\n\tresult, err := h.planner.Plan(ctx, autovideo.Input{\n\t\tFormat:                input.Body.Format,\n\t\tTitle:                 input.Body.Title,\n\t\tLanguage:              input.Body.Language,\n\t\tTargetDurationSeconds: input.Body.TargetDurationSeconds,\n\t\tSource:                source,\n\t\tParts:                 parts,\n\t})\n'''
+          if 'resolveAutoVideoMediaSource(ctx' not in text:
+              if old not in text: raise SystemExit('missing planner call anchor')
+              text = text.replace(old, new, 1)
+          handler.write_text(text)
+
+          routes = Path('apps/server/internal/api/routes.go')
+          text = routes.read_text()
+          text = text.replace(
+              'handlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner).RegisterRoutes(api)',
+              'handlers.NewAutoVideoHandler(deps.DB, deps.Authenticator, deps.AutoVideoPlanner, deps.MediaStorage).RegisterRoutes(api)'
+          )
+          routes.write_text(text)
+
+          client = Path('apps/web/src/lib/auno/auto-video/api.ts')
+          text = client.read_text()
+          old = '''\t\tvalue: source.value,\n\t\turl: source.url ?? ''\n'''
+          new = '''\t\tvalue: source.value,\n\t\turl: source.url ?? '',\n\t\tmime_type: source.mimeType ?? '',\n\t\tmedia_id: source.mediaId ?? ''\n'''
+          if 'media_id: source.mediaId' not in text:
+              if old not in text: raise SystemExit('missing client source body anchor')
+              text = text.replace(old, new, 1)
+          client.write_text(text)
+          PY
+
+          upload() {
+            path="$1"
+            api_path="$2"
+            message="$3"
+            encoded="$(base64 -w0 "$path")"
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+              -f message="$message" -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
+          }
+          upload apps/server/internal/services/autovideo/service.go apps/server/internal/services/autovideo/service.go 'feat: pass multimodal parts through Auto Video planner'
+          upload apps/server/internal/api/handlers/auto_video.go apps/server/internal/api/handlers/auto_video.go 'feat: resolve workspace media for Auto Video AI'
+          upload apps/server/internal/api/routes.go apps/server/internal/api/routes.go 'feat: provide media storage to Auto Video handler'
+          upload apps/web/src/lib/auno/auto-video/api.ts apps/web/src/lib/auno/auto-video/api.ts 'feat: send Auto Video media source metadata'
