@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { AUNO_BRAND } from '$lib/auno/brand';
+
 	interface Props {
 		class?: string;
 		width?: number;
@@ -24,21 +26,21 @@
 		width={size}
 		height={size}
 		role={decorative || showText ? undefined : 'img'}
-		aria-label={decorative || showText ? undefined : 'OpenPost'}
+		aria-label={decorative || showText ? undefined : AUNO_BRAND.productName}
 		aria-hidden={decorative || showText ? 'true' : undefined}
 		class="h-auto max-w-full shrink-0"
 	>
 		<g fill="var(--action-focal)">
-			<path d="M24 4h36v28L32 60H4V24A20 20 0 0 1 24 4Z" />
-			<path d="M68 4h36a20 20 0 0 1 20 20v36H96L68 32Z" />
-			<path d="M4 68h28l28 28v28H24a20 20 0 0 1-20-20Z" />
-			<path d="m68 96 28-28h28v36a20 20 0 0 1-20 20H68Z" />
+			<path d="M58 12h12L35 116H12L58 12Z" />
+			<path d="M70 12 116 116H92L64 49 70 12Z" />
+			<path d="M39 78h50l8 18H33l6-18Z" />
+			<path d="M58 12h12l-6 16-6-16Z" />
 		</g>
 	</svg>
 	{#if showText}
 		<span
 			class="font-brand leading-none font-semibold tracking-[-0.02em] whitespace-nowrap text-sidebar-foreground"
-			>OpenPost</span
+			>{AUNO_BRAND.productName}</span
 		>
 	{/if}
 </div>
