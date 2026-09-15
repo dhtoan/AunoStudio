@@ -146,39 +146,91 @@ function tuneTrack(
 	track: KeyframeTrack | undefined,
 	property: string,
 	durationInFrames: number,
-	options: {
-		intensity: number;
-		depth: number;
-		speed: number;
-		paperJitter: number;
-		holdRatio?: number;
-		frameOffset: number;
-	}
+	intensity: number,
+	depth: number,
+	speed: number
 ): KeyframeTrack | undefined {
 	if (!track) return track;
 	const end = Math.max(1, durationInFrames - 1);
 	const first = track.values[0] ?? 0;
 	const values = track.values.map((value) => {
-		let next = first + (value - first) * options.intensity;
-		if (property === 'scaleX' || property === 'scaleY') next = 1 + (next - 1) * options.depth;
-		if (property === 'x' || property === 'y' || property === 'rotation') {
-			next = first + (next - first) * (1 + options.paperJitter * 0.18);
-		}
+		let next = first + (value - first) * intensity;
+		if (property === 'scaleX' || property === 'scaleY') next = 1 + (next - 1) * depth;
 		return next;
 	});
-	const assemblyEnd =
-		options.holdRatio === undefined
-			? end
-			: Math.max(1, Math.min(end, Math.round(end * (1 - options.holdRatio))));
-	const frames = track.frames.map((frame, index) => {
-		const speedFrame = Math.round(frame / options.speed);
-		const holdFrame = index === track.frames.length - 1 ? Math.min(speedFrame, assemblyEnd) : speedFrame;
-		return Math.max(0, Math.min(end, holdFrame + options.frameOffset));
-	});
+	const frames = track.frames.map((frame, index) =>
+		index === 0
+			? Math.max(0, Math.min(end, frame))
+			: Math.max(0, Math.min(end, Math.round(frame / speed)))
+	);
 	for (let index = 1; index < frames.length; index += 1) {
 		frames[index] = Math.min(end, Math.max(frames[index]!, frames[index - 1]!));
 	}
 	return { ...track, frames, values };
+}
+
+function tunePaperJitter(track: KeyframeTrack | undefined, amount: number): KeyframeTrack | undefined {
+	if (!track?.ids?.some((id) => id.startsWith('auno:paper-jitter:'))) return track;
+	const settled = track.values[track.values.length - 1] ?? 0;
+	return {
+		...track,
+		values: track.values.map((value, index) =>
+			track.ids?.[index]?.startsWith('auno:paper-jitter:')
+				? settled + (value - settled) * amount
+				: value
+		)
+	};
+}
+
+function tuneShadowDepth(
+	track: KeyframeTrack | undefined,
+	property: string,
+	depth: number
+): KeyframeTrack | undefined {
+	if (!track) return track;
+	if (property === 'opacity') return { ...track, values: track.values.map((value) => value * depth) };
+	if (property !== 'x' && property !== 'y') return track;
+	const settled = track.values[track.values.length - 1] ?? 0;
+	return { ...track, values: track.values.map((value) => settled + (value - settled) * depth) };
+}
+
+function assemblyOffset(itemId: string, order: string): number {
+	const hero = itemId.endsWith('-paper-hero');
+	const shadow = itemId.endsWith('-paper-shadow');
+	const back = itemId.endsWith('-paper-back');
+	if (order === 'hero-first') return hero ? 0 : shadow ? 3 : back ? 6 : 0;
+	return back ? 0 : shadow ? 3 : hero ? 6 : 0;
+}
+
+function tuneAssemblyTiming(
+	track: KeyframeTrack | undefined,
+	durationInFrames: number,
+	holdRatio: number | undefined,
+	offsetFrames: number | undefined
+): KeyframeTrack | undefined {
+	if (!track?.ids?.length || (holdRatio === undefined && offsetFrames === undefined)) return track;
+	const end = Math.max(1, durationInFrames - 1);
+	const frames = [...track.frames];
+	let assemblyIndex = -1;
+	let holdIndex = -1;
+	for (let index = 0; index < track.ids.length; index += 1) {
+		const id = track.ids[index] ?? '';
+		if (id.startsWith('auno:assembly:') && id.endsWith(':hold')) holdIndex = index;
+		else if (id.startsWith('auno:assembly:')) assemblyIndex = index;
+	}
+	if (assemblyIndex < 0) return track;
+	const authoredAssembly = frames[assemblyIndex] ?? Math.max(1, end - 1);
+	const target = holdRatio === undefined
+		? authoredAssembly
+		: Math.round(durationInFrames * (1 - holdRatio));
+	const offset = offsetFrames ?? 0;
+	if (frames.length > 0 && offsetFrames !== undefined) frames[0] = Math.min(end - 1, Math.max(0, offset));
+	frames[assemblyIndex] = Math.min(end - 1, Math.max((frames[0] ?? 0) + 1, target + offset));
+	if (holdIndex >= 0) frames[holdIndex] = end;
+	for (let index = 1; index < frames.length; index += 1) {
+		frames[index] = Math.min(end, Math.max(frames[index]!, frames[index - 1]!));
+	}
+	return { ...track, frames };
 }
 
 function applyMotionControlOverrides(
@@ -197,49 +249,37 @@ function applyMotionControlOverrides(
 	const intensity = boundedNumber(intensityControl, overrides, 1);
 	const depth = boundedNumber(depthControl, overrides, 1);
 	const speed = boundedNumber(speedControl, overrides, 1);
-	const paperJitter = boundedNumber(jitterControl, overrides, 0);
-	const shadowDepth = boundedNumber(shadowControl, overrides, 0);
-	const holdRatio = holdControl ? boundedNumber(holdControl, overrides, 0.3) : undefined;
-	const assemblyOrder = selectedValue(assemblyControl, overrides, 'back-to-front');
-	const animated = items.filter((item) => Boolean(item.keyframes));
-
-	const noGenericChange = intensity === 1 && depth === 1 && speed === 1;
-	const noVoxControls = !jitterControl && !shadowControl && !holdControl && !assemblyControl;
-	if (noGenericChange && noVoxControls) return Array.from(items);
+	const paperJitter = boundedNumber(jitterControl, overrides, 1);
+	const shadowDepth = boundedNumber(shadowControl, overrides, 1);
+	const holdRatio = holdControl && overrides[holdControl.id] !== undefined
+		? boundedNumber(holdControl, overrides, 0.18)
+		: undefined;
+	const assemblyOrder = selectedValue(assemblyControl, overrides, assemblyControl?.defaultValue ?? 'back-to-front');
+	const assemblyOverridden = Boolean(assemblyControl && overrides[assemblyControl.id] !== undefined);
+	const jitterOverridden = Boolean(jitterControl && overrides[jitterControl.id] !== undefined);
+	const shadowOverridden = Boolean(shadowControl && overrides[shadowControl.id] !== undefined);
+	const genericChanged = intensity !== 1 || depth !== 1 || speed !== 1;
+	if (!genericChanged && !jitterOverridden && !shadowOverridden && holdRatio === undefined && !assemblyOverridden) {
+		return Array.from(items);
+	}
 
 	return items.map((item) => {
-		const animatedIndex = animated.findIndex((candidate) => candidate.id === item.id);
-		const orderIndex = animatedIndex < 0
-			? 0
-			: assemblyOrder === 'hero-first'
-				? animatedIndex
-				: Math.max(0, animated.length - animatedIndex - 1);
-		const frameOffset = assemblyControl ? orderIndex * 2 : 0;
-		let next = item;
-		if (shadowControl?.targetItemId === item.id && item.transform) {
-			next = {
-				...next,
-				transform: {
-					...item.transform,
-					opacity: Math.max(0.02, Math.min(0.28, 0.02 + shadowDepth * 0.22))
-				}
-			};
-		}
-		if (!item.keyframes) return next;
+		if (!item.keyframes) return item;
+		const paperElement = item.id.includes('-paper-');
+		const shadowElement = item.id.endsWith('-paper-shadow');
+		const offset = paperElement && assemblyOverridden ? assemblyOffset(item.id, assemblyOrder) : undefined;
 		const keyframes = Object.fromEntries(
-			Object.entries(item.keyframes).map(([property, track]) => [
-				property,
-				tuneTrack(track, property, item.durationInFrames, {
-					intensity,
-					depth,
-					speed,
-					paperJitter,
-					holdRatio,
-					frameOffset
-				})
-			])
+			Object.entries(item.keyframes).map(([property, sourceTrack]) => {
+				let track = tuneTrack(sourceTrack, property, item.durationInFrames, intensity, depth, speed);
+				if (paperElement && jitterOverridden && ['x', 'y', 'rotation'].includes(property)) {
+					track = tunePaperJitter(track, paperJitter);
+				}
+				if (shadowElement && shadowOverridden) track = tuneShadowDepth(track, property, shadowDepth);
+				if (paperElement) track = tuneAssemblyTiming(track, item.durationInFrames, holdRatio, offset);
+				return [property, track];
+			})
 		) as typeof item.keyframes;
-		return { ...next, keyframes };
+		return { ...item, keyframes };
 	});
 }
 

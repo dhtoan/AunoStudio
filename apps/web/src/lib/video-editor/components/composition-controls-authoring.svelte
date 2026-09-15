@@ -46,6 +46,22 @@
 				return m.video_editor_motion_published_fill_color();
 			case 'shape.strokeColor':
 				return m.video_editor_motion_published_stroke_color();
+			case 'shape.shapeType':
+				return 'shape type';
+			case 'motion.intensity':
+				return 'motion intensity';
+			case 'motion.depth':
+				return 'motion depth';
+			case 'motion.speed':
+				return 'motion speed';
+			case 'motion.paperJitter':
+				return 'paper jitter';
+			case 'motion.shadowDepth':
+				return 'shadow depth';
+			case 'motion.holdRatio':
+				return 'hold ratio';
+			case 'motion.assemblyOrder':
+				return 'assembly order';
 		}
 	}
 

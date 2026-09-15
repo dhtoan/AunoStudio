@@ -439,7 +439,11 @@ export type CompositionControlProperty =
 	| 'shape.shapeType'
 	| 'motion.intensity'
 	| 'motion.depth'
-	| 'motion.speed';
+	| 'motion.speed'
+	| 'motion.paperJitter'
+	| 'motion.shadowDepth'
+	| 'motion.holdRatio'
+	| 'motion.assemblyOrder';
 export type CompositionControlKind = 'text' | 'color' | 'number' | 'select';
 export interface CompositionControlOption {
 	value: string;
