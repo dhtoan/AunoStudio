@@ -2,15 +2,11 @@ package handlers
 
 import (
 	"context"
-	"errors"
-	"log"
 	"net/http"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/openpost/backend/internal/ai"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/services/autovideo"
 	"github.com/openpost/backend/internal/services/documentary"
@@ -70,6 +66,7 @@ type UpdateDocumentaryRunInput struct {
 	Body   struct {
 		WorkspaceID       string          `json:"workspace_id" required:"true" minLength:"1"`
 		GenerationVersion int64           `json:"generation_version" required:"true" minimum:"1"`
+		ClearSource       bool            `json:"clear_source,omitempty"`
 		Run               documentary.Run `json:"run" required:"true"`
 	}
 }
@@ -99,37 +96,30 @@ type DeleteDocumentaryRunOutput struct {
 	}
 }
 
+func documentaryOperation(id, method, path, summary string, auth huma.Middlewares) huma.Operation {
+	return huma.Operation{
+		OperationID: id,
+		Method:      method,
+		Path:        path,
+		Summary:     summary,
+		Description: "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+		Tags:        []string{"Auno Auto Video"},
+		Middlewares: auth,
+		Errors:      []int{400, 403, 404, 409, 429, 502, 503},
+	}
+}
+
 func (h *DocumentaryHandler) RegisterRoutes(api huma.API) {
 	auth := huma.Middlewares{middleware.AuthMiddleware(api, h.auth)}
-	operations := []struct {
-		id      string
-		method  string
-		path    string
-		summary string
-		handler any
-	}{
-		{"create-auno-documentary-run", http.MethodPost, "/auno/auto-video/documentary/runs", "Create an Auno documentary run", h.create},
-		{"get-auno-documentary-run", http.MethodGet, "/auno/auto-video/documentary/runs/{run_id}", "Get an Auno documentary run", h.get},
-		{"update-auno-documentary-run", http.MethodPut, "/auno/auto-video/documentary/runs/{run_id}", "Update an Auno documentary run", h.update},
-		{"delete-auno-documentary-run", http.MethodDelete, "/auno/auto-video/documentary/runs/{run_id}", "Delete an Auno documentary run", h.delete},
-		{"generate-auno-documentary-ideas", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/ideas", "Generate documentary idea candidates", h.generateIdeas},
-		{"generate-auno-documentary-script", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/script", "Generate documentary narration", h.generateScript},
-		{"generate-auno-documentary-beats", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/beats", "Generate documentary beat timing", h.generateBeats},
-		{"generate-auno-documentary-visuals", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/visuals", "Generate documentary visual plans", h.generateVisuals},
-		{"generate-auno-documentary-thumbnails", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/thumbnails", "Generate documentary thumbnail plans", h.generateThumbnails},
-	}
-	for _, operation := range operations {
-		huma.Register(api, huma.Operation{
-			OperationID: operation.id,
-			Method:      operation.method,
-			Path:        operation.path,
-			Summary:     operation.summary,
-			Description: "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
-			Tags:        []string{"Auno Auto Video"},
-			Middlewares: auth,
-			Errors:      []int{400, 403, 404, 409, 429, 502, 503},
-		}, operation.handler)
-	}
+	huma.Register(api, documentaryOperation("create-auno-documentary-run", http.MethodPost, "/auno/auto-video/documentary/runs", "Create an Auno documentary run", auth), h.create)
+	huma.Register(api, documentaryOperation("get-auno-documentary-run", http.MethodGet, "/auno/auto-video/documentary/runs/{run_id}", "Get an Auno documentary run", auth), h.get)
+	huma.Register(api, documentaryOperation("update-auno-documentary-run", http.MethodPut, "/auno/auto-video/documentary/runs/{run_id}", "Update an Auno documentary run", auth), h.update)
+	huma.Register(api, documentaryOperation("delete-auno-documentary-run", http.MethodDelete, "/auno/auto-video/documentary/runs/{run_id}", "Delete an Auno documentary run", auth), h.delete)
+	huma.Register(api, documentaryOperation("generate-auno-documentary-ideas", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/ideas", "Generate documentary idea candidates", auth), h.generateIdeas)
+	huma.Register(api, documentaryOperation("generate-auno-documentary-script", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/script", "Generate documentary narration", auth), h.generateScript)
+	huma.Register(api, documentaryOperation("generate-auno-documentary-beats", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/beats", "Generate documentary beat timing", auth), h.generateBeats)
+	huma.Register(api, documentaryOperation("generate-auno-documentary-visuals", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/visuals", "Generate documentary visual plans", auth), h.generateVisuals)
+	huma.Register(api, documentaryOperation("generate-auno-documentary-thumbnails", http.MethodPost, "/auno/auto-video/documentary/runs/{run_id}/thumbnails", "Generate documentary thumbnail plans", auth), h.generateThumbnails)
 }
 
 func (h *DocumentaryHandler) create(ctx context.Context, input *CreateDocumentaryRunInput) (*DocumentaryRunOutput, error) {
@@ -186,7 +176,10 @@ func (h *DocumentaryHandler) update(ctx context.Context, input *UpdateDocumentar
 	}
 	next := *current
 	patch := input.Body.Run
-	if patch.Source != nil && !reflect.DeepEqual(current.Source, patch.Source) {
+	if input.Body.ClearSource && current.Source != nil {
+		next.Source = nil
+		documentary.InvalidateFrom(&next, documentary.StepSource)
+	} else if patch.Source != nil && !reflect.DeepEqual(current.Source, patch.Source) {
 		resolved, resolveErr := h.resolveNewSource(ctx, input.Body.WorkspaceID, *patch.Source)
 		if resolveErr != nil {
 			return nil, resolveErr
@@ -213,10 +206,12 @@ func (h *DocumentaryHandler) update(ctx context.Context, input *UpdateDocumentar
 	if language := strings.TrimSpace(patch.Language); language != "" && language != current.Language {
 		next.Language = language
 		documentary.InvalidateFrom(&next, documentary.StepScript)
+		markDocumentaryStepStale(&next, documentary.StepScript)
 	}
 	if patch.Script != nil && !reflect.DeepEqual(current.Script, patch.Script) {
 		next.Script = patch.Script
 		documentary.InvalidateFrom(&next, documentary.StepScript)
+		markDocumentaryStep(&next, documentary.StepScript, patch.Script.Fingerprint)
 	}
 	if patch.Voice != nil && !reflect.DeepEqual(current.Voice, patch.Voice) {
 		next.Voice = patch.Voice
@@ -259,336 +254,4 @@ func (h *DocumentaryHandler) delete(ctx context.Context, input *DeleteDocumentar
 	output := &DeleteDocumentaryRunOutput{}
 	output.Body.Deleted = true
 	return output, nil
-}
-
-func (h *DocumentaryHandler) generateIdeas(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
-	run, err := h.generationRun(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	source, parts, err := h.sourceForPlanning(ctx, input.Body.WorkspaceID, run.Source)
-	if err != nil {
-		return nil, err
-	}
-	result, err := h.planner.GenerateIdeas(ctx, documentary.IdeasInput{
-		RunID: run.ID, Language: run.Language, Niche: run.Niche, CustomTopic: run.CustomTopic, Source: source, Parts: parts,
-	})
-	if err != nil {
-		return nil, documentaryPlannerHTTPError(err)
-	}
-	documentary.InvalidateFrom(run, documentary.StepIdeas)
-	run.Ideas = result.Ideas
-	run.CurrentStep = documentary.StepIdeas
-	markDocumentaryStep(run, documentary.StepIdeas, documentary.Fingerprint(run.Niche, run.CustomTopic, documentarySourceFingerprint(run.Source)))
-	setDocumentaryProvider(run, "ideas", result.Model)
-	return h.persistGeneration(ctx, input, run)
-}
-
-func (h *DocumentaryHandler) generateScript(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
-	run, err := h.generationRun(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if err := documentary.ValidateDuration(run.TargetDurationSeconds); err != nil {
-		return nil, documentaryHTTPError(err)
-	}
-	idea := selectedDocumentaryIdea(run)
-	if idea == nil && strings.TrimSpace(run.CustomTopic) == "" {
-		return nil, huma.Error400BadRequest("select a documentary idea or provide a custom topic first")
-	}
-	source, parts, err := h.sourceForPlanning(ctx, input.Body.WorkspaceID, run.Source)
-	if err != nil {
-		return nil, err
-	}
-	result, err := h.planner.GenerateScript(ctx, documentary.ScriptInput{
-		RunID: run.ID, Language: run.Language, Idea: idea, CustomTopic: run.CustomTopic,
-		TargetDurationSeconds: run.TargetDurationSeconds, Source: source, Parts: parts,
-	})
-	if err != nil {
-		return nil, documentaryPlannerHTTPError(err)
-	}
-	documentary.InvalidateFrom(run, documentary.StepScript)
-	run.Script = &result.Script
-	run.CurrentStep = documentary.StepScript
-	markDocumentaryStep(run, documentary.StepScript, result.Script.Fingerprint)
-	setDocumentaryProvider(run, "script", result.Model)
-	return h.persistGeneration(ctx, input, run)
-}
-
-func (h *DocumentaryHandler) generateBeats(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
-	run, err := h.generationRun(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if run.Script == nil {
-		return nil, huma.Error400BadRequest("generate or enter a documentary script first")
-	}
-	result, err := h.planner.GenerateBeats(ctx, documentary.BeatsInput{
-		RunID: run.ID, Script: *run.Script, TargetDurationSeconds: run.TargetDurationSeconds,
-	})
-	if err != nil {
-		return nil, documentaryPlannerHTTPError(err)
-	}
-	documentary.InvalidateFrom(run, documentary.StepBeats)
-	run.Beats = result.Beats
-	run.CurrentStep = documentary.StepBeats
-	markDocumentaryStep(run, documentary.StepBeats, documentary.Fingerprint(run.Script.Fingerprint, strings.Join(documentaryBeatIDs(run.Beats), ",")))
-	setDocumentaryProvider(run, "beats", result.Model)
-	return h.persistGeneration(ctx, input, run)
-}
-
-func (h *DocumentaryHandler) generateVisuals(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
-	run, err := h.generationRun(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if len(run.Beats) == 0 {
-		return nil, huma.Error400BadRequest("generate documentary beats first")
-	}
-	source, parts, err := h.sourceForPlanning(ctx, input.Body.WorkspaceID, run.Source)
-	if err != nil {
-		return nil, err
-	}
-	result, err := h.planner.GenerateVisuals(ctx, documentary.VisualsInput{
-		RunID: run.ID, Language: run.Language, Beats: run.Beats, Source: source, Parts: parts,
-	})
-	if err != nil {
-		return nil, documentaryPlannerHTTPError(err)
-	}
-	documentary.InvalidateFrom(run, documentary.StepVisuals)
-	run.VisualPlans = result.Plans
-	planByBeat := make(map[string]documentary.VisualPlan, len(result.Plans))
-	for _, plan := range result.Plans {
-		planByBeat[plan.BeatID] = plan
-	}
-	for index := range run.Beats {
-		if plan, ok := planByBeat[run.Beats[index].ID]; ok {
-			run.Beats[index].VisualIntent = plan.VisualIntent
-			run.Beats[index].RequiredSubjectIDs = append([]string(nil), plan.RequiredSubjectIDs...)
-		}
-	}
-	run.CurrentStep = documentary.StepVisuals
-	markDocumentaryStep(run, documentary.StepVisuals, documentary.Fingerprint(strings.Join(documentaryVisualFingerprints(result.Plans), ",")))
-	setDocumentaryProvider(run, "visuals", result.Model)
-	return h.persistGeneration(ctx, input, run)
-}
-
-func (h *DocumentaryHandler) generateThumbnails(ctx context.Context, input *GenerateDocumentaryStepInput) (*DocumentaryRunOutput, error) {
-	run, err := h.generationRun(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if run.Script == nil {
-		return nil, huma.Error400BadRequest("generate or enter a documentary script first")
-	}
-	source, parts, err := h.sourceForPlanning(ctx, input.Body.WorkspaceID, run.Source)
-	if err != nil {
-		return nil, err
-	}
-	title := run.CustomTopic
-	if idea := selectedDocumentaryIdea(run); idea != nil {
-		title = idea.Title
-	}
-	result, err := h.planner.GenerateThumbnails(ctx, documentary.ThumbnailsInput{
-		RunID: run.ID, Language: run.Language, Title: title, Script: *run.Script, Source: source, Parts: parts,
-	})
-	if err != nil {
-		return nil, documentaryPlannerHTTPError(err)
-	}
-	run.Thumbnails = result.Plans
-	run.CurrentStep = documentary.StepThumbnails
-	markDocumentaryStep(run, documentary.StepThumbnails, documentary.Fingerprint(run.Script.Fingerprint, title))
-	setDocumentaryProvider(run, "thumbnails", result.Model)
-	return h.persistGeneration(ctx, input, run)
-}
-
-func (h *DocumentaryHandler) generationRun(ctx context.Context, input *GenerateDocumentaryStepInput) (*documentary.Run, error) {
-	if err := h.checkEdit(ctx, input.Body.WorkspaceID); err != nil {
-		return nil, err
-	}
-	if h.planner == nil {
-		return nil, huma.Error503ServiceUnavailable("Documentary planning is not configured")
-	}
-	userID := middleware.GetUserID(ctx)
-	if !h.limiter.Allow("auno-documentary:"+userID, documentaryRequestsPerMinute, time.Minute) {
-		return nil, huma.Error429TooManyRequests("Documentary planning limit reached; try again in one minute")
-	}
-	run, err := h.store.Get(ctx, input.Body.WorkspaceID, input.PathID)
-	if err != nil {
-		return nil, documentaryHTTPError(err)
-	}
-	if run.GenerationVersion != input.Body.GenerationVersion {
-		return nil, documentaryHTTPError(documentary.ErrConflict)
-	}
-	return run, nil
-}
-
-func (h *DocumentaryHandler) persistGeneration(ctx context.Context, input *GenerateDocumentaryStepInput, run *documentary.Run) (*DocumentaryRunOutput, error) {
-	updated, err := h.store.Upsert(ctx, input.Body.WorkspaceID, *run, input.Body.GenerationVersion)
-	if err != nil {
-		return nil, documentaryHTTPError(err)
-	}
-	return &DocumentaryRunOutput{Body: *updated}, nil
-}
-
-func (h *DocumentaryHandler) checkEdit(ctx context.Context, workspaceID string) error {
-	if h == nil || h.db == nil || h.store == nil {
-		return huma.Error503ServiceUnavailable("Documentary workflow is unavailable")
-	}
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return huma.Error400BadRequest("workspace_id is required")
-	}
-	allowed, err := workspaceEditAllowed(ctx, h.db, workspaceID, middleware.GetUserID(ctx))
-	if err != nil {
-		return huma.Error503ServiceUnavailable("failed to verify workspace access")
-	}
-	if !allowed {
-		return huma.Error403Forbidden("workspace access denied")
-	}
-	return nil
-}
-
-func (h *DocumentaryHandler) resolveNewSource(ctx context.Context, workspaceID string, source autovideo.Source) (autovideo.Source, error) {
-	kind := strings.ToLower(strings.TrimSpace(source.Kind))
-	if kind != "url" {
-		if source.MediaID != "" {
-			resolved, _, err := resolveAutoVideoMediaSource(ctx, h.db, h.storage, workspaceID, source)
-			if err != nil {
-				return autovideo.Source{}, documentaryMediaHTTPError(err)
-			}
-			return resolved, nil
-		}
-		return source, nil
-	}
-	if h.sourceLoader == nil {
-		return autovideo.Source{}, huma.Error503ServiceUnavailable("URL source extraction is unavailable")
-	}
-	rawURL := strings.TrimSpace(source.URL)
-	if rawURL == "" {
-		rawURL = strings.TrimSpace(source.Value)
-	}
-	document, err := h.sourceLoader.Load(ctx, rawURL)
-	if err != nil {
-		return autovideo.Source{}, documentarySourceHTTPError(err)
-	}
-	source.URL = document.CanonicalURL
-	source.Value = document.Text
-	if strings.TrimSpace(document.Title) != "" {
-		source.Label = document.Title
-	}
-	return source, nil
-}
-
-func (h *DocumentaryHandler) sourceForPlanning(
-	ctx context.Context,
-	workspaceID string,
-	source *autovideo.Source,
-) (*autovideo.Source, []ai.MultimodalPart, error) {
-	if source == nil {
-		return nil, nil, nil
-	}
-	copySource := *source
-	if strings.TrimSpace(copySource.MediaID) == "" {
-		return &copySource, nil, nil
-	}
-	resolved, parts, err := resolveAutoVideoMediaSource(ctx, h.db, h.storage, workspaceID, copySource)
-	if err != nil {
-		return nil, nil, documentaryMediaHTTPError(err)
-	}
-	return &resolved, parts, nil
-}
-
-func documentaryHTTPError(err error) error {
-	switch {
-	case errors.Is(err, documentary.ErrInvalid):
-		return huma.Error400BadRequest("invalid documentary workflow state")
-	case errors.Is(err, documentary.ErrNotFound):
-		return huma.Error404NotFound("documentary run was not found")
-	case errors.Is(err, documentary.ErrConflict):
-		return huma.Error409Conflict("documentary run changed; reload it before saving again")
-	default:
-		return huma.Error503ServiceUnavailable("documentary workflow is unavailable")
-	}
-}
-
-func documentaryPlannerHTTPError(err error) error {
-	if errors.Is(err, documentary.ErrInvalid) || errors.Is(err, documentary.ErrInvalidResponse) {
-		return huma.Error400BadRequest("documentary input or generated output is invalid")
-	}
-	var providerErr *ai.ProviderError
-	if errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusTooManyRequests {
-		return huma.Error429TooManyRequests("documentary AI provider is rate limited; try again later")
-	}
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return huma.Error503ServiceUnavailable("documentary planning timed out")
-	}
-	log.Printf("Auno documentary planning failed (%T)", err)
-	return huma.Error502BadGateway("documentary planning failed")
-}
-
-func documentarySourceHTTPError(err error) error {
-	if errors.Is(err, sourcecontext.ErrInvalidURL) || errors.Is(err, sourcecontext.ErrCredentialsNotAllowed) ||
-		errors.Is(err, sourcecontext.ErrCustomPortNotAllowed) || errors.Is(err, sourcecontext.ErrURLNotPublic) ||
-		errors.Is(err, sourcecontext.ErrUnsupportedContentType) || errors.Is(err, sourcecontext.ErrResponseTooLarge) ||
-		errors.Is(err, sourcecontext.ErrUnreadable) {
-		return huma.Error400BadRequest("documentary source URL is not a supported public document")
-	}
-	return huma.Error502BadGateway("documentary source URL could not be loaded")
-}
-
-func documentaryMediaHTTPError(err error) error {
-	if errors.Is(err, errAutoVideoMediaInvalid) {
-		return huma.Error400BadRequest("documentary media source is invalid, unavailable, too large, or unsupported")
-	}
-	return huma.Error503ServiceUnavailable("documentary media source could not be read")
-}
-
-func selectedDocumentaryIdea(run *documentary.Run) *documentary.Idea {
-	if run == nil || strings.TrimSpace(run.SelectedIdeaID) == "" {
-		return nil
-	}
-	for index := range run.Ideas {
-		if run.Ideas[index].ID == run.SelectedIdeaID {
-			return &run.Ideas[index]
-		}
-	}
-	return nil
-}
-
-func markDocumentaryStep(run *documentary.Run, step documentary.Step, fingerprint string) {
-	if run.StepStates == nil {
-		run.StepStates = map[documentary.Step]documentary.StepState{}
-	}
-	run.StepStates[step] = documentary.StepState{Fingerprint: fingerprint, Status: documentary.StepStatusReady}
-}
-
-func setDocumentaryProvider(run *documentary.Run, step, model string) {
-	if run.ProviderManifest == nil {
-		run.ProviderManifest = map[string]string{}
-	}
-	run.ProviderManifest[step] = model
-}
-
-func documentarySourceFingerprint(source *autovideo.Source) string {
-	if source == nil {
-		return "no-source"
-	}
-	return documentary.Fingerprint(source.ID, source.Kind, source.URL, source.MediaID, source.Value)
-}
-
-func documentaryBeatIDs(beats []documentary.Beat) []string {
-	ids := make([]string, 0, len(beats))
-	for _, beat := range beats {
-		ids = append(ids, beat.ID)
-	}
-	return ids
-}
-
-func documentaryVisualFingerprints(plans []documentary.VisualPlan) []string {
-	fingerprints := make([]string, 0, len(plans))
-	for _, plan := range plans {
-		fingerprints = append(fingerprints, plan.Fingerprint)
-	}
-	return fingerprints
 }
