@@ -13,8 +13,13 @@
 	} = $props();
 
 	let draft = $state(script.text);
+	let loadedFingerprint = $state(script.fingerprint);
 	$effect(() => {
-		if (script.text !== draft) draft = script.text;
+		const nextFingerprint = script.fingerprint;
+		if (nextFingerprint !== loadedFingerprint) {
+			loadedFingerprint = nextFingerprint;
+			draft = script.text;
+		}
 	});
 </script>
 
