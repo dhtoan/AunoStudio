@@ -1,0 +1,73 @@
+name: Wire Auto Video Automatic Enrichment
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-autogen-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Auto Video handoff and panel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          route = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = route.read_text()
+          text = text.replace(
+              "`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video`",
+              "`/video-editor/${cloudProject.id}?storage=cloud&auno=auto-video&autogen=voice,captions,music-if-ready`"
+          )
+          text = text.replace(
+              "`/video-editor/${project.id}?auno=auto-video`",
+              "`/video-editor/${project.id}?auno=auto-video&autogen=voice,captions,music-if-ready`"
+          )
+          route.write_text(text)
+
+          panel = Path('apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte')
+          text = panel.read_text()
+          anchor = "\timport { onMount } from 'svelte';\n"
+          addition = "\timport { page } from '$app/state';\n" + anchor
+          if "import { page } from '$app/state';" not in text:
+              if anchor not in text: raise SystemExit('missing onMount anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\timport { editorSession } from '$lib/video-editor/editor.svelte';\n"
+          addition = anchor + "\timport { inspectMusicGenerationStorage } from '$lib/video-editor/local-ai/music/ace-step-service';\n"
+          if "inspectMusicGenerationStorage" not in text:
+              if anchor not in text: raise SystemExit('missing editor session anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tlet motionBusy = $state(false);\n"
+          addition = anchor + "\tlet autoEnrichmentStarted = false;\n"
+          if "autoEnrichmentStarted" not in text:
+              if anchor not in text: raise SystemExit('missing motion busy anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tonMount(() => {\n\t\tvoid refreshSidecar();\n\t});\n"
+          replacement = "\tasync function runRequestedAutoEnrichment(): Promise<void> {\n\t\tif (!sidecar || autoEnrichmentStarted) return;\n\t\tconst requested = new Set(\n\t\t\t(page.url.searchParams.get('autogen') ?? '')\n\t\t\t\t.split(',')\n\t\t\t\t.map((value) => value.trim())\n\t\t\t\t.filter(Boolean)\n\t\t);\n\t\tif (requested.size === 0) return;\n\t\tautoEnrichmentStarted = true;\n\t\tif (requested.has('voice') && (sidecar.generationGraph?.media?.voices?.length ?? 0) === 0) {\n\t\t\tawait generateVoices();\n\t\t}\n\t\tif (requested.has('captions') && sidecar && !sidecar.generationGraph?.media?.captions) {\n\t\t\tawait generateCaptions();\n\t\t}\n\t\tif (requested.has('music-if-ready') && sidecar && !sidecar.generationGraph?.media?.music) {\n\t\t\ttry {\n\t\t\t\tconst storage = await inspectMusicGenerationStorage('standard');\n\t\t\t\tif (storage.missingBytes === 0 && storage.sufficient) await generateMusic();\n\t\t\t} catch {\n\t\t\t\t// Optional background music never blocks a completed Auto Video project.\n\t\t\t}\n\t\t}\n\t}\n\n\tonMount(() => {\n\t\tvoid (async () => {\n\t\t\tawait refreshSidecar();\n\t\t\tawait runRequestedAutoEnrichment();\n\t\t})();\n\t});\n"
+          if "async function runRequestedAutoEnrichment" not in text:
+              if anchor not in text: raise SystemExit('missing onMount block')
+              text = text.replace(anchor, replacement, 1)
+          panel.write_text(text)
+          PY
+
+          upload() {
+            path="$1"
+            api_path="$2"
+            message="$3"
+            encoded="$(base64 -w0 "$path")"
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+              -f message="$message" -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
+          }
+          upload 'apps/web/src/routes/auto-video/+page.svelte' 'apps/web/src/routes/auto-video/%2Bpage.svelte' 'feat: request automatic voice and captions on Auto Video handoff'
+          upload 'apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte' 'apps/web/src/lib/video-editor/components/auno-auto-video-panel.svelte' 'feat: auto enrich new Auto Video projects'
