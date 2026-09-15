@@ -25,4 +25,4 @@ jobs:
       - name: Verify headless motion compiler
         run: cd apps/server && go test ./internal/aunomotion -v
       - name: Verify web cross-runtime contract
-        run: cd apps/web && bun x vitest run src/lib/auno/motion/cross-runtime-contract.test.ts
+        run: cd apps/web && bun run sync && bun x vitest run --project server src/lib/auno/motion/cross-runtime-contract.test.ts
