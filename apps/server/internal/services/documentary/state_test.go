@@ -59,6 +59,13 @@ func TestStoreUpdatesAndAttachesProjectWithOptimisticVersion(t *testing.T) {
 	_, err = store.Upsert(t.Context(), workspaceID, *updated, 1)
 	require.ErrorIs(t, err, ErrConflict)
 
+	userID := "test-user"
+	_, err = store.db.NewInsert().Model(&models.User{
+		ID:    userID,
+		Email: "documentary-test@example.com",
+	}).Exec(t.Context())
+	require.NoError(t, err)
+
 	projectID := "documentary-project"
 	_, err = store.db.NewInsert().Model(&models.VideoProject{
 		ID:              projectID,
@@ -67,8 +74,8 @@ func TestStoreUpdatesAndAttachesProjectWithOptimisticVersion(t *testing.T) {
 		HeadRevision:    1,
 		DocumentJSON:    `{}`,
 		SyncStatus:      models.VideoProjectSyncPending,
-		CreatedByUserID: "test-user",
-		UpdatedByUserID: "test-user",
+		CreatedByUserID: userID,
+		UpdatedByUserID: userID,
 	}).Exec(t.Context())
 	require.NoError(t, err)
 
