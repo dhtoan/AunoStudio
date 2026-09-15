@@ -1,0 +1,64 @@
+name: Wire Auno Motion Into Auto Video
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/auno-motion-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Auto Video motion integration
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/routes/auto-video/+page.svelte')
+          text = path.read_text()
+
+          anchor = "\timport type { Project } from '$lib/video-editor/project/types';\n"
+          addition = anchor + "\timport { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';\n\timport { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';\n"
+          if "planMotionGraph" not in text:
+              if anchor not in text: raise SystemExit('missing motion import anchor')
+              text = text.replace(anchor, addition, 1)
+
+          anchor = "\tlet canvas = $state<AutoVideoCanvasPreset>('vertical');\n"
+          addition = anchor + "\tlet motionStyle = $state<MotionStyleId>('editorial-fashion');\n"
+          if "let motionStyle" not in text:
+              if anchor not in text: raise SystemExit('missing canvas state anchor')
+              text = text.replace(anchor, addition, 1)
+
+          old = "\t\t\tconst project = compileStoryboardToProject(storyboard, canvas);\n"
+          new = "\t\t\tconst baseProject = compileStoryboardToProject(storyboard, canvas);\n\t\t\tconst motionGraph = planMotionGraph({\n\t\t\t\tprojectId: baseProject.id,\n\t\t\t\tstyle: motionStyle,\n\t\t\t\tscenes: storyboard.scenes\n\t\t\t});\n\t\t\tconst project = applyMotionGraphToProject(baseProject, motionGraph);\n"
+          if "const motionGraph = planMotionGraph" not in text:
+              if old not in text: raise SystemExit('missing project compile anchor')
+              text = text.replace(old, new, 1)
+
+          old = "\t\t\t\t\t\tuserModifiedItemIds: []\n\t\t\t\t\t}))\n\t\t\t\t}\n"
+          new = "\t\t\t\t\t\tuserModifiedItemIds: []\n\t\t\t\t\t})),\n\t\t\t\t\tmotion: { schemaVersion: 1 as const, style: motionGraph.style, seed: motionGraph.seed }\n\t\t\t\t}\n"
+          if "motion: { schemaVersion" not in text:
+              if old not in text: raise SystemExit('missing generation graph anchor')
+              text = text.replace(old, new, 1)
+
+          language_anchor = "\t\t\t\t<label class=\"space-y-2 text-sm font-medium\">\n\t\t\t\t\t<span>Language</span>\n"
+          motion_markup = "\t\t\t\t<label class=\"space-y-2 text-sm font-medium\">\n\t\t\t\t\t<span>Motion style</span>\n\t\t\t\t\t<select bind:value={motionStyle} class=\"h-10 w-full rounded-md border bg-background px-3 text-sm\">\n\t\t\t\t\t\t{#each Object.values(MOTION_STYLES) as definition (definition.id)}\n\t\t\t\t\t\t\t<option value={definition.id}>{definition.label}</option>\n\t\t\t\t\t\t{/each}\n\t\t\t\t\t</select>\n\t\t\t\t</label>\n"
+          if "<span>Motion style</span>" not in text:
+              if language_anchor not in text: raise SystemExit('missing language UI anchor')
+              text = text.replace(language_anchor, motion_markup + language_anchor, 1)
+              text = text.replace('sm:grid-cols-2 lg:grid-cols-5', 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6', 1)
+
+          path.write_text(text)
+          PY
+          path='apps/web/src/routes/auto-video/+page.svelte'
+          api_path='apps/web/src/routes/auto-video/%2Bpage.svelte'
+          encoded="$(base64 -w0 "$path")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${api_path}?ref=main" --jq .sha)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${api_path}" \
+            -f message='feat: apply Auno Motion styles to Auto Video projects' \
+            -f branch=main -f content="$encoded" -f sha="$sha" >/dev/null
