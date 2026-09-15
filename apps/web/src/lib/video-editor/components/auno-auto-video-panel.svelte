@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleCustomization, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, hashMotionSeed, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleCustomization, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import MotionStyleCustomizer from '$lib/components/auno-motion/motion-style-customizer.svelte';
@@ -198,7 +198,7 @@
 		}
 	}
 
-	async function applyMotionStyle(): Promise<void> {
+	async function applyMotionStyle(newVariation = false): Promise<void> {
 		if (!sidecar || motionBusy || mediaBusy !== null || busyScene !== null) return;
 		const project = editorSession.project;
 		if (!project) {
@@ -209,10 +209,15 @@
 		status = '';
 		try {
 			const previousMotion = sidecar.generationGraph?.motion;
+			const variationSeed = newVariation
+				? hashMotionSeed(`${previousMotion?.seed ?? 0}:${sidecar.generationVersion + 1}:${motionStyle}`)
+				: previousMotion?.style === motionStyle
+					? previousMotion.seed
+					: undefined;
 			const graph = planMotionGraph({
 				projectId,
 				style: motionStyle,
-				seed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,
+				seed: variationSeed,
 				scenes: sidecar.storyboard.scenes,
 				customization: motionCustomization
 			});
@@ -261,7 +266,7 @@
 			};
 			await persistSidecar(nextSidecar);
 			onautosave();
-			status = `Regenerated ${MOTION_STYLES[motionStyle].label} motion only. Voice, captions, music, manual text, and compatible composition overrides were preserved.`;
+			status = `${newVariation ? 'Created a new deterministic variation of' : 'Regenerated'} ${MOTION_STYLES[motionStyle].label} motion only. Voice, captions, music, manual text, and compatible composition overrides were preserved.`;
 		} catch (cause) {
 			status = cause instanceof Error ? cause.message : String(cause);
 		} finally {
@@ -449,10 +454,15 @@
 							<option value={definition.id}>{definition.label}</option>
 						{/each}
 					</select>
-					<Button type="button" size="sm" variant="outline" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={applyMotionStyle}>
+					<Button type="button" size="sm" variant="outline" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={() => applyMotionStyle(false)}>
 						{motionBusy ? 'Regenerating…' : sidecar.generationGraph?.motion ? 'Regenerate motion' : 'Apply motion'}
 					</Button>
 				</div>
+				{#if sidecar.generationGraph?.motion}
+					<Button type="button" size="sm" variant="ghost" class="w-full" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={() => applyMotionStyle(true)}>
+						New motion variation
+					</Button>
+				{/if}
 
 				<MotionStyleCustomizer bind:customization={motionCustomization} />
 
