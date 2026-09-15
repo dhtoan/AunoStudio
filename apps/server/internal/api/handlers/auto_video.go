@@ -13,32 +13,50 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/services/autovideo"
 	"github.com/openpost/backend/internal/services/ratelimit"
+	"github.com/openpost/backend/internal/services/sourcecontext"
 	"github.com/uptrace/bun"
 )
 
 const autoVideoRequestsPerMinute = 10
 
 type AutoVideoHandler struct {
-	db      *bun.DB
-	auth    middleware.Authenticator
-	planner autovideo.Planner
-	limiter *ratelimit.Limiter
+	db           *bun.DB
+	auth         middleware.Authenticator
+	planner      autovideo.Planner
+	sourceLoader sourcecontext.Loader
+	limiter      *ratelimit.Limiter
+}
+
+type autoVideoSourceBody struct {
+	ID    string `json:"id" required:"true"`
+	Kind  string `json:"kind" required:"true"`
+	Label string `json:"label" required:"true"`
+	Value string `json:"value" required:"true" minLength:"1" maxLength:"50000"`
+	URL   string `json:"url,omitempty"`
+}
+
+type ResolveAutoVideoSourceInput struct {
+	Body struct {
+		WorkspaceID string              `json:"workspace_id" required:"true" doc:"Workspace ID"`
+		Source      autoVideoSourceBody `json:"source" required:"true"`
+	}
+}
+
+type ResolveAutoVideoSourceOutput struct {
+	Body struct {
+		Source    autovideo.Source `json:"source"`
+		Truncated bool             `json:"truncated"`
+	}
 }
 
 type GenerateAutoVideoStoryboardInput struct {
 	Body struct {
-		WorkspaceID           string `json:"workspace_id" required:"true" doc:"Workspace ID"`
-		Format                string `json:"format" required:"true" doc:"Review, news, guide, compare, or top-n"`
-		Title                 string `json:"title,omitempty" maxLength:"160" doc:"Optional project title"`
-		Language              string `json:"language" required:"true" minLength:"2" maxLength:"32" doc:"Narration language code"`
-		TargetDurationSeconds int    `json:"target_duration_seconds" required:"true" minimum:"10" maximum:"180" doc:"Target duration in seconds"`
-		Source                struct {
-			ID    string `json:"id" required:"true"`
-			Kind  string `json:"kind" required:"true"`
-			Label string `json:"label" required:"true"`
-			Value string `json:"value" required:"true" minLength:"1" maxLength:"50000"`
-			URL   string `json:"url,omitempty"`
-		} `json:"source" required:"true"`
+		WorkspaceID           string              `json:"workspace_id" required:"true" doc:"Workspace ID"`
+		Format                string              `json:"format" required:"true" doc:"Review, news, guide, compare, or top-n"`
+		Title                 string              `json:"title,omitempty" maxLength:"160" doc:"Optional project title"`
+		Language              string              `json:"language" required:"true" minLength:"2" maxLength:"32" doc:"Narration language code"`
+		TargetDurationSeconds int                 `json:"target_duration_seconds" required:"true" minimum:"10" maximum:"180" doc:"Target duration in seconds"`
+		Source                autoVideoSourceBody `json:"source" required:"true"`
 	}
 }
 
@@ -50,10 +68,23 @@ type GenerateAutoVideoStoryboardOutput struct {
 }
 
 func NewAutoVideoHandler(db *bun.DB, auth middleware.Authenticator, planner autovideo.Planner) *AutoVideoHandler {
-	return &AutoVideoHandler{db: db, auth: auth, planner: planner, limiter: ratelimit.New()}
+	loader, _ := sourcecontext.New(sourcecontext.Config{})
+	return &AutoVideoHandler{db: db, auth: auth, planner: planner, sourceLoader: loader, limiter: ratelimit.New()}
 }
 
 func (h *AutoVideoHandler) RegisterRoutes(api huma.API) {
+	auth := huma.Middlewares{middleware.AuthMiddleware(api, h.auth)}
+	huma.Register(api, huma.Operation{
+		OperationID: "resolve-auno-auto-video-source",
+		Method:      http.MethodPost,
+		Path:        "/auno/auto-video/source/resolve",
+		Summary:     "Resolve an Auno Auto Video source",
+		Description: "Safely fetches and extracts a bounded public URL for use as untrusted source material.",
+		Tags:        []string{"Auno Auto Video"},
+		Middlewares: auth,
+		Errors:      []int{400, 403, 502, 503},
+	}, h.resolveSource)
+
 	huma.Register(api, huma.Operation{
 		OperationID: "generate-auno-auto-video-storyboard",
 		Method:      http.MethodPost,
@@ -61,22 +92,74 @@ func (h *AutoVideoHandler) RegisterRoutes(api huma.API) {
 		Summary:     "Generate an editable Auno Auto Video storyboard",
 		Description: "Plans scene copy and visual intent only. It does not render, save, schedule, or publish media.",
 		Tags:        []string{"Auno Auto Video"},
-		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Middlewares: auth,
 		Errors:      []int{400, 403, 429, 502, 503},
 	}, h.generate)
 }
 
-func (h *AutoVideoHandler) generate(ctx context.Context, input *GenerateAutoVideoStoryboardInput) (*GenerateAutoVideoStoryboardOutput, error) {
+func (h *AutoVideoHandler) checkWorkspace(ctx context.Context, workspaceID string) error {
 	if h.db == nil {
-		return nil, huma.Error503ServiceUnavailable("Auto Video is unavailable")
+		return huma.Error503ServiceUnavailable("Auto Video is unavailable")
 	}
-	workspaceID := strings.TrimSpace(input.Body.WorkspaceID)
+	workspaceID = strings.TrimSpace(workspaceID)
 	allowed, err := workspaceEditAllowed(ctx, h.db, workspaceID, middleware.GetUserID(ctx))
 	if err != nil {
-		return nil, huma.Error503ServiceUnavailable("failed to verify workspace access")
+		return huma.Error503ServiceUnavailable("failed to verify workspace access")
 	}
 	if !allowed {
-		return nil, huma.Error403Forbidden("workspace access denied")
+		return huma.Error403Forbidden("workspace access denied")
+	}
+	return nil
+}
+
+func sourceFromBody(source autoVideoSourceBody) autovideo.Source {
+	return autovideo.Source{
+		ID: source.ID, Kind: source.Kind, Label: source.Label,
+		Value: source.Value, URL: source.URL,
+	}
+}
+
+func (h *AutoVideoHandler) resolveSource(ctx context.Context, input *ResolveAutoVideoSourceInput) (*ResolveAutoVideoSourceOutput, error) {
+	if err := h.checkWorkspace(ctx, input.Body.WorkspaceID); err != nil {
+		return nil, err
+	}
+	source := sourceFromBody(input.Body.Source)
+	if strings.ToLower(strings.TrimSpace(source.Kind)) != "url" {
+		output := &ResolveAutoVideoSourceOutput{}
+		output.Body.Source = source
+		return output, nil
+	}
+	if h.sourceLoader == nil {
+		return nil, huma.Error503ServiceUnavailable("URL source extraction is unavailable")
+	}
+	rawURL := strings.TrimSpace(source.URL)
+	if rawURL == "" {
+		rawURL = strings.TrimSpace(source.Value)
+	}
+	document, err := h.sourceLoader.Load(ctx, rawURL)
+	if err != nil {
+		if errors.Is(err, sourcecontext.ErrInvalidURL) || errors.Is(err, sourcecontext.ErrCredentialsNotAllowed) ||
+			errors.Is(err, sourcecontext.ErrCustomPortNotAllowed) || errors.Is(err, sourcecontext.ErrURLNotPublic) ||
+			errors.Is(err, sourcecontext.ErrUnsupportedContentType) || errors.Is(err, sourcecontext.ErrResponseTooLarge) ||
+			errors.Is(err, sourcecontext.ErrUnreadable) {
+			return nil, huma.Error400BadRequest("source URL is not a supported public document")
+		}
+		return nil, huma.Error502BadGateway("source URL could not be loaded")
+	}
+	source.URL = document.CanonicalURL
+	source.Value = document.Text
+	if strings.TrimSpace(document.Title) != "" {
+		source.Label = document.Title
+	}
+	output := &ResolveAutoVideoSourceOutput{}
+	output.Body.Source = source
+	output.Body.Truncated = document.Truncated
+	return output, nil
+}
+
+func (h *AutoVideoHandler) generate(ctx context.Context, input *GenerateAutoVideoStoryboardInput) (*GenerateAutoVideoStoryboardOutput, error) {
+	if err := h.checkWorkspace(ctx, input.Body.WorkspaceID); err != nil {
+		return nil, err
 	}
 	if h.planner == nil {
 		return nil, huma.Error503ServiceUnavailable("AI Auto Video planning is not configured")
@@ -91,16 +174,10 @@ func (h *AutoVideoHandler) generate(ctx context.Context, input *GenerateAutoVide
 		Title:                 input.Body.Title,
 		Language:              input.Body.Language,
 		TargetDurationSeconds: input.Body.TargetDurationSeconds,
-		Source: autovideo.Source{
-			ID:    input.Body.Source.ID,
-			Kind:  input.Body.Source.Kind,
-			Label: input.Body.Source.Label,
-			Value: input.Body.Source.Value,
-			URL:   input.Body.Source.URL,
-		},
+		Source:                sourceFromBody(input.Body.Source),
 	})
 	if err != nil {
-		log.Printf("Auno Auto Video planning failed for workspace %s (%T)", workspaceID, err)
+		log.Printf("Auno Auto Video planning failed for workspace %s (%T)", strings.TrimSpace(input.Body.WorkspaceID), err)
 		return nil, autoVideoPlannerError(err)
 	}
 	output := &GenerateAutoVideoStoryboardOutput{}
