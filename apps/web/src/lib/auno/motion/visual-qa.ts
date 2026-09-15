@@ -9,6 +9,14 @@ export interface AunoMotionVisualQAInput {
 	compositionIds?: ReadonlySet<string>;
 }
 
+interface Bounds {
+	left: number;
+	right: number;
+	top: number;
+	bottom: number;
+	area: number;
+}
+
 function finite(value: number | undefined): boolean {
 	return value === undefined || Number.isFinite(value);
 }
@@ -48,19 +56,56 @@ function invalidTransform(item: TimelineItem): boolean {
 		(transform.scaleY !== undefined && transform.scaleY <= 0);
 }
 
-function textOutsideSafeBounds(item: TimelineItem, width: number, height: number): boolean {
-	if (item.type !== 'text' || !item.transform) return false;
-	const { x, y, width: itemWidth, height: itemHeight } = item.transform;
-	if (![x, y, itemWidth, itemHeight].every((value) => value !== undefined && Number.isFinite(value))) {
-		return false;
+function itemBounds(item: TimelineItem): Bounds | null {
+	const transform = item.transform;
+	if (!transform) return null;
+	const { x, y, width, height, scaleX = 1, scaleY = 1 } = transform;
+	if (![x, y, width, height, scaleX, scaleY].every((value) => value !== undefined && Number.isFinite(value))) {
+		return null;
 	}
+	const scaledWidth = Math.abs((width as number) * (scaleX as number));
+	const scaledHeight = Math.abs((height as number) * (scaleY as number));
+	if (scaledWidth <= 0 || scaledHeight <= 0) return null;
+	return {
+		left: (x as number) - scaledWidth / 2,
+		right: (x as number) + scaledWidth / 2,
+		top: (y as number) - scaledHeight / 2,
+		bottom: (y as number) + scaledHeight / 2,
+		area: scaledWidth * scaledHeight
+	};
+}
+
+function textOutsideSafeBounds(item: TimelineItem, width: number, height: number): boolean {
+	if (item.type !== 'text') return false;
+	const bounds = itemBounds(item);
+	if (!bounds) return false;
 	const safeX = width * 0.05;
 	const safeY = height * 0.05;
-	const left = (x as number) - (itemWidth as number) / 2;
-	const right = (x as number) + (itemWidth as number) / 2;
-	const top = (y as number) - (itemHeight as number) / 2;
-	const bottom = (y as number) + (itemHeight as number) / 2;
-	return left < safeX || right > width - safeX || top < safeY || bottom > height - safeY;
+	return bounds.left < safeX || bounds.right > width - safeX || bounds.top < safeY || bounds.bottom > height - safeY;
+}
+
+function overlapRatio(left: Bounds, right: Bounds): number {
+	const width = Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left));
+	const height = Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top));
+	const intersection = width * height;
+	if (intersection <= 0) return 0;
+	return intersection / Math.max(1, Math.min(left.area, right.area));
+}
+
+function overlappingTextPair(items: readonly TimelineItem[]): [TimelineItem, TimelineItem] | null {
+	const textItems = items.filter((item) => item.type === 'text' && visible(item));
+	for (let leftIndex = 0; leftIndex < textItems.length; leftIndex += 1) {
+		const left = textItems[leftIndex]!;
+		const leftBounds = itemBounds(left);
+		if (!leftBounds) continue;
+		for (let rightIndex = leftIndex + 1; rightIndex < textItems.length; rightIndex += 1) {
+			const right = textItems[rightIndex]!;
+			const rightBounds = itemBounds(right);
+			if (!rightBounds) continue;
+			if (overlapRatio(leftBounds, rightBounds) >= 0.2) return [left, right];
+		}
+	}
+	return null;
 }
 
 /**
@@ -112,6 +157,16 @@ export function inspectAunoMotionVisualQA(input: AunoMotionVisualQAInput): AutoV
 					message: `Motion Composition ${item.compositionId} is missing from the project registry.`
 				});
 			}
+		}
+		const overlap = overlappingTextPair(authored);
+		if (overlap) {
+			issues.push({
+				code: 'visual.text_overlap',
+				severity: 'warning',
+				sceneId: scene.id,
+				itemId: overlap[0].id,
+				message: `Text ${overlap[0].label || overlap[0].id} overlaps ${overlap[1].label || overlap[1].id} by at least 20%.`
+			});
 		}
 	}
 	return issues;
