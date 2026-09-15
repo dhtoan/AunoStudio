@@ -30,7 +30,7 @@
 	} from '$lib/auno/auto-video/types';
 
 	const gate = createWorkspaceGate();
-	let sourceKind = $state<'text' | 'url' | 'markdown'>('text');
+	let sourceKind = $state<'text' | 'url' | 'markdown' | 'txt'>('text');
 	let sourceValue = $state('');
 	let title = $state('');
 	let format = $state<AutoVideoFormat>('review');
@@ -47,6 +47,31 @@
 	let planning = $state(false);
 	let creating = $state(false);
 
+	async function loadTextSourceFile(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		error = '';
+		if (file.size > 1_000_000) {
+			error = 'TXT/Markdown sources are limited to 1 MB. Use a URL or shorten the document first.';
+			input.value = '';
+			return;
+		}
+		try {
+			const content = await file.text();
+			if (!content.trim()) throw new Error('The selected text file is empty.');
+			sourceValue = content.slice(0, 200_000);
+			sourceKind = /\.(md|markdown)$/i.test(file.name) ? 'markdown' : 'txt';
+			if (!title.trim()) title = file.name.replace(/\.[^.]+$/, '');
+			storyboard = null;
+			activeSource = null;
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			input.value = '';
+		}
+	}
+
 	function createSource(): AutoVideoSource {
 		const value = sourceValue.trim();
 		return {
@@ -61,7 +86,7 @@
 	async function generateStoryboard(): Promise<void> {
 		error = '';
 		if (!sourceValue.trim()) {
-			error = 'Add source text, Markdown, or a URL first.';
+			error = 'Add source text, Markdown, a TXT/Markdown file, or a URL first.';
 			return;
 		}
 		planning = true;
@@ -201,6 +226,7 @@
 						<option value="text">Text</option>
 						<option value="url">URL</option>
 						<option value="markdown">Markdown</option>
+						<option value="txt">TXT file</option>
 					</select>
 				</label>
 				<label class="space-y-2 text-sm font-medium">
@@ -220,6 +246,14 @@
 						: 'Paste the content, notes, script, or product information to turn into a video.'}
 				></textarea>
 			</label>
+
+			<div class="flex flex-wrap items-center gap-2">
+				<label class="inline-flex h-9 cursor-pointer items-center rounded-md border bg-background px-3 text-xs font-medium hover:bg-muted">
+					Choose TXT / Markdown
+					<input type="file" class="sr-only" accept=".txt,.md,.markdown,text/plain,text/markdown" onchange={loadTextSourceFile} />
+				</label>
+				<span class="text-xs text-muted-foreground">Read locally · up to 1 MB · planner text capped at 200k characters</span>
+			</div>
 
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 				<label class="space-y-2 text-sm font-medium">
