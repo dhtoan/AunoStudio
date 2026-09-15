@@ -1,0 +1,27 @@
+services:
+  auno-studio:
+    environment:
+      OPENPOST_DATABASE_DRIVER: postgres
+      OPENPOST_DATABASE_URL: postgres://${POSTGRES_USER:-auno}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-auno}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-auno}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-auno}
+    volumes:
+      - auno_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-auno} -d ${POSTGRES_DB:-auno}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  auno_postgres_data:
