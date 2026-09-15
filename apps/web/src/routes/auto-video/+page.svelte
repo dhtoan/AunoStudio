@@ -15,7 +15,7 @@
 	import { createProject } from '$lib/video-editor/workspace-fs/projects';
 	import { CloudVideoProjectRepository } from '$lib/video-editor/cloud/project-repository';
 	import type { Project } from '$lib/video-editor/project/types';
-	import { MOTION_STYLES, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
+	import { MOTION_STYLES, createMotionProbePlan, motionProbeSignature, planMotionGraph, validateMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { applyMotionGraphToProject } from '$lib/auno/motion/native-compiler';
 	import { requestAIStoryboard, resolveAutoVideoSource } from '$lib/auno/auto-video/api';
 	import {
@@ -266,6 +266,8 @@
 			});
 			const project = applyMotionGraphToProject(baseProject, motionGraph);
 			const motionDiagnostics = validateMotionGraph(motionGraph);
+			const motionProbePlan = createMotionProbePlan(motionGraph, baseProject.metadata.fps);
+			const motionProbePlanSignature = motionProbeSignature(motionProbePlan);
 			const now = Date.now();
 			const sidecar = {
 				version: 1 as const,
@@ -295,7 +297,9 @@
 						style: motionGraph.style,
 						seed: motionGraph.seed,
 						brief: motionGraph.brief,
-						diagnostics: motionDiagnostics
+						diagnostics: motionDiagnostics,
+						probePlan: motionProbePlan,
+						probeSignature: motionProbePlanSignature
 					}
 				}
 			};
