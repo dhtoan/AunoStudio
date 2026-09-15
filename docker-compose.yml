@@ -1,8 +1,8 @@
 services:
-  openpost:
-    image: ghcr.io/getopenpost/openpost:latest
+  auno-studio:
+    image: ghcr.io/dhtoan/aunostudio:${AUNO_IMAGE_TAG:-latest}
     platform: linux/amd64
-    container_name: openpost
+    container_name: auno-studio
     restart: unless-stopped
     stop_grace_period: 15s
 
@@ -10,12 +10,11 @@ services:
       - .env
 
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${AUNO_HOST_PORT:-8080}:8080"
 
     volumes:
-      - openpost_data:/data
+      - auno_studio_data:/data
 
-    # Process liveness only. Gate traffic and rollouts on /api/v1/ready.
     healthcheck:
       test:
         [
@@ -32,10 +31,14 @@ services:
       start_period: 10s
 
     environment:
-      # These can be overridden by .env file
       - OPENPOST_PORT=8080
-      - OPENPOST_DATABASE_PATH=/data/db/openpost.db
+      - OPENPOST_EDITION=selfhost
+      - OPENPOST_DATABASE_DRIVER=sqlite
+      - OPENPOST_DATABASE_PATH=/data/db/auno-studio.db
+      - OPENPOST_STORAGE_DRIVER=local
       - OPENPOST_MEDIA_PATH=/data/media
+      - OPENPOST_TELEMETRY_ENABLED=false
+      - OPENPOST_UPDATE_CHECK_ENABLED=false
 
 volumes:
-  openpost_data:
+  auno_studio_data:
