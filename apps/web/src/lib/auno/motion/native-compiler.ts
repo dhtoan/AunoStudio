@@ -11,6 +11,7 @@ import type {
 import { aunoMotionTrack, buildMotionCompositionOverlays } from './motion-composition';
 
 function scalarTrack(
+	scope: string,
 	from: number,
 	to: number,
 	durationInFrames: number,
@@ -20,7 +21,7 @@ function scalarTrack(
 	return {
 		frames: [0, end],
 		values: [from, to],
-		ids: [crypto.randomUUID(), crypto.randomUUID()],
+		ids: [`auno:${scope}:0`, `auno:${scope}:1`],
 		easings: [easing, easing]
 	};
 }
@@ -119,21 +120,25 @@ export function compileMotionGraphToNativeTimeline(
 					: item.background,
 				keyframes: mergeKeyframes(item, {
 					backgroundRotation: scalarTrack(
+						`${item.id}:backgroundRotation`,
 						scene.background.rotationFrom,
 						scene.background.rotationTo,
 						durationInFrames
 					),
 					backgroundScale: scalarTrack(
+						`${item.id}:backgroundScale`,
 						scene.background.scaleFrom,
 						scene.background.scaleTo,
 						durationInFrames
 					),
 					backgroundOffsetX: scalarTrack(
+						`${item.id}:backgroundOffsetX`,
 						scene.background.offsetXFrom,
 						scene.background.offsetXTo,
 						durationInFrames
 					),
 					backgroundOffsetY: scalarTrack(
+						`${item.id}:backgroundOffsetY`,
 						scene.background.offsetYFrom,
 						scene.background.offsetYTo,
 						durationInFrames
@@ -151,18 +156,21 @@ export function compileMotionGraphToNativeTimeline(
 				textMotion: textMotionForScene(graph.seed, index, durationInFrames, scene.text),
 				keyframes: mergeKeyframes(item, {
 					x: scalarTrack(
+						`${item.id}:x`,
 						baseX + scene.camera.xFrom * width,
 						baseX + scene.camera.xTo * width,
 						durationInFrames
 					),
 					y: scalarTrack(
+						`${item.id}:y`,
 						baseY + scene.camera.yFrom * height,
 						baseY + scene.camera.yTo * height,
 						durationInFrames
 					),
-					scaleX: scalarTrack(scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
-					scaleY: scalarTrack(scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
+					scaleX: scalarTrack(`${item.id}:scaleX`, scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
+					scaleY: scalarTrack(`${item.id}:scaleY`, scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
 					rotation: scalarTrack(
+						`${item.id}:rotation`,
 						scene.camera.rotationFrom,
 						scene.camera.rotationTo,
 						durationInFrames
