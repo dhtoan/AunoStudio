@@ -1,0 +1,17 @@
+name: Task 18 easing TDD gate
+
+on:
+  push:
+    paths:
+      - .github/workflows/auno-task18-easing-tdd.yml
+      - packages/auno-motion/src/easing.ts
+      - packages/auno-motion/src/easing.test.ts
+
+jobs:
+  easing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun test packages/auno-motion/src/easing.test.ts
