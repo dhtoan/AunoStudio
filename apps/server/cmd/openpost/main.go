@@ -715,11 +715,13 @@ func main() {
 			cfg.ContentAIProvider,
 			cfg.ContentAIRequireZDR,
 		)
-		autoVideoPlanner, err = autovideo.New(contentGenerator, cfg.TextGenerationModel)
-		if err != nil {
-			fatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Auto Video planner: %v", err)
-		}
-		log.Printf("Auno Auto Video planner enabled with model %s", cfg.TextGenerationModel)
+	}
+	autoVideoPlanner, autoVideoModel, autoVideoProvider, err := aunoAutoVideoPlanner(cfg, contentGenerator)
+	if err != nil {
+		fatalfWithDiagnostics(diagnosticsReporter, "failed to initialize Auno Auto Video planner: %v", err)
+	}
+	if autoVideoPlanner != nil {
+		log.Printf("Auno Auto Video planner enabled with model %s via %s", autoVideoModel, autoVideoProvider)
 	}
 
 	var publicSourceLoader sourcecontext.Loader
