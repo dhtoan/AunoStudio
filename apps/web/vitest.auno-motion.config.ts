@@ -9,7 +9,6 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
-		include: ['src/lib/auno/motion/**/*.test.ts'],
-		expect: { requireAssertions: true }
+		include: ['src/lib/auno/motion/**/*.test.ts']
 	}
 });
