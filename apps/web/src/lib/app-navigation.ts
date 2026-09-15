@@ -1,5 +1,6 @@
 export type PrimaryNavigationItem = {
 	id:
+		| 'home'
 		| 'new'
 		| 'calendar'
 		| 'publications'
@@ -16,6 +17,7 @@ export type PrimaryNavigationItem = {
 };
 
 export type AppRouteFamily =
+	| 'home'
 	| 'root'
 	| 'calendar'
 	| 'publications'
@@ -28,6 +30,7 @@ export type AppRouteFamily =
 	| 'local-editors';
 
 export const appRouteFamilies = {
+	home: ['/home'],
 	root: ['/'],
 	calendar: ['/calendar'],
 	publications: ['/publications', '/calendar'],
@@ -41,6 +44,7 @@ export const appRouteFamilies = {
 } satisfies Record<AppRouteFamily, readonly string[]>;
 
 export const primaryNavigation: PrimaryNavigationItem[] = [
+	{ id: 'home', label: 'Home', href: '/home', family: 'home', mobile: false },
 	{ id: 'new', label: 'New post', href: '/', family: 'root', mobile: true },
 	{ id: 'calendar', label: 'Calendar', href: '/calendar', family: 'calendar', mobile: true },
 	{
@@ -104,6 +108,7 @@ export function isLocalEditorRoute(pathname: string): boolean {
 
 export function isMoreNavigationRoute(pathname: string): boolean {
 	return (
+		isAppRouteInFamily(pathname, 'home') ||
 		isAppRouteInFamily(pathname, 'growth') ||
 		isAppRouteInFamily(pathname, 'analytics') ||
 		isAppRouteInFamily(pathname, 'editors') ||
