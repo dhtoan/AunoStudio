@@ -86,7 +86,7 @@ export default defineConfig({
       cwd: repositoryRoot,
       command: [
         `rm -f ${dbPath}`,
-        ...(usePrebuiltArtifact ? [] : ["bun run build -- frontend"]),
+        ...(usePrebuiltArtifact ? [] : ["VITE_AUNO_E2E=1 bun run build -- frontend"]),
         [
           "cd apps/server &&",
           `OPENPOST_PORT=${port}`,
@@ -94,6 +94,7 @@ export default defineConfig({
           'OPENPOST_JWT_SECRET="jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"',
           'OPENPOST_ENCRYPTION_KEY="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"',
           "OPENPOST_DISABLE_REGISTRATIONS=false",
+          "OPENPOST_AUNO_E2E_FIXTURES=1",
           "OPENPOST_EMAIL_PROVIDER=smtp",
           'OPENPOST_EMAIL_FROM="OpenPost <hello@openpost.test>"',
           `OPENPOST_SMTP_HOST=${host}`,

@@ -36,6 +36,16 @@ interface MotionQATestHook {
   }): Promise<{ frame: number; issues: RuntimeQAIssue[] }>;
 }
 
+async function waitForQAHook(page: Parameters<typeof authenticatePage>[0]): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean((window as typeof window & { __AUNO_MOTION_QA_TEST__?: MotionQATestHook }).__AUNO_MOTION_QA_TEST__),
+      ),
+    )
+    .toBe(true);
+}
+
 test("all ten Motion Styles expose clean structured runtime QA at fixed probes", async ({ page, request }) => {
   test.setTimeout(120_000);
   const unique = Date.now().toString(36);
@@ -43,6 +53,7 @@ test("all ten Motion Styles expose clean structured runtime QA at fixed probes",
   await createWorkspace(request, auth.token, "Auno Motion Visual QA E2E");
   await authenticatePage(page, auth.token);
   await page.goto("/video-editor");
+  await waitForQAHook(page);
 
   for (const style of MOTION_STYLES) {
     for (const progress of [0.25, 0.5, 0.75] as const) {
@@ -68,6 +79,7 @@ test("Vox signature documentary beats remain free of runtime visual blockers", a
   await createWorkspace(request, auth.token, "Auno Vox Visual QA E2E");
   await authenticatePage(page, auth.token);
   await page.goto("/video-editor");
+  await waitForQAHook(page);
 
   for (const scenario of VOX_SCENARIOS) {
     const result = await page.evaluate(async (scenarioName) => {

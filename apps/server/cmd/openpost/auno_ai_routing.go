@@ -14,6 +14,15 @@ func aunoPlannerGenerator(
 	cfg *config.Config,
 	openRouterGenerator ai.Generator,
 ) (ai.Generator, string, string, error) {
+	fixtureEnabled := strings.TrimSpace(os.Getenv("OPENPOST_AUNO_E2E_FIXTURES")) == "1"
+	fixtureGenerator, err := aunoE2EPlannerGenerator(fixtureEnabled)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if fixtureGenerator != nil {
+		return fixtureGenerator, "auno-e2e-fixture", "fixture", nil
+	}
+
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("AUNO_AI_PROVIDER")))
 	if provider == "" {
 		provider = "auto"
