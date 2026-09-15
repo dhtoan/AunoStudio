@@ -37,6 +37,16 @@ function changedPixelMetrics(left: FrameCapture, right: FrameCapture) {
   };
 }
 
+async function waitForMotionHook(page: Parameters<typeof authenticatePage>[0]): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => Boolean((window as typeof window & { __AUNO_MOTION_TEST__?: MotionTestHook }).__AUNO_MOTION_TEST__),
+      ),
+    )
+    .toBe(true);
+}
+
 test("preview and export pre-encode frames are deterministic across reload", async ({ page, request }) => {
   test.setTimeout(120_000);
   const unique = Date.now().toString(36);
@@ -44,6 +54,7 @@ test("preview and export pre-encode frames are deterministic across reload", asy
   await createWorkspace(request, auth.token, "Auno Motion Determinism E2E");
   await authenticatePage(page, auth.token);
   await page.goto("/video-editor");
+  await waitForMotionHook(page);
 
   const fixture = await page.evaluate(async () => {
     const hook = (window as typeof window & { __AUNO_MOTION_TEST__?: MotionTestHook }).__AUNO_MOTION_TEST__;
@@ -51,6 +62,9 @@ test("preview and export pre-encode frames are deterministic across reload", asy
     return hook.seedDeterministicProject();
   });
   expect(fixture.probeFrames.length).toBeGreaterThanOrEqual(5);
+
+  await page.goto(`/video-editor/${fixture.projectId}?storage=cloud`);
+  await waitForMotionHook(page);
 
   const beforeReload: FrameCapture[] = [];
   for (const frame of fixture.probeFrames) {
