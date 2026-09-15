@@ -93,9 +93,40 @@ export interface AutoVideoGenerationBlock {
 	userModifiedItemIds: string[];
 }
 
+export interface AutoVideoVoiceAsset {
+	sceneId: string;
+	itemId: string;
+	mediaId: string;
+	durationSeconds: number;
+	engine: string;
+	voice: string;
+}
+
+export interface AutoVideoCaptionAsset {
+	itemId: string;
+	generatedAt: number;
+	source: 'script';
+}
+
+export interface AutoVideoMusicAsset {
+	itemId: string;
+	mediaId: string;
+	durationSeconds: number;
+	provider: string;
+	prompt: string;
+	seed?: number;
+}
+
+export interface AutoVideoGeneratedMedia {
+	voices?: AutoVideoVoiceAsset[];
+	captions?: AutoVideoCaptionAsset;
+	music?: AutoVideoMusicAsset;
+}
+
 export interface AutoVideoGenerationGraph {
 	version: 1;
 	blocks: AutoVideoGenerationBlock[];
+	media?: AutoVideoGeneratedMedia;
 }
 
 export interface AutoVideoSidecar {
