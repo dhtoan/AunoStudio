@@ -40,6 +40,10 @@ function readControlValue(item: TimelineItem, property: CompositionControlProper
 		case 'motion.intensity':
 		case 'motion.depth':
 		case 'motion.speed':
+		case 'motion.paperJitter':
+		case 'motion.shadowDepth':
+		case 'motion.holdRatio':
+		case 'motion.assemblyOrder':
 			return null;
 	}
 }
@@ -106,14 +110,21 @@ function applyControlValue(
 		case 'motion.intensity':
 		case 'motion.depth':
 		case 'motion.speed':
+		case 'motion.paperJitter':
+		case 'motion.shadowDepth':
+		case 'motion.holdRatio':
+		case 'motion.assemblyOrder':
 			return item;
 	}
 }
 
-function boundedNumber(control: CompositionControlDefinition | undefined, overrides: CompositionControlOverrides, fallback: number): number {
+function boundedNumber(
+	control: CompositionControlDefinition | undefined,
+	overrides: CompositionControlOverrides,
+	fallback: number
+): number {
 	if (!control) return fallback;
-	const raw = overrides[control.id];
-	if (raw === undefined) return fallback;
+	const raw = overrides[control.id] ?? control.defaultValue;
 	const parsed = Number(raw);
 	if (!Number.isFinite(parsed)) return fallback;
 	const min = control.min ?? parsed;
@@ -121,29 +132,114 @@ function boundedNumber(control: CompositionControlDefinition | undefined, overri
 	return Math.min(Math.max(parsed, Math.min(min, max)), Math.max(min, max));
 }
 
-function tuneTrack(track: KeyframeTrack | undefined, property: string, durationInFrames: number, intensity: number, depth: number, speed: number): KeyframeTrack | undefined {
+function selectedValue(
+	control: CompositionControlDefinition | undefined,
+	overrides: CompositionControlOverrides,
+	fallback: string
+): string {
+	if (!control) return fallback;
+	const value = overrides[control.id] ?? control.defaultValue;
+	return control.options?.some((option) => option.value === value) ? value : fallback;
+}
+
+function tuneTrack(
+	track: KeyframeTrack | undefined,
+	property: string,
+	durationInFrames: number,
+	options: {
+		intensity: number;
+		depth: number;
+		speed: number;
+		paperJitter: number;
+		holdRatio?: number;
+		frameOffset: number;
+	}
+): KeyframeTrack | undefined {
 	if (!track) return track;
 	const end = Math.max(1, durationInFrames - 1);
 	const first = track.values[0] ?? 0;
 	const values = track.values.map((value) => {
-		let next = first + (value - first) * intensity;
-		if (property === 'scaleX' || property === 'scaleY') next = 1 + (next - 1) * depth;
+		let next = first + (value - first) * options.intensity;
+		if (property === 'scaleX' || property === 'scaleY') next = 1 + (next - 1) * options.depth;
+		if (property === 'x' || property === 'y' || property === 'rotation') {
+			next = first + (next - first) * (1 + options.paperJitter * 0.18);
+		}
 		return next;
 	});
-	const frames = track.frames.map((frame, index) => index === 0 ? Math.max(0, Math.min(end, frame)) : Math.max(0, Math.min(end, Math.round(frame / speed))));
-	for (let index = 1; index < frames.length; index += 1) frames[index] = Math.min(end, Math.max(frames[index], frames[index - 1]));
+	const assemblyEnd =
+		options.holdRatio === undefined
+			? end
+			: Math.max(1, Math.min(end, Math.round(end * (1 - options.holdRatio))));
+	const frames = track.frames.map((frame, index) => {
+		const speedFrame = Math.round(frame / options.speed);
+		const holdFrame = index === track.frames.length - 1 ? Math.min(speedFrame, assemblyEnd) : speedFrame;
+		return Math.max(0, Math.min(end, holdFrame + options.frameOffset));
+	});
+	for (let index = 1; index < frames.length; index += 1) {
+		frames[index] = Math.min(end, Math.max(frames[index]!, frames[index - 1]!));
+	}
 	return { ...track, frames, values };
 }
 
-function applyMotionControlOverrides(items: readonly TimelineItem[], schema: CompositionControlSchema, overrides: CompositionControlOverrides): TimelineItem[] {
-	const intensity = boundedNumber(schema.controls.find((control) => control.property === 'motion.intensity'), overrides, 1);
-	const depth = boundedNumber(schema.controls.find((control) => control.property === 'motion.depth'), overrides, 1);
-	const speed = boundedNumber(schema.controls.find((control) => control.property === 'motion.speed'), overrides, 1);
-	if (intensity === 1 && depth === 1 && speed === 1) return Array.from(items);
+function applyMotionControlOverrides(
+	items: readonly TimelineItem[],
+	schema: CompositionControlSchema,
+	overrides: CompositionControlOverrides
+): TimelineItem[] {
+	const intensityControl = schema.controls.find((control) => control.property === 'motion.intensity');
+	const depthControl = schema.controls.find((control) => control.property === 'motion.depth');
+	const speedControl = schema.controls.find((control) => control.property === 'motion.speed');
+	const jitterControl = schema.controls.find((control) => control.property === 'motion.paperJitter');
+	const shadowControl = schema.controls.find((control) => control.property === 'motion.shadowDepth');
+	const holdControl = schema.controls.find((control) => control.property === 'motion.holdRatio');
+	const assemblyControl = schema.controls.find((control) => control.property === 'motion.assemblyOrder');
+
+	const intensity = boundedNumber(intensityControl, overrides, 1);
+	const depth = boundedNumber(depthControl, overrides, 1);
+	const speed = boundedNumber(speedControl, overrides, 1);
+	const paperJitter = boundedNumber(jitterControl, overrides, 0);
+	const shadowDepth = boundedNumber(shadowControl, overrides, 0);
+	const holdRatio = holdControl ? boundedNumber(holdControl, overrides, 0.3) : undefined;
+	const assemblyOrder = selectedValue(assemblyControl, overrides, 'back-to-front');
+	const animated = items.filter((item) => Boolean(item.keyframes));
+
+	const noGenericChange = intensity === 1 && depth === 1 && speed === 1;
+	const noVoxControls = !jitterControl && !shadowControl && !holdControl && !assemblyControl;
+	if (noGenericChange && noVoxControls) return Array.from(items);
+
 	return items.map((item) => {
-		if (!item.keyframes) return item;
-		const keyframes = Object.fromEntries(Object.entries(item.keyframes).map(([property, track]) => [property, tuneTrack(track, property, item.durationInFrames, intensity, depth, speed)])) as typeof item.keyframes;
-		return { ...item, keyframes };
+		const animatedIndex = animated.findIndex((candidate) => candidate.id === item.id);
+		const orderIndex = animatedIndex < 0
+			? 0
+			: assemblyOrder === 'hero-first'
+				? animatedIndex
+				: Math.max(0, animated.length - animatedIndex - 1);
+		const frameOffset = assemblyControl ? orderIndex * 2 : 0;
+		let next = item;
+		if (shadowControl?.targetItemId === item.id && item.transform) {
+			next = {
+				...next,
+				transform: {
+					...item.transform,
+					opacity: Math.max(0.02, Math.min(0.28, 0.02 + shadowDepth * 0.22))
+				}
+			};
+		}
+		if (!item.keyframes) return next;
+		const keyframes = Object.fromEntries(
+			Object.entries(item.keyframes).map(([property, track]) => [
+				property,
+				tuneTrack(track, property, item.durationInFrames, {
+					intensity,
+					depth,
+					speed,
+					paperJitter,
+					holdRatio,
+					frameOffset
+				})
+			])
+		) as typeof item.keyframes;
+		return { ...next, keyframes };
 	});
 }
 
@@ -169,14 +265,31 @@ export function applyCompositionControlOverrides(
 		let next = item;
 		for (const control of controls) {
 			if (control.property.startsWith('motion.')) continue;
-			next = applyControlValue(next, control.property, overrides[control.id]);
+			next = applyControlValue(next, control.property, overrides[control.id]!);
 		}
 		changed ||= next !== item;
 		return next;
 	});
 	const motionResolved = applyMotionControlOverrides(resolved, schema, overrides);
-	return changed || motionResolved.some((item, index) => item !== resolved[index]) ? motionResolved : storedItems(items);
+	return changed || motionResolved.some((item, index) => item !== resolved[index])
+		? motionResolved
+		: storedItems(items);
 }
+
+const compositionControlProperties = [
+	'text.text',
+	'text.color',
+	'shape.fillColor',
+	'shape.strokeColor',
+	'shape.shapeType',
+	'motion.intensity',
+	'motion.depth',
+	'motion.speed',
+	'motion.paperJitter',
+	'motion.shadowDepth',
+	'motion.holdRatio',
+	'motion.assemblyOrder'
+] as const;
 
 const compositionControlInputSchema = z.object({
 	version: z.literal(COMPOSITION_CONTROLS_VERSION),
@@ -186,7 +299,7 @@ const compositionControlInputSchema = z.object({
 				id: z.string().trim().min(1).max(100),
 				name: z.string().trim().min(1).max(120),
 				targetItemId: z.string().trim().min(1).max(100),
-				property: z.enum(['text.text', 'text.color', 'shape.fillColor', 'shape.strokeColor', 'shape.shapeType', 'motion.intensity', 'motion.depth', 'motion.speed']),
+				property: z.enum(compositionControlProperties),
 				kind: z.enum(['text', 'color', 'number', 'select']),
 				defaultValue: z.string().max(100_000).optional(),
 				min: z.number().finite().optional(),
@@ -197,6 +310,13 @@ const compositionControlInputSchema = z.object({
 		)
 		.max(1_000)
 });
+
+function expectedControlKind(property: CompositionControlProperty): CompositionControlKind {
+	if (property === 'text.text') return 'text';
+	if (property === 'shape.shapeType' || property === 'motion.assemblyOrder') return 'select';
+	if (property.startsWith('motion.')) return 'number';
+	return 'color';
+}
 
 export function sanitizeCompositionControlSchema(
 	value: JsonValue | CompositionControlSchema | undefined,
@@ -213,7 +333,7 @@ export function sanitizeCompositionControlSchema(
 		const target = itemById.get(targetItemId);
 		if (!target) continue;
 		const sourceValue = readControlValue(target, entry.property);
-		const kind: CompositionControlKind = entry.property === 'text.text' ? 'text' : entry.property === 'shape.shapeType' ? 'select' : entry.property.startsWith('motion.') ? 'number' : 'color';
+		const kind = expectedControlKind(entry.property);
 		const targetKey = `${targetItemId}:${entry.property}`;
 		const motionControl = entry.property.startsWith('motion.');
 		if (
@@ -224,8 +344,18 @@ export function sanitizeCompositionControlSchema(
 		) {
 			continue;
 		}
-		if (kind === 'number' && (!Number.isFinite(Number(entry.defaultValue)) || entry.min === undefined || entry.max === undefined)) continue;
-		if (kind === 'select' && (!entry.options?.length || !entry.options.some((option) => option.value === entry.defaultValue))) continue;
+		if (
+			kind === 'number' &&
+			(!Number.isFinite(Number(entry.defaultValue)) || entry.min === undefined || entry.max === undefined)
+		) {
+			continue;
+		}
+		if (
+			kind === 'select' &&
+			(!entry.options?.length || !entry.options.some((option) => option.value === entry.defaultValue))
+		) {
+			continue;
+		}
 		seenIds.add(id);
 		seenTargets.add(targetKey);
 		controls.push({
