@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { MOTION_STYLES, planMotionGraph, type MotionStyleId } from '@auno/motion';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { requestAIStoryboard } from '$lib/auno/auto-video/api';
@@ -19,6 +20,8 @@
 	} from '$lib/auno/auto-video/types';
 	import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.svelte';
 	import { removeItems, updateItemProperties } from '$lib/video-editor/timeline/actions/items';
+	import { applyMotionGraphToLiveTimeline } from '$lib/auno/motion/live-applier';
+	import { editorSession } from '$lib/video-editor/editor.svelte';
 
 	let {
 		projectId,
@@ -33,6 +36,8 @@
 	let busyScene = $state<number | 'all' | null>(null);
 	let mediaBusy = $state<'voice' | 'captions' | 'music' | null>(null);
 	let voiceProgress = $state('');
+	let motionStyle = $state<MotionStyleId>('editorial-fashion');
+	let motionBusy = $state(false);
 	let status = $state('');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id?.trim() ?? '');
@@ -66,7 +71,10 @@
 		loading = true;
 		status = '';
 		try {
-			sidecar = await loadAutoVideoSidecarRemote(workspaceId, projectId);
+			const loaded = await loadAutoVideoSidecarRemote(workspaceId, projectId);
+			sidecar = loaded;
+			const savedStyle = loaded?.generationGraph?.motion?.style;
+			if (savedStyle && savedStyle in MOTION_STYLES) motionStyle = savedStyle as MotionStyleId;
 		} finally {
 			loading = false;
 		}
@@ -177,6 +185,50 @@
 		}
 	}
 
+	async function applyMotionStyle(): Promise<void> {
+		if (!sidecar || motionBusy || mediaBusy !== null || busyScene !== null) return;
+		const project = editorSession.project;
+		if (!project) {
+			status = 'The native video project is not ready yet.';
+			return;
+		}
+		motionBusy = true;
+		status = '';
+		try {
+			const previousMotion = sidecar.generationGraph?.motion;
+			const graph = planMotionGraph({
+				projectId,
+				style: motionStyle,
+				seed: previousMotion?.style === motionStyle ? previousMotion.seed : undefined,
+				scenes: sidecar.storyboard.scenes
+			});
+			applyMotionGraphToLiveTimeline({
+				graph,
+				width: project.metadata.width,
+				height: project.metadata.height
+			});
+			const nextSidecar: AutoVideoSidecar = {
+				...sidecar,
+				generationVersion: sidecar.generationVersion + 1,
+				updatedAt: Date.now(),
+				providerManifest: { ...sidecar.providerManifest, motion: `auno-motion:${motionStyle}` },
+				generationGraph: {
+					...sidecar.generationGraph,
+					version: 1,
+					blocks: sidecar.generationGraph?.blocks ?? [],
+					motion: { schemaVersion: 1, style: graph.style, seed: graph.seed }
+				}
+			};
+			await persistSidecar(nextSidecar);
+			onautosave();
+			status = `Applied ${MOTION_STYLES[motionStyle].label} as native editable motion.`;
+		} catch (cause) {
+			status = cause instanceof Error ? cause.message : String(cause);
+		} finally {
+			motionBusy = false;
+		}
+	}
+
 	async function generateVoices(): Promise<void> {
 		if (!sidecar || mediaBusy !== null || busyScene !== null) return;
 		mediaBusy = 'voice';
@@ -265,6 +317,17 @@
 				<div class="rounded-md bg-[var(--video-editor-control)] p-2.5">
 					<p class="text-xs font-medium text-[var(--video-editor-text)]">{sidecar.storyboard.title}</p>
 					<p class="mt-1 text-[11px] text-[var(--video-editor-muted)]">{sidecar.storyboard.format} · {sidecar.storyboard.language} · {sidecar.providerManifest.planner ?? 'planner'}</p>
+				</div>
+
+				<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5">
+					<select bind:value={motionStyle} aria-label="Motion style" class="h-9 min-w-0 rounded border border-[var(--video-editor-border)] bg-[var(--video-editor-panel)] px-2 text-[11px] text-[var(--video-editor-text)]" disabled={motionBusy || mediaBusy !== null || busyScene !== null}>
+						{#each Object.values(MOTION_STYLES) as definition (definition.id)}
+							<option value={definition.id}>{definition.label}</option>
+						{/each}
+					</select>
+					<Button type="button" size="sm" variant="outline" disabled={motionBusy || mediaBusy !== null || busyScene !== null} onclick={applyMotionStyle}>
+						{motionBusy ? 'Applying…' : 'Apply motion'}
+					</Button>
 				</div>
 
 				<div class="grid grid-cols-3 gap-1.5">
