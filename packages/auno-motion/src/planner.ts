@@ -39,10 +39,18 @@ function normalizedIntensity(value: number | undefined, fallback: number): numbe
   return clamp(value as number, 0, 1);
 }
 
+function normalizePalette(values: readonly string[] | undefined): string[] {
+  if (!values?.length) return [];
+  return [...new Set(
+    values
+      .map((value) => value.trim().toUpperCase())
+      .filter((value) => /^#[0-9A-F]{6}$/.test(value))
+  )];
+}
+
 function normalizeCustomization(
   base: StyleBrief,
-  customization: MotionStyleCustomization | undefined,
-  sceneCount: number
+  customization: MotionStyleCustomization | undefined
 ): { brief: StyleBrief; motionIntensity: number | undefined } {
   if (!customization) return { brief: base, motionIntensity: undefined };
   const cameraLanguage = customization.cameraLanguage?.trim();
@@ -50,15 +58,11 @@ function normalizeCustomization(
   const transitionLanguage = (customization.transitionLanguage ?? []).filter((kind) =>
     TRANSITION_KINDS.includes(kind)
   );
-  const palette = createStyleBrief({
-    style: 'editorial-fashion',
-    brandPalette: customization.palette,
-    sceneCount
-  }).palette;
+  const palette = normalizePalette(customization.palette);
   return {
     brief: {
       ...base,
-      ...(customization.palette?.length ? { palette } : {}),
+      ...(palette.length >= 2 ? { palette } : {}),
       ...(cameraLanguage ? { cameraLanguage } : {}),
       ...(backgroundLanguage ? { backgroundLanguage } : {}),
       ...(transitionLanguage.length ? { transitionLanguage: [...new Set(transitionLanguage)] } : {})
@@ -74,7 +78,7 @@ export function planMotionGraph(input: PlanMotionGraphInput): MotionSceneGraph {
     brandPalette: input.brandPalette,
     sceneCount: input.scenes.length
   });
-  const customized = normalizeCustomization(baseBrief, input.customization, input.scenes.length);
+  const customized = normalizeCustomization(baseBrief, input.customization);
   const brief = customized.brief;
   const userIntensity = normalizedIntensity(customized.motionIntensity, style.text.intensity);
   const intensityRatio = clamp(userIntensity / Math.max(0.05, style.text.intensity), 0, 1.75);
