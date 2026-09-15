@@ -40,6 +40,7 @@
 		security: () => import('$lib/components/settings/SecuritySettingsTab.svelte'),
 		developer: () => import('$lib/components/settings/DeveloperSettingsTab.svelte'),
 		general: () => import('$lib/components/settings/WorkspacePreferencesSettings.svelte'),
+		ai: () => import('$lib/components/settings/AunoAISettingsTab.svelte'),
 		brand: () => import('$lib/components/settings/BrandSettingsTab.svelte'),
 		appearance: () => import('$lib/components/themes/theme-appearance-settings.svelte'),
 		accounts: () => import('$lib/components/account-management.svelte'),
