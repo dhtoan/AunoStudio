@@ -7,7 +7,7 @@ on:
     paths:
       - 'tests/app/auno/**'
       - 'apps/server/cmd/openpost/auno_*'
-      - 'apps/web/src/lib/auno/motion/**'
+      - 'apps/web/src/lib/auno/**'
       - 'apps/web/src/hooks.client.ts'
       - 'tests/app/playwright.config.ts'
       - '.github/workflows/auno-task19-red.yml'
@@ -15,7 +15,7 @@ on:
     paths:
       - 'tests/app/auno/**'
       - 'apps/server/cmd/openpost/auno_*'
-      - 'apps/web/src/lib/auno/motion/**'
+      - 'apps/web/src/lib/auno/**'
       - 'apps/web/src/hooks.client.ts'
       - 'tests/app/playwright.config.ts'
       - '.github/workflows/auno-task19-red.yml'
@@ -41,8 +41,10 @@ jobs:
             echo '::warning::bun.lock is stale on the current main baseline; showing generated lock diff'
             git diff -- bun.lock | head -n 240
           fi
-      - name: Run fixture generator red contract
+      - name: Run dev fixture generator contract
         run: cd apps/server && go test -tags dev ./cmd/openpost -run TestAunoE2EPlannerGeneratorIsOptInAndStructured -count=1 -v
+      - name: Run production fixture guard contract
+        run: cd apps/server && go test ./cmd/openpost -run TestAunoE2EPlannerGeneratorIsUnavailableInProduction -count=1 -v
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
       - name: Run Task 19 browser gates
