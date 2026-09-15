@@ -5,5 +5,6 @@ export * from './style-brief';
 export * from './validate';
 export * from './probes';
 export * from './editorial-fashion';
+export * from './documentary-paper-collage';
 export * from './recommend';
 export * from './planner';
