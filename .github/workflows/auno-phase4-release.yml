@@ -1,0 +1,144 @@
+name: Auno Phase 4 Release Gate
+
+on:
+  pull_request:
+    paths: &auno_paths
+      - 'packages/auno-motion/**'
+      - 'apps/server/internal/aunomotion/**'
+      - 'apps/server/internal/services/autovideo/**'
+      - 'apps/server/internal/services/documentary/**'
+      - 'apps/server/internal/api/handlers/auto_video*.go'
+      - 'apps/server/internal/models/auno_*.go'
+      - 'apps/server/internal/database/migrations/900*.sql'
+      - 'apps/server/cmd/openpost/auno_*'
+      - 'apps/web/src/lib/auno/**'
+      - 'apps/web/src/lib/components/auno-documentary/**'
+      - 'apps/web/src/routes/auto-video/**'
+      - 'apps/web/src/hooks.client.ts'
+      - 'tests/app/auno/**'
+      - 'tests/app/playwright.config.ts'
+      - 'third_party/bang-motion/**'
+      - 'licenses/bang-motion/**'
+      - 'NOTICE.md'
+      - 'docs/compliance/third-party-inventory.md'
+      - 'bun.lock'
+      - 'apps/web/package.json'
+      - '.github/workflows/auno-phase4-release.yml'
+  push:
+    branches:
+      - main
+      - codex/task19-vox-motion-e2e
+    paths: *auno_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  motion-package:
+    name: motion-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Test Auno Motion package
+        run: bun test packages/auno-motion/src
+      - name: Test browser motion adapters
+        run: bun --cwd apps/web x vitest run src/lib/auno/motion
+
+  backend-documentary:
+    name: backend-documentary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: apps/server/go.sum
+      - name: Test documentary, motion compiler, and Auto Video services
+        run: >-
+          cd apps/server && go test
+          ./internal/services/documentary
+          ./internal/aunomotion
+          ./internal/services/autovideo
+          -v
+      - name: Test deterministic dev planner fixture routing
+        run: >-
+          cd apps/server && go test -tags dev ./cmd/openpost
+          -run 'TestAuno(E2EPlannerGeneratorIsOptInAndStructured|PlannerGeneratorUsesE2EFixtureWhenExplicitlyEnabled)'
+          -count=1 -v
+
+  frontend-auno:
+    name: frontend-auno
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: apps/server/go.sum
+      - run: bun install --frozen-lockfile
+      - name: Check frontend
+        run: bun run check -- frontend
+      - name: Test Auno frontend modules
+        run: bun --cwd apps/web x vitest run src/lib/auno src/lib/video-editor/auno
+      - name: Build production web embed
+        run: bun run build -- frontend
+      - name: Prove E2E fixture is unavailable in production build
+        run: >-
+          cd apps/server && go test ./cmd/openpost
+          -run TestAunoE2EPlannerGeneratorIsUnavailableInProduction
+          -count=1 -v
+
+  browser-auno:
+    name: browser-auno
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: apps/server/go.sum
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - name: Run deterministic Motion and Vox browser gates
+        run: >-
+          bunx playwright test --config tests/app/playwright.config.ts
+          tests/app/auno/motion-determinism.spec.ts
+          tests/app/auno/motion-visual-qa.spec.ts
+          tests/app/auno/vox-documentary.spec.ts
+          --workers=1
+
+  compliance:
+    name: compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: apps/server/go.sum
+      - run: bun install --frozen-lockfile
+      - name: Verify Bang Motion provenance snapshot
+        run: bun scripts/check-bang-motion-vendor.mjs
+      - name: Verify third-party notices
+        run: bun scripts/check-third-party-notices.mjs
+      - name: Validate workflow syntax
+        run: bun run check -- workflows
