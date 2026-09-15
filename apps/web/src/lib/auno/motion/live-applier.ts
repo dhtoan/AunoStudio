@@ -3,14 +3,56 @@ import { timelineStore } from '$lib/video-editor/timeline/stores/timeline-store.
 import { transitionsStore } from '$lib/video-editor/timeline/actions/transitions-store.svelte';
 import { execute } from '$lib/video-editor/timeline/commands/command-store.svelte';
 import { sequenceStore } from '$lib/video-editor/sequences/sequence-store.svelte';
+import type { CompositionControlOverrides, TimelineItem } from '$lib/video-editor/project/types';
 import { compileMotionGraphToNativeTimeline } from './native-compiler';
 import { aunoMotionTrack, buildMotionCompositionOverlays } from './motion-composition';
+
+export interface AppliedMotionOwnedItem {
+	itemId: string;
+	sceneId: string;
+}
+
+export interface ApplyMotionGraphResult {
+	ownedItems: AppliedMotionOwnedItem[];
+	compositionIds: string[];
+}
+
+function existingOverridesByItemId(): Map<string, CompositionControlOverrides> {
+	const overrides = new Map<string, CompositionControlOverrides>();
+	for (const item of timelineStore.items) {
+		if (
+			item.type === 'composition' &&
+			item.id.endsWith('-motion-composition') &&
+			item.compositionControlOverrides
+		) {
+			overrides.set(item.id, { ...item.compositionControlOverrides });
+		}
+	}
+	return overrides;
+}
+
+function preserveCompositionOverrides(
+	item: TimelineItem,
+	existing: Map<string, CompositionControlOverrides>
+): TimelineItem {
+	if (item.type !== 'composition') return item;
+	const previous = existing.get(item.id);
+	if (!previous) return item;
+	return {
+		...item,
+		compositionControlOverrides: {
+			...(item.compositionControlOverrides ?? {}),
+			...previous
+		}
+	};
+}
 
 export function applyMotionGraphToLiveTimeline(options: {
 	graph: MotionSceneGraph;
 	width: number;
 	height: number;
-}): void {
+}): ApplyMotionGraphResult {
+	const preservedOverrides = existingOverridesByItemId();
 	const compiled = compileMotionGraphToNativeTimeline({
 		items: timelineStore.items,
 		transitions: transitionsStore.list,
@@ -27,7 +69,8 @@ export function applyMotionGraphToLiveTimeline(options: {
 	});
 	const overlayIds = new Set(overlays.map((entry) => entry.item.id));
 	const baseItems = compiled.items.filter((item) => !item.id.endsWith('-motion-composition'));
-	const items = [...baseItems, ...overlays.map((entry) => entry.item)];
+	const motionItems = overlays.map((entry) => preserveCompositionOverrides(entry.item, preservedOverrides));
+	const items = [...baseItems, ...motionItems];
 	const tracks = timelineStore.tracks
 		.filter((track) => track.id !== 'track-auno-motion')
 		.map((track) => {
@@ -57,5 +100,13 @@ export function applyMotionGraphToLiveTimeline(options: {
 		}
 	});
 
-	void overlayIds;
+	return {
+		ownedItems: options.graph.scenes
+			.filter((scene) => overlayIds.has(`${scene.sourceSceneId}-motion-composition`))
+			.map((scene) => ({
+				itemId: `${scene.sourceSceneId}-motion-composition`,
+				sceneId: scene.sourceSceneId
+			})),
+		compositionIds: overlays.map((entry) => entry.composition.id)
+	};
 }
