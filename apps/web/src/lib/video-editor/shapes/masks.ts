@@ -1,3 +1,4 @@
+import { getCanvas2DContext } from '$lib/canvas-context';
 import type { TimelineItem } from '../project/types';
 import { mediaDrawGeometry } from '../media/render-geometry';
 import { buildShapePath } from './render';
@@ -50,9 +51,9 @@ export class ShapeMaskRasterizer {
 	private readonly featherContext: MaskContext;
 
 	constructor() {
-		const localContext = this.localCanvas.getContext('2d');
-		const matteContext = this.matteCanvas.getContext('2d');
-		const featherContext = this.featherCanvas.getContext('2d');
+		const localContext = getCanvas2DContext(this.localCanvas);
+		const matteContext = getCanvas2DContext(this.matteCanvas);
+		const featherContext = getCanvas2DContext(this.featherCanvas);
 		if (!localContext || !matteContext || !featherContext) {
 			throw new Error('Failed to create the shape mask canvas contexts.');
 		}

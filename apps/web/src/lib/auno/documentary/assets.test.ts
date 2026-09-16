@@ -9,7 +9,13 @@ const plan: DocumentaryVisualPlan = {
 	supports: [],
 	prompt: 'archive photograph on paper',
 	requiredSubjectIds: [],
-	animation: { camera: 'locked', cadence: 'stepped', assemblyOrder: 'back-to-front', holdRatio: 0.18, ambientLife: [] }
+	animation: {
+		camera: 'locked',
+		cadence: 'stepped',
+		assemblyOrder: 'back-to-front',
+		holdRatio: 0.18,
+		ambientLife: []
+	}
 };
 
 describe('documentary generated asset imports', () => {
@@ -23,12 +29,19 @@ describe('documentary generated asset imports', () => {
 			upload
 		});
 		expect(upload).toHaveBeenCalledOnce();
+		expect(upload).toHaveBeenCalledWith(
+			expect.objectContaining({ source: 'upload', assetKind: 'library', retentionClass: 'library' })
+		);
 		expect(result).toEqual({ mediaId: 'media-123', kind: 'image', mimeType: 'image/png' });
 		expect(JSON.stringify(result)).not.toContain('http');
 	});
 
 	it('replaces a visual plan with a Media Library id without flattening the beat', () => {
-		const next = replaceVisualPlanMedia(plan, { mediaId: 'media-123', kind: 'image', mimeType: 'image/png' });
+		const next = replaceVisualPlanMedia(plan, {
+			mediaId: 'media-123',
+			kind: 'image',
+			mimeType: 'image/png'
+		});
 		expect(next.mediaId).toBe('media-123');
 		expect(next.beatId).toBe(plan.beatId);
 		expect(next.prompt).toBe(plan.prompt);

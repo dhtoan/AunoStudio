@@ -39,7 +39,9 @@ interface VoxDocumentaryTestHook {
 	}): Promise<void>;
 	readCompositionOverride(input: { itemId: string; controlId: string }): string | null;
 	reloadProject(projectId: string): Promise<void>;
-	seekBeat(index: number): Promise<{ index: number; frame: number; itemId: string; itemCount: number }>;
+	seekBeat(
+		index: number
+	): Promise<{ index: number; frame: number; itemId: string; itemCount: number }>;
 	exportEntryState(): Promise<{ available: boolean; durationFrames: number }>;
 }
 
@@ -71,10 +73,16 @@ function findCompositionFixture(project: Project) {
 		(candidate): candidate is TimelineItem & { type: 'composition'; compositionId: string } =>
 			candidate.type === 'composition' && Boolean(candidate.compositionId)
 	);
-	if (!item?.compositionId) throw new Error('Vox E2E fixture did not compile an editable motion composition');
-	const composition = timeline?.compositions?.find((candidate) => candidate.id === item.compositionId);
-	const control = composition?.compositionControls?.controls.find((candidate) => candidate.id === 'paper-jitter');
-	if (!composition || !control) throw new Error('Vox E2E motion composition controls are unavailable');
+	if (!item?.compositionId)
+		throw new Error('Vox E2E fixture did not compile an editable motion composition');
+	const composition = timeline?.compositions?.find(
+		(candidate) => candidate.id === item.compositionId
+	);
+	const control = composition?.compositionControls?.controls.find(
+		(candidate) => candidate.id === 'paper-jitter'
+	);
+	if (!composition || !control)
+		throw new Error('Vox E2E motion composition controls are unavailable');
 	return { item, composition, control };
 }
 
@@ -122,8 +130,10 @@ async function setCompositionOverride(input: {
 	controlId: string;
 	value: string;
 }): Promise<void> {
+	await waitForEditorProject();
 	const item = timelineStore.itemById.get(input.itemId);
-	if (!item || item.type !== 'composition') throw new Error(`Composition item ${input.itemId} is unavailable`);
+	if (!item || item.type !== 'composition')
+		throw new Error(`Composition item ${input.itemId} is unavailable`);
 	timelineStore._updateItems([
 		{
 			id: item.id,

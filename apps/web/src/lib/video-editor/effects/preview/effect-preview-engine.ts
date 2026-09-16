@@ -3,6 +3,7 @@
  * Ported from FreeCut's effect-thumbnail engine and adapted to OpenPost's registry.
  */
 
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { previewKey } from './preview-key';
 import { createGpuCompositor, type GpuCompositor } from '../gpu/compositor';
 import { getGpuEffect } from '../gpu/registry';
@@ -74,7 +75,7 @@ function clonePreviewCanvas(
 	source: HTMLCanvasElement | OffscreenCanvas
 ): HTMLCanvasElement | OffscreenCanvas | null {
 	const copy = createCanvas(EFFECT_PREVIEW_WIDTH, EFFECT_PREVIEW_HEIGHT);
-	const context = copy?.getContext('2d');
+	const context = copy ? getCanvas2DContext(copy) : null;
 	if (!copy || !context) return null;
 	context.drawImage(source, 0, 0, EFFECT_PREVIEW_WIDTH, EFFECT_PREVIEW_HEIGHT);
 	return copy;
@@ -211,7 +212,7 @@ export function getEffectPreviewSample(
 			resolve(null);
 			return;
 		}
-		const context = canvas.getContext('2d');
+		const context = getCanvas2DContext(canvas);
 		if (!context) {
 			resolve(null);
 			return;
@@ -329,7 +330,7 @@ export function renderEffectPreviewFrame(
 	}
 	if (cssEffects.length > 0) {
 		cssPreviewCanvas ??= createCanvas(EFFECT_PREVIEW_WIDTH, EFFECT_PREVIEW_HEIGHT);
-		const context = cssPreviewCanvas?.getContext('2d');
+		const context = cssPreviewCanvas ? getCanvas2DContext(cssPreviewCanvas) : null;
 		if (cssPreviewCanvas && context) {
 			context.clearRect(0, 0, EFFECT_PREVIEW_WIDTH, EFFECT_PREVIEW_HEIGHT);
 			context.save();
