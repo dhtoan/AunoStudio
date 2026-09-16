@@ -1,3 +1,4 @@
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { ShaderBackgroundRenderer } from '../backgrounds/shader-renderer';
 import { shaderTime } from '../backgrounds/shaders';
 /** Shared preview/export compositor for transformed layers and real backdrops. */
@@ -97,7 +98,7 @@ function ensureCanvasSize(
 	if (pooled) {
 		releaseCanvas(canvas);
 		const nextCanvas = pooled.canvas;
-		const nextContext = nextCanvas.getContext('2d');
+		const nextContext = getCanvas2DContext(nextCanvas);
 		if (!nextContext) throw new Error('Failed to acquire pooled canvas context.');
 		nextContext.imageSmoothingEnabled = true;
 		nextContext.imageSmoothingQuality = 'high';
@@ -130,7 +131,7 @@ export function drawTransformedLayer(
 		const width = Math.max(1, Math.ceil(geometry.drawWidth));
 		const height = Math.max(1, Math.ceil(geometry.drawHeight));
 		const localCanvas = acquireCanvas(width, height);
-		const localContext = localCanvas.getContext('2d');
+		const localContext = getCanvas2DContext(localCanvas);
 		if (localContext) {
 			localContext.globalAlpha = 1;
 			localContext.globalCompositeOperation = 'source-over';
@@ -281,25 +282,25 @@ export class CanvasStackCompositor {
 		withTransitionBranches = true,
 		options?: CanvasStackCompositorOptions
 	) {
-		const context = canvas.getContext('2d');
+		const context = getCanvas2DContext(canvas);
 		if (!context) throw new Error('Failed to create the composition canvas context.');
 		this.context = context;
 		this.context.imageSmoothingEnabled = true;
 		this.context.imageSmoothingQuality = 'high';
 		this.layerCanvas = acquireCanvas(1, 1);
-		const layerContext = this.layerCanvas.getContext('2d');
+		const layerContext = getCanvas2DContext(this.layerCanvas);
 		if (!layerContext) throw new Error('Failed to create the layer canvas context.');
 		this.layerContext = layerContext;
 		this.layerContext.imageSmoothingEnabled = true;
 		this.layerContext.imageSmoothingQuality = 'high';
 		this.cornerPinCanvas = acquireCanvas(1, 1);
-		const cornerPinContext = this.cornerPinCanvas.getContext('2d');
+		const cornerPinContext = getCanvas2DContext(this.cornerPinCanvas);
 		if (!cornerPinContext) throw new Error('Failed to create the corner pin canvas context.');
 		this.cornerPinContext = cornerPinContext;
 		this.cornerPinContext.imageSmoothingEnabled = true;
 		this.cornerPinContext.imageSmoothingQuality = 'high';
 		this.backgroundCanvas = acquireCanvas(1, 1);
-		const backgroundContext = this.backgroundCanvas.getContext('2d');
+		const backgroundContext = getCanvas2DContext(this.backgroundCanvas);
 		if (!backgroundContext) throw new Error('Failed to create the background canvas context.');
 		this.backgroundContext = backgroundContext;
 		this.backgroundContext.imageSmoothingEnabled = true;
@@ -315,7 +316,7 @@ export class CanvasStackCompositor {
 			this.transitionLeftCanvas = acquireCanvas(1, 1);
 			this.transitionRightCanvas = acquireCanvas(1, 1);
 			this.transitionOutputCanvas = acquireCanvas(1, 1);
-			this.transitionOutputContext = this.transitionOutputCanvas.getContext('2d');
+			this.transitionOutputContext = getCanvas2DContext(this.transitionOutputCanvas);
 			const leftStackOptions: CanvasStackCompositorOptions | undefined =
 				options && 'backgroundAdapter' in options
 					? { backgroundAdapter: options.backgroundAdapter }

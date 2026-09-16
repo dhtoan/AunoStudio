@@ -16,6 +16,7 @@ import type {
 	EditorColorCompositor,
 	EditorColorRenderEffect
 } from '$lib/editor-color-grade/rendering';
+import { getWebGL2Context } from '$lib/canvas-context';
 import { BLEND_MODE_INDEX, type BlendMode } from './blend-modes';
 import { BLEND_MODES_GLSL, EFFECT_COMMON_GLSL, FULLSCREEN_VERTEX_GLSL } from './shader-source';
 import { getGpuEffect } from './registry';
@@ -192,7 +193,7 @@ export class GpuCompositor implements EditorColorCompositor {
 
 	/** Create a compositor for a canvas; null when WebGL2 is unavailable. */
 	static create(canvas: HTMLCanvasElement | OffscreenCanvas): GpuCompositor | null {
-		const gl = canvas.getContext('webgl2', {
+		const gl = getWebGL2Context(canvas, {
 			alpha: true,
 			premultipliedAlpha: false,
 			antialias: false,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { renderBackgroundCpu } from './render';
 import type { ProceduralBackground } from './types';
 
@@ -21,7 +22,7 @@ function makeCanvas(w: number, h: number): CanvasWithContext {
 		c.width = w;
 		c.height = h;
 	}
-	const ctx = c.getContext('2d', { willReadFrequently: true });
+	const ctx = getCanvas2DContext(c, { willReadFrequently: true });
 	if (!ctx) throw new Error('2d unavailable');
 	return { canvas: c, ctx };
 }

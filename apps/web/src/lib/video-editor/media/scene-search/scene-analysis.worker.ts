@@ -1,6 +1,7 @@
 /** Scene detection and thumbnail extraction worker. Ported from FreeCut (MIT). */
 
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from 'mediabunny';
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { ensureProResDecoderForCodec } from '../prores-decoder';
 import {
 	classifyAdaptiveSceneCuts,
@@ -126,7 +127,7 @@ async function run(
 		let decoded = 0;
 		for await (const wrapped of adaptiveSink.canvases()) {
 			if (state.aborted) return;
-			const context = wrapped.canvas.getContext('2d', { willReadFrequently: true });
+			const context = getCanvas2DContext(wrapped.canvas, { willReadFrequently: true });
 			if (!context) throw new Error('Unable to read scene-analysis frames');
 			const pixels = context.getImageData(0, 0, wrapped.canvas.width, wrapped.canvas.height).data;
 			const current = extractFrameFeatures(pixels, wrapped.canvas.width, wrapped.canvas.height);

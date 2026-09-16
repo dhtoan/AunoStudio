@@ -1435,6 +1435,32 @@
 				],
 				"type": "object"
 			},
+			"AnimationBrief": {
+				"additionalProperties": false,
+				"properties": {
+					"ambient_life": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"assembly_order": {
+						"type": "string"
+					},
+					"cadence": {
+						"type": "string"
+					},
+					"camera": {
+						"type": "string"
+					},
+					"hold_ratio": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["camera", "cadence", "assembly_order", "hold_ratio"],
+				"type": "object"
+			},
 			"AppBootstrapOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2079,6 +2105,73 @@
 				"required": ["type"],
 				"type": "object"
 			},
+			"AunoAICapabilitiesOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/AunoAICapabilitiesOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"active_model": {
+						"type": "string"
+					},
+					"active_provider": {
+						"type": "string"
+					},
+					"browser_music_generation": {
+						"type": "boolean"
+					},
+					"browser_transcription": {
+						"type": "boolean"
+					},
+					"browser_tts": {
+						"type": "boolean"
+					},
+					"documentary_planner_available": {
+						"type": "boolean"
+					},
+					"documentary_server_image_generation": {
+						"type": "boolean"
+					},
+					"documentary_server_video_generation": {
+						"type": "boolean"
+					},
+					"gemini_configured": {
+						"type": "boolean"
+					},
+					"local_storyboard_fallback": {
+						"type": "boolean"
+					},
+					"openrouter_configured": {
+						"type": "boolean"
+					},
+					"planner_available": {
+						"type": "boolean"
+					},
+					"provider_mode": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"provider_mode",
+					"planner_available",
+					"active_provider",
+					"active_model",
+					"gemini_configured",
+					"openrouter_configured",
+					"local_storyboard_fallback",
+					"browser_tts",
+					"browser_transcription",
+					"browser_music_generation",
+					"documentary_planner_available",
+					"documentary_server_image_generation",
+					"documentary_server_video_generation"
+				],
+				"type": "object"
+			},
 			"AuthConfigurationOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2276,6 +2369,95 @@
 				"required": ["redirect_url"],
 				"type": "object"
 			},
+			"AutoVideoProjectResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/AutoVideoProjectResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"generation_graph": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"generation_version": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"project_id": {
+						"type": "string"
+					},
+					"provider_manifest": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"source_manifest": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"storyboard": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"template_id": {
+						"type": "string"
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"project_id",
+					"workspace_id",
+					"generation_version",
+					"source_manifest",
+					"storyboard",
+					"provider_manifest",
+					"generation_graph",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
+			"AutoVideoSourceBody": {
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"kind": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"mime_type": {
+						"type": "string"
+					},
+					"url": {
+						"type": "string"
+					},
+					"value": {
+						"maxLength": 50000,
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["id", "kind", "label", "value"],
+				"type": "object"
+			},
 			"BatchDeleteMediaInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2321,6 +2503,58 @@
 					}
 				},
 				"required": ["deleted", "failed_ids"],
+				"type": "object"
+			},
+			"Beat": {
+				"additionalProperties": false,
+				"properties": {
+					"core_idea": {
+						"type": "string"
+					},
+					"duration_seconds": {
+						"format": "double",
+						"type": "number"
+					},
+					"evidence_refs": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"id": {
+						"type": "string"
+					},
+					"index": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"narration": {
+						"type": "string"
+					},
+					"required_subject_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"start_seconds": {
+						"format": "double",
+						"type": "number"
+					},
+					"visual_intent": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"index",
+					"narration",
+					"start_seconds",
+					"duration_seconds",
+					"core_idea",
+					"evidence_refs",
+					"visual_intent"
+				],
 				"type": "object"
 			},
 			"BeginEmailChangeInputBody": {
@@ -4229,6 +4463,39 @@
 				},
 				"type": "object"
 			},
+			"CreateDocumentaryRunInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/CreateDocumentaryRunInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"custom_topic": {
+						"maxLength": 500,
+						"type": "string"
+					},
+					"language": {
+						"maxLength": 32,
+						"type": "string"
+					},
+					"niche": {
+						"maxLength": 120,
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/AutoVideoSourceBody"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id"],
+				"type": "object"
+			},
 			"CreateExternalApplicationInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -5563,6 +5830,78 @@
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
 						"examples": ["https://example.com/api/v1/schemas/DeleteAccountOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
+				"type": "object"
+			},
+			"DeleteAutoVideoProjectInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/DeleteAutoVideoProjectInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id"],
+				"type": "object"
+			},
+			"DeleteAutoVideoProjectOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/DeleteAutoVideoProjectOutputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
+				"type": "object"
+			},
+			"DeleteDocumentaryRunInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/DeleteDocumentaryRunInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id"],
+				"type": "object"
+			},
+			"DeleteDocumentaryRunOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/DeleteDocumentaryRunOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -7536,6 +7875,123 @@
 				"required": ["id", "follow_state", "updated_at", "generation_id"],
 				"type": "object"
 			},
+			"GenerateAutoVideoStoryboardInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/GenerateAutoVideoStoryboardInputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"format": {
+						"description": "Review, news, guide, compare, or top-n",
+						"type": "string"
+					},
+					"language": {
+						"description": "Narration language code",
+						"maxLength": 32,
+						"minLength": 2,
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/AutoVideoSourceBody"
+					},
+					"target_duration_seconds": {
+						"description": "Target duration in seconds",
+						"format": "int64",
+						"maximum": 180,
+						"minimum": 10,
+						"type": "integer"
+					},
+					"title": {
+						"description": "Optional project title",
+						"maxLength": 160,
+						"type": "string"
+					},
+					"workspace_id": {
+						"description": "Workspace ID",
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "format", "language", "target_duration_seconds", "source"],
+				"type": "object"
+			},
+			"GenerateAutoVideoStoryboardOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/GenerateAutoVideoStoryboardOutputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"model": {
+						"type": "string"
+					},
+					"storyboard": {
+						"$ref": "#/components/schemas/Storyboard"
+					}
+				},
+				"required": ["storyboard", "model"],
+				"type": "object"
+			},
+			"GenerateDocumentaryStepInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/GenerateDocumentaryStepInputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"generation_version": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "generation_version"],
+				"type": "object"
+			},
+			"GenerateDocumentaryVisualStepInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/GenerateDocumentaryVisualStepInputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"generation_version": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "generation_version"],
+				"type": "object"
+			},
 			"GenerateMediaAltTextInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -8041,6 +8497,31 @@
 					}
 				},
 				"required": ["status"],
+				"type": "object"
+			},
+			"Idea": {
+				"additionalProperties": false,
+				"properties": {
+					"evidence_anchors": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"hook": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"subterritory": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "title", "hook", "subterritory", "evidence_anchors"],
 				"type": "object"
 			},
 			"IdentityAuditEvent": {
@@ -16539,6 +17020,49 @@
 				"required": ["message"],
 				"type": "object"
 			},
+			"ResolveAutoVideoSourceInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/ResolveAutoVideoSourceInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/AutoVideoSourceBody"
+					},
+					"workspace_id": {
+						"description": "Workspace ID",
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "source"],
+				"type": "object"
+			},
+			"ResolveAutoVideoSourceOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": [
+							"https://example.com/api/v1/schemas/ResolveAutoVideoSourceOutputBody.json"
+						],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/Source"
+					},
+					"truncated": {
+						"type": "boolean"
+					}
+				},
+				"required": ["source", "truncated"],
+				"type": "object"
+			},
 			"ResolveCapabilitiesInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -17495,6 +18019,125 @@
 				],
 				"type": "object"
 			},
+			"Run": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/Run.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"beats": {
+						"items": {
+							"$ref": "#/components/schemas/Beat"
+						},
+						"type": ["array", "null"]
+					},
+					"created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"current_step": {
+						"type": "string"
+					},
+					"custom_topic": {
+						"type": "string"
+					},
+					"generation_version": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"id": {
+						"type": "string"
+					},
+					"ideas": {
+						"items": {
+							"$ref": "#/components/schemas/Idea"
+						},
+						"type": ["array", "null"]
+					},
+					"language": {
+						"type": "string"
+					},
+					"mode": {
+						"type": "string"
+					},
+					"niche": {
+						"type": "string"
+					},
+					"project_id": {
+						"type": "string"
+					},
+					"provider_manifest": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object"
+					},
+					"schema_version": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"script": {
+						"$ref": "#/components/schemas/Script"
+					},
+					"selected_idea_id": {
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/Source"
+					},
+					"step_states": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/StepState"
+						},
+						"type": "object"
+					},
+					"style": {
+						"type": "string"
+					},
+					"target_duration_seconds": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"thumbnails": {
+						"items": {
+							"$ref": "#/components/schemas/ThumbnailPlan"
+						},
+						"type": ["array", "null"]
+					},
+					"updated_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"visual_plans": {
+						"items": {
+							"$ref": "#/components/schemas/VisualPlan"
+						},
+						"type": ["array", "null"]
+					},
+					"voice": {
+						"$ref": "#/components/schemas/VoiceManifest"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"schema_version",
+					"id",
+					"workspace_id",
+					"mode",
+					"style",
+					"current_step",
+					"generation_version",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
 			"RuntimeControlSelector": {
 				"additionalProperties": false,
 				"properties": {
@@ -17703,6 +18346,46 @@
 				"required": ["workspace_id", "policies"],
 				"type": "object"
 			},
+			"Scene": {
+				"additionalProperties": false,
+				"properties": {
+					"duration_seconds": {
+						"format": "double",
+						"type": "number"
+					},
+					"id": {
+						"type": "string"
+					},
+					"role": {
+						"type": "string"
+					},
+					"source_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"title": {
+						"type": "string"
+					},
+					"visual_intent": {
+						"type": "string"
+					},
+					"voice": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"role",
+					"title",
+					"voice",
+					"visual_intent",
+					"duration_seconds",
+					"source_ids"
+				],
+				"type": "object"
+			},
 			"Screenshot": {
 				"additionalProperties": false,
 				"properties": {
@@ -17714,6 +18397,39 @@
 					}
 				},
 				"required": ["mime_type", "data"],
+				"type": "object"
+			},
+			"Script": {
+				"additionalProperties": false,
+				"properties": {
+					"diagnostics": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"evidence_refs": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"fingerprint": {
+						"type": "string"
+					},
+					"target_word_count": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"text": {
+						"type": "string"
+					},
+					"word_count": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["text", "word_count", "target_word_count", "evidence_refs", "fingerprint"],
 				"type": "object"
 			},
 			"SearchPage": {
@@ -18372,6 +19088,34 @@
 				],
 				"type": "object"
 			},
+			"Source": {
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"kind": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"mime_type": {
+						"type": "string"
+					},
+					"url": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "kind", "label", "value"],
+				"type": "object"
+			},
 			"SourceMaterial": {
 				"additionalProperties": false,
 				"properties": {
@@ -18548,6 +19292,19 @@
 				"required": ["enabled", "version", "revision"],
 				"type": "object"
 			},
+			"StepState": {
+				"additionalProperties": false,
+				"properties": {
+					"fingerprint": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string"
+					}
+				},
+				"required": ["status"],
+				"type": "object"
+			},
 			"StockMediaProvenance": {
 				"additionalProperties": false,
 				"properties": {
@@ -18626,6 +19383,47 @@
 					}
 				},
 				"required": ["key", "name", "provider_url", "photos", "videos", "audio", "attribution"],
+				"type": "object"
+			},
+			"Storyboard": {
+				"additionalProperties": false,
+				"properties": {
+					"format": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"language": {
+						"type": "string"
+					},
+					"scenes": {
+						"items": {
+							"$ref": "#/components/schemas/Scene"
+						},
+						"type": ["array", "null"]
+					},
+					"target_duration_seconds": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"title": {
+						"type": "string"
+					},
+					"version": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": [
+					"version",
+					"id",
+					"format",
+					"title",
+					"language",
+					"target_duration_seconds",
+					"scenes"
+				],
 				"type": "object"
 			},
 			"SubmitDiagnosticsInputBody": {
@@ -20431,6 +21229,34 @@
 				"required": ["display", "title", "body", "label", "metadata", "code"],
 				"type": "object"
 			},
+			"ThumbnailPlan": {
+				"additionalProperties": false,
+				"properties": {
+					"headline": {
+						"type": "string"
+					},
+					"hero": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"prompt": {
+						"type": "string"
+					},
+					"text_elements": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["id", "hero", "prompt"],
+				"type": "object"
+			},
 			"ToggleImageEditorDesignFavoriteOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -20547,6 +21373,35 @@
 					}
 				},
 				"required": ["slug"],
+				"type": "object"
+			},
+			"UpdateDocumentaryRunInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/UpdateDocumentaryRunInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"clear_source": {
+						"type": "boolean"
+					},
+					"generation_version": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					},
+					"run": {
+						"$ref": "#/components/schemas/Run"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "generation_version", "run"],
 				"type": "object"
 			},
 			"UpdateImageEditorBrandKitInputBody": {
@@ -21257,6 +22112,56 @@
 				"required": ["organization_id", "kind", "name", "media_type", "content_base64"],
 				"type": "object"
 			},
+			"UpsertAutoVideoProjectInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/api/v1/schemas/UpsertAutoVideoProjectInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"generation_graph": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"generation_version": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					},
+					"provider_manifest": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"source_manifest": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"storyboard": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"template_id": {
+						"maxLength": 160,
+						"type": "string"
+					},
+					"workspace_id": {
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": [
+					"workspace_id",
+					"generation_version",
+					"source_manifest",
+					"storyboard",
+					"provider_manifest",
+					"generation_graph"
+				],
+				"type": "object"
+			},
 			"UpsertRenditionsInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -21903,6 +22808,78 @@
 				"required": ["width", "height", "pixel_ratio"],
 				"type": "object"
 			},
+			"VisualPlan": {
+				"additionalProperties": false,
+				"properties": {
+					"animation": {
+						"$ref": "#/components/schemas/AnimationBrief"
+					},
+					"beat_id": {
+						"type": "string"
+					},
+					"fingerprint": {
+						"type": "string"
+					},
+					"hero": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"prompt": {
+						"type": "string"
+					},
+					"required_subject_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"supports": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"visual_intent": {
+						"type": "string"
+					}
+				},
+				"required": ["beat_id", "visual_intent", "hero", "prompt", "animation"],
+				"type": "object"
+			},
+			"VoiceChunk": {
+				"additionalProperties": false,
+				"properties": {
+					"beat_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"duration_seconds": {
+						"format": "double",
+						"type": "number"
+					},
+					"id": {
+						"type": "string"
+					},
+					"item_id": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"text": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "text"],
+				"type": "object"
+			},
 			"VoiceDefinition": {
 				"additionalProperties": false,
 				"properties": {
@@ -21941,6 +22918,37 @@
 					}
 				},
 				"required": ["body"],
+				"type": "object"
+			},
+			"VoiceManifest": {
+				"additionalProperties": false,
+				"properties": {
+					"chunks": {
+						"items": {
+							"$ref": "#/components/schemas/VoiceChunk"
+						},
+						"type": ["array", "null"]
+					},
+					"direction": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"fingerprint": {
+						"type": "string"
+					},
+					"measured_duration_seconds": {
+						"format": "double",
+						"type": "number"
+					},
+					"provider": {
+						"type": "string"
+					},
+					"voice": {
+						"type": "string"
+					}
+				},
 				"type": "object"
 			},
 			"VoiceProfile": {
@@ -26786,6 +27794,1842 @@
 				],
 				"summary": "Get application bootstrap state",
 				"tags": ["Auth", "Workspaces"]
+			}
+		},
+		"/auno/ai/capabilities": {
+			"get": {
+				"description": "Returns provider and local capability availability without exposing credentials or secret values.",
+				"operationId": "get-auno-ai-capabilities",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AunoAICapabilitiesOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Get Auno AI capability status",
+				"tags": ["Auno AI"]
+			}
+		},
+		"/auno/auto-video/documentary/runs": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "create-auno-documentary-run",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateDocumentaryRunInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Create an Auno documentary run",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}": {
+			"delete": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "delete-auno-documentary-run",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DeleteDocumentaryRunInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteDocumentaryRunOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Delete an Auno documentary run",
+				"tags": ["Auno Auto Video"]
+			},
+			"get": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "get-auno-documentary-run",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Workspace ID",
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"description": "Workspace ID",
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Get an Auno documentary run",
+				"tags": ["Auno Auto Video"]
+			},
+			"put": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "update-auno-documentary-run",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateDocumentaryRunInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Update an Auno documentary run",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/beats": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "generate-auno-documentary-beats",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate documentary beat timing",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/ideas": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "generate-auno-documentary-ideas",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate documentary idea candidates",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/script": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "generate-auno-documentary-script",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate documentary narration",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/thumbnails": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "generate-auno-documentary-thumbnails",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate documentary thumbnail plans",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/visuals": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "generate-auno-documentary-visuals",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate documentary visual plans",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/documentary/runs/{run_id}/visuals/{beat_id}": {
+			"post": {
+				"description": "Persistent Auno Documentary Long-form workflow. Generated outputs remain editable and are stored separately from the native video project until handoff.",
+				"operationId": "regenerate-auno-documentary-beat-visual",
+				"parameters": [
+					{
+						"description": "Documentary run ID",
+						"in": "path",
+						"name": "run_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary run ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Documentary beat ID",
+						"in": "path",
+						"name": "beat_id",
+						"required": true,
+						"schema": {
+							"description": "Documentary beat ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateDocumentaryVisualStepInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Run"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Regenerate one documentary beat visual",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/projects/{id}": {
+			"delete": {
+				"operationId": "delete-auno-auto-video-project",
+				"parameters": [
+					{
+						"description": "Native video project ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"description": "Native video project ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DeleteAutoVideoProjectInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteAutoVideoProjectOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Delete Auno Auto Video generation metadata",
+				"tags": ["Auno Auto Video"]
+			},
+			"get": {
+				"operationId": "get-auno-auto-video-project",
+				"parameters": [
+					{
+						"description": "Native video project ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"description": "Native video project ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Workspace ID",
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"description": "Workspace ID",
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AutoVideoProjectResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Get Auno Auto Video generation metadata",
+				"tags": ["Auno Auto Video"]
+			},
+			"put": {
+				"description": "Stores AI provenance and regeneration state separately from the native video project document.",
+				"operationId": "upsert-auno-auto-video-project",
+				"parameters": [
+					{
+						"description": "Native video project ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"description": "Native video project ID",
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpsertAutoVideoProjectInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AutoVideoProjectResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Save Auno Auto Video generation metadata",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/source/resolve": {
+			"post": {
+				"description": "Safely fetches and extracts a bounded public URL for use as untrusted source material.",
+				"operationId": "resolve-auno-auto-video-source",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ResolveAutoVideoSourceInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ResolveAutoVideoSourceOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Resolve an Auno Auto Video source",
+				"tags": ["Auno Auto Video"]
+			}
+		},
+		"/auno/auto-video/storyboard": {
+			"post": {
+				"description": "Plans scene copy and visual intent only. It does not render, save, schedule, or publish media.",
+				"operationId": "generate-auno-auto-video-storyboard",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateAutoVideoStoryboardInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GenerateAutoVideoStoryboardOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"502": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Gateway"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Generate an editable Auno Auto Video storyboard",
+				"tags": ["Auno Auto Video"]
 			}
 		},
 		"/auth/account": {

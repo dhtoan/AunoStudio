@@ -83,6 +83,14 @@ export function planVoiceChunks(
 	for (const beat of beats) {
 		const beatWords = words(beat.narration);
 		if (beatWords.length === 0) continue;
+		if (beatWords.length <= maxWords) {
+			if (chunkWords.length > 0 && chunkWords.length + beatWords.length > maxWords) flush();
+			chunkWords.push(...beatWords);
+			chunkBeatIds.push(beat.id);
+			if (chunkWords.length >= maxWords) flush();
+			continue;
+		}
+		flush();
 		let cursor = 0;
 		while (cursor < beatWords.length) {
 			const capacity = maxWords - chunkWords.length;
@@ -94,7 +102,7 @@ export function planVoiceChunks(
 			chunkWords.push(...beatWords.slice(cursor, cursor + take));
 			chunkBeatIds.push(beat.id);
 			cursor += take;
-			if (chunkWords.length >= maxWords) flush();
+			flush();
 		}
 	}
 	flush();

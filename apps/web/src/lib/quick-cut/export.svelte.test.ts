@@ -16,6 +16,7 @@ import {
 	WebMOutputFormat
 } from 'mediabunny';
 import { discardScratchFile, exportSegments } from './export';
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { createSegment } from './model';
 import { probeSourceFile } from './source';
 
@@ -138,7 +139,7 @@ async function centerPixel(blob: Blob, timestamp: number): Promise<[number, numb
 		if (!track) throw new Error('Video track missing.');
 		const wrapped = await new CanvasSink(track).getCanvas(timestamp);
 		if (!wrapped) throw new Error('Decoded frame missing.');
-		const context = wrapped.canvas.getContext('2d');
+		const context = getCanvas2DContext(wrapped.canvas);
 		if (!context) throw new Error('2D canvas unavailable.');
 		const pixel = context.getImageData(SIZE / 2, SIZE / 2, 1, 1).data;
 		return [pixel[0]!, pixel[1]!, pixel[2]!];

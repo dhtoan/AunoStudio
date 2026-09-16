@@ -1,5 +1,6 @@
 /** Ported from FreeCut's MIT-licensed transition preview, using OpenPost's Canvas renderers. */
 
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { transitionRegistry } from '../index';
 import { defaultTransitionProperties } from '../default-properties';
 import type { FlipDirection, SlideDirection, WipeDirection } from '../types';
@@ -54,7 +55,7 @@ async function loadFrame(url: string): Promise<PreviewCanvas> {
 	const canvas = createCanvas(TRANSITION_PREVIEW_WIDTH, TRANSITION_PREVIEW_HEIGHT);
 	if (!canvas || typeof Image === 'undefined')
 		throw new Error('Transition preview is unavailable.');
-	const context = canvas.getContext('2d');
+	const context = getCanvas2DContext(canvas);
 	if (!context) throw new Error('Transition preview canvas is unavailable.');
 	const image = new Image();
 	image.src = url;
@@ -87,7 +88,7 @@ export function renderTransitionPreviewFrame(
 	progress: number
 ): PreviewCanvas | null {
 	renderCanvas ??= createCanvas(TRANSITION_PREVIEW_WIDTH, TRANSITION_PREVIEW_HEIGHT);
-	const context = renderCanvas?.getContext('2d');
+	const context = renderCanvas ? getCanvas2DContext(renderCanvas) : null;
 	if (!renderCanvas || !context) return null;
 	context.clearRect(0, 0, TRANSITION_PREVIEW_WIDTH, TRANSITION_PREVIEW_HEIGHT);
 	const definition = transitionRegistry.getDefinition(presentationId);
@@ -111,7 +112,7 @@ export function renderTransitionPreviewFrame(
 
 function copyCanvas(source: PreviewCanvas): PreviewCanvas | null {
 	const copy = createCanvas(TRANSITION_PREVIEW_WIDTH, TRANSITION_PREVIEW_HEIGHT);
-	const context = copy?.getContext('2d');
+	const context = copy ? getCanvas2DContext(copy) : null;
 	if (!copy || !context) return null;
 	context.drawImage(source, 0, 0, TRANSITION_PREVIEW_WIDTH, TRANSITION_PREVIEW_HEIGHT);
 	return copy;

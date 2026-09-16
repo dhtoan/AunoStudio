@@ -17,6 +17,7 @@ import {
 import { probeSourceFile } from './source';
 import { preflightExport, exportSegments, discardScratchFile } from './export';
 import { createSegment } from './model';
+import { getCanvas2DContext } from '$lib/canvas-context';
 
 async function createColorMp4(
 	color: string,
@@ -334,7 +335,7 @@ describe('quick-cut mediabunny fixture', () => {
 		const colorAt = async (seconds: number): Promise<'red' | 'blue'> => {
 			const wrapped = await canvasSink.getCanvas(seconds);
 			if (!wrapped) throw new Error(`No decoded frame at ${seconds}.`);
-			const context = wrapped.canvas.getContext('2d');
+			const context = getCanvas2DContext(wrapped.canvas);
 			if (!context) throw new Error('Decoded canvas unavailable.');
 			const pixel = context.getImageData(64, 36, 1, 1).data;
 			return pixel[0]! > pixel[2]! ? 'red' : 'blue';

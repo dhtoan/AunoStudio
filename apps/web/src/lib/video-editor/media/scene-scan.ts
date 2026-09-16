@@ -9,6 +9,7 @@
  */
 
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from 'mediabunny';
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { ensureProResDecoderForCodec } from './prores-decoder';
 import { resolveMediaBlob } from './import.svelte';
 import { detectSceneCuts, type FrameHistogram } from './scene-detection';
@@ -179,7 +180,7 @@ export async function scanSceneCuts(
 				total: timestamps.length
 			});
 			if (!wrapped) continue;
-			const context = wrapped.canvas.getContext('2d');
+			const context = getCanvas2DContext(wrapped.canvas);
 			if (!context || wrapped.canvas.width < 1 || wrapped.canvas.height < 1) continue;
 			const { data } = context.getImageData(0, 0, wrapped.canvas.width, wrapped.canvas.height);
 			histograms.push({

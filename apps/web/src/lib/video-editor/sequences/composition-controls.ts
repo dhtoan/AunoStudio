@@ -36,7 +36,7 @@ function readControlValue(item: TimelineItem, property: CompositionControlProper
 		case 'shape.strokeColor':
 			return item.type === 'shape' && item.strokeEnabled ? (item.strokeColor ?? '#ffffff') : null;
 		case 'shape.shapeType':
-			return item.type === 'shape' ? item.shapeType : null;
+			return item.type === 'shape' ? (item.shapeType ?? 'rectangle') : null;
 		case 'motion.intensity':
 		case 'motion.depth':
 		case 'motion.speed':
@@ -169,7 +169,10 @@ function tuneTrack(
 	return { ...track, frames, values };
 }
 
-function tunePaperJitter(track: KeyframeTrack | undefined, amount: number): KeyframeTrack | undefined {
+function tunePaperJitter(
+	track: KeyframeTrack | undefined,
+	amount: number
+): KeyframeTrack | undefined {
 	if (!track?.ids?.some((id) => id.startsWith('auno:paper-jitter:'))) return track;
 	const settled = track.values[track.values.length - 1] ?? 0;
 	return {
@@ -188,7 +191,8 @@ function tuneShadowDepth(
 	depth: number
 ): KeyframeTrack | undefined {
 	if (!track) return track;
-	if (property === 'opacity') return { ...track, values: track.values.map((value) => value * depth) };
+	if (property === 'opacity')
+		return { ...track, values: track.values.map((value) => value * depth) };
 	if (property !== 'x' && property !== 'y') return track;
 	const settled = track.values[track.values.length - 1] ?? 0;
 	return { ...track, values: track.values.map((value) => settled + (value - settled) * depth) };
@@ -220,11 +224,11 @@ function tuneAssemblyTiming(
 	}
 	if (assemblyIndex < 0) return track;
 	const authoredAssembly = frames[assemblyIndex] ?? Math.max(1, end - 1);
-	const target = holdRatio === undefined
-		? authoredAssembly
-		: Math.round(durationInFrames * (1 - holdRatio));
+	const target =
+		holdRatio === undefined ? authoredAssembly : Math.round(durationInFrames * (1 - holdRatio));
 	const offset = offsetFrames ?? 0;
-	if (frames.length > 0 && offsetFrames !== undefined) frames[0] = Math.min(end - 1, Math.max(0, offset));
+	if (frames.length > 0 && offsetFrames !== undefined)
+		frames[0] = Math.min(end - 1, Math.max(0, offset));
 	frames[assemblyIndex] = Math.min(end - 1, Math.max((frames[0] ?? 0) + 1, target + offset));
 	if (holdIndex >= 0) frames[holdIndex] = end;
 	for (let index = 1; index < frames.length; index += 1) {
@@ -238,28 +242,49 @@ function applyMotionControlOverrides(
 	schema: CompositionControlSchema,
 	overrides: CompositionControlOverrides
 ): TimelineItem[] {
-	const intensityControl = schema.controls.find((control) => control.property === 'motion.intensity');
+	const intensityControl = schema.controls.find(
+		(control) => control.property === 'motion.intensity'
+	);
 	const depthControl = schema.controls.find((control) => control.property === 'motion.depth');
 	const speedControl = schema.controls.find((control) => control.property === 'motion.speed');
-	const jitterControl = schema.controls.find((control) => control.property === 'motion.paperJitter');
-	const shadowControl = schema.controls.find((control) => control.property === 'motion.shadowDepth');
+	const jitterControl = schema.controls.find(
+		(control) => control.property === 'motion.paperJitter'
+	);
+	const shadowControl = schema.controls.find(
+		(control) => control.property === 'motion.shadowDepth'
+	);
 	const holdControl = schema.controls.find((control) => control.property === 'motion.holdRatio');
-	const assemblyControl = schema.controls.find((control) => control.property === 'motion.assemblyOrder');
+	const assemblyControl = schema.controls.find(
+		(control) => control.property === 'motion.assemblyOrder'
+	);
 
 	const intensity = boundedNumber(intensityControl, overrides, 1);
 	const depth = boundedNumber(depthControl, overrides, 1);
 	const speed = boundedNumber(speedControl, overrides, 1);
 	const paperJitter = boundedNumber(jitterControl, overrides, 1);
 	const shadowDepth = boundedNumber(shadowControl, overrides, 1);
-	const holdRatio = holdControl && overrides[holdControl.id] !== undefined
-		? boundedNumber(holdControl, overrides, 0.18)
-		: undefined;
-	const assemblyOrder = selectedValue(assemblyControl, overrides, assemblyControl?.defaultValue ?? 'back-to-front');
-	const assemblyOverridden = Boolean(assemblyControl && overrides[assemblyControl.id] !== undefined);
+	const holdRatio =
+		holdControl && overrides[holdControl.id] !== undefined
+			? boundedNumber(holdControl, overrides, 0.18)
+			: undefined;
+	const assemblyOrder = selectedValue(
+		assemblyControl,
+		overrides,
+		assemblyControl?.defaultValue ?? 'back-to-front'
+	);
+	const assemblyOverridden = Boolean(
+		assemblyControl && overrides[assemblyControl.id] !== undefined
+	);
 	const jitterOverridden = Boolean(jitterControl && overrides[jitterControl.id] !== undefined);
 	const shadowOverridden = Boolean(shadowControl && overrides[shadowControl.id] !== undefined);
 	const genericChanged = intensity !== 1 || depth !== 1 || speed !== 1;
-	if (!genericChanged && !jitterOverridden && !shadowOverridden && holdRatio === undefined && !assemblyOverridden) {
+	if (
+		!genericChanged &&
+		!jitterOverridden &&
+		!shadowOverridden &&
+		holdRatio === undefined &&
+		!assemblyOverridden
+	) {
 		return Array.from(items);
 	}
 
@@ -267,15 +292,25 @@ function applyMotionControlOverrides(
 		if (!item.keyframes) return item;
 		const paperElement = item.id.includes('-paper-');
 		const shadowElement = item.id.endsWith('-paper-shadow');
-		const offset = paperElement && assemblyOverridden ? assemblyOffset(item.id, assemblyOrder) : undefined;
+		const offset =
+			paperElement && assemblyOverridden ? assemblyOffset(item.id, assemblyOrder) : undefined;
 		const keyframes = Object.fromEntries(
 			Object.entries(item.keyframes).map(([property, sourceTrack]) => {
-				let track = tuneTrack(sourceTrack, property, item.durationInFrames, intensity, depth, speed);
+				let track = tuneTrack(
+					sourceTrack,
+					property,
+					item.durationInFrames,
+					intensity,
+					depth,
+					speed
+				);
 				if (paperElement && jitterOverridden && ['x', 'y', 'rotation'].includes(property)) {
 					track = tunePaperJitter(track, paperJitter);
 				}
-				if (shadowElement && shadowOverridden) track = tuneShadowDepth(track, property, shadowDepth);
-				if (paperElement) track = tuneAssemblyTiming(track, item.durationInFrames, holdRatio, offset);
+				if (shadowElement && shadowOverridden)
+					track = tuneShadowDepth(track, property, shadowDepth);
+				if (paperElement)
+					track = tuneAssemblyTiming(track, item.durationInFrames, holdRatio, offset);
 				return [property, track];
 			})
 		) as typeof item.keyframes;
@@ -345,7 +380,10 @@ const compositionControlInputSchema = z.object({
 				min: z.number().finite().optional(),
 				max: z.number().finite().optional(),
 				step: z.number().finite().positive().optional(),
-				options: z.array(z.object({ value: z.string().max(100), label: z.string().max(120) })).max(100).optional()
+				options: z
+					.array(z.object({ value: z.string().max(100), label: z.string().max(120) }))
+					.max(100)
+					.optional()
 			})
 		)
 		.max(1_000)
@@ -386,13 +424,16 @@ export function sanitizeCompositionControlSchema(
 		}
 		if (
 			kind === 'number' &&
-			(!Number.isFinite(Number(entry.defaultValue)) || entry.min === undefined || entry.max === undefined)
+			(!Number.isFinite(Number(entry.defaultValue)) ||
+				entry.min === undefined ||
+				entry.max === undefined)
 		) {
 			continue;
 		}
 		if (
 			kind === 'select' &&
-			(!entry.options?.length || !entry.options.some((option) => option.value === entry.defaultValue))
+			(!entry.options?.length ||
+				!entry.options.some((option) => option.value === entry.defaultValue))
 		) {
 			continue;
 		}

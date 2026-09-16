@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getCanvas2DContext } from '$lib/canvas-context';
 import { render } from 'vitest-browser-svelte';
 import { strToU8, zipSync } from 'fflate';
 import type { Project, TimelineItem, TimelineTrack } from '../project/types';
@@ -138,7 +139,7 @@ function registerAnimationMedia(blob: Blob = animationBlob): void {
 }
 
 function centerPixel(canvas: HTMLCanvasElement | OffscreenCanvas): Uint8ClampedArray {
-	const context = canvas.getContext('2d', { willReadFrequently: true });
+	const context = getCanvas2DContext(canvas, { willReadFrequently: true });
 	if (!context) throw new Error('2D canvas unavailable');
 	return context.getImageData(SIZE / 2, SIZE / 2, 1, 1).data;
 }

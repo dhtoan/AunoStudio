@@ -15,6 +15,7 @@ on:
       - 'apps/web/src/lib/components/auno-documentary/**'
       - 'apps/web/src/routes/auto-video/**'
       - 'apps/web/src/hooks.client.ts'
+      - 'apps/web/vitest.config.ts'
       - 'tests/app/auno/**'
       - 'tests/app/playwright.config.ts'
       - 'third_party/bang-motion/**'
@@ -48,7 +49,7 @@ jobs:
       - name: Test Auno Motion package
         run: bun test packages/auno-motion/src
       - name: Test browser motion adapters
-        run: cd apps/web && bunx vitest run --project server src/lib/auno/motion
+        run: cd apps/web && bun run sync && bunx vitest run --project server src/lib/auno/motion
 
   backend-documentary:
     name: backend-documentary

@@ -113,7 +113,7 @@ export function compileMotionGraphToNativeTimeline(
 		graph.scenes.map((scene, index) => [scene.sourceSceneId, { scene, index }])
 	);
 
-	const items = input.items.map((item) => {
+	const items = input.items.map((item): TimelineItem => {
 		const sceneId = item.id.endsWith('-background')
 			? item.id.slice(0, -'-background'.length)
 			: item.id.endsWith('-text')
@@ -127,9 +127,10 @@ export function compileMotionGraphToNativeTimeline(
 		if (item.type === 'background') {
 			return {
 				...item,
-				background: item.background
-					? { ...item.background, smoothness: scene.background.smoothness }
-					: item.background,
+				background:
+					item.background?.kind === 'mesh-gradient'
+						? { ...item.background, smoothness: scene.background.smoothness }
+						: item.background,
 				keyframes: mergeKeyframes(item, {
 					backgroundRotation: scalarTrack(
 						`${item.id}:backgroundRotation`,
@@ -179,8 +180,18 @@ export function compileMotionGraphToNativeTimeline(
 						baseY + scene.camera.yTo * height,
 						durationInFrames
 					),
-					scaleX: scalarTrack(`${item.id}:scaleX`, scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
-					scaleY: scalarTrack(`${item.id}:scaleY`, scene.camera.scaleFrom, scene.camera.scaleTo, durationInFrames),
+					scaleX: scalarTrack(
+						`${item.id}:scaleX`,
+						scene.camera.scaleFrom,
+						scene.camera.scaleTo,
+						durationInFrames
+					),
+					scaleY: scalarTrack(
+						`${item.id}:scaleY`,
+						scene.camera.scaleFrom,
+						scene.camera.scaleTo,
+						durationInFrames
+					),
 					rotation: scalarTrack(
 						`${item.id}:rotation`,
 						scene.camera.rotationFrom,
