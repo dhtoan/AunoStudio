@@ -74,6 +74,7 @@ const checks = {
       "scripts/n8n-package-release.test.mjs",
       "scripts/mobile-release.test.mjs",
       "scripts/release-assets.test.mjs",
+      "scripts/auno-container-release.test.mjs",
       "scripts/release-lifecycle.test.mjs",
       "scripts/ci-artifacts.test.mjs",
       "scripts/ci-plan.test.mjs",
