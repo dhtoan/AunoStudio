@@ -165,6 +165,16 @@ function ideaFromDTO(idea: IdeaDTO): DocumentaryIdea {
 	return { ...idea, evidenceAnchors: idea.evidence_anchors ?? [] };
 }
 
+function ideaToDTO(idea: DocumentaryIdea): IdeaDTO {
+	return {
+		id: idea.id,
+		title: idea.title,
+		hook: idea.hook,
+		subterritory: idea.subterritory,
+		evidence_anchors: idea.evidenceAnchors
+	};
+}
+
 function scriptFromDTO(script: ScriptDTO): DocumentaryScript {
 	return {
 		text: script.text,
@@ -349,7 +359,7 @@ function documentaryRunToDTO(run: DocumentaryRun): RunDTO {
 		generation_version: run.generationVersion,
 		source: run.source ? sourceToDTO(run.source) : undefined,
 		niche: run.niche,
-		ideas: run.ideas.map((idea) => ({ ...idea, evidence_anchors: idea.evidenceAnchors })),
+		ideas: run.ideas.map(ideaToDTO),
 		selected_idea_id: run.selectedIdeaId,
 		custom_topic: run.customTopic,
 		target_duration_seconds: run.targetDurationSeconds,

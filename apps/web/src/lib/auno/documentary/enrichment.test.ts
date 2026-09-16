@@ -34,6 +34,36 @@ describe('documentary voice enrichment', () => {
 		expect(chunks.flatMap((chunk) => chunk.beatIds)).toEqual(source.map((beat) => beat.id));
 	});
 
+	it('isolates oversized beat fragments from adjacent beats', () => {
+		const source = beats(3, 3).map((beat, index) => ({
+			...beat,
+			id: ['before', 'oversized', 'after'][index]!,
+			narration: Array.from(
+				{ length: [8, 23, 7][index]! },
+				(_, wordIndex) => `word-${index}-${wordIndex}`
+			).join(' ')
+		}));
+		const chunks = planVoiceChunks(source, 4);
+
+		expect(chunks.map((chunk) => chunk.beatIds)).toEqual([
+			['before'],
+			['oversized'],
+			['oversized'],
+			['oversized'],
+			['after']
+		]);
+
+		const next = redistributeBeatDurations(
+			source,
+			chunks.map((chunk, index) => ({
+				chunkId: chunk.id,
+				beatIds: chunk.beatIds,
+				durationSeconds: [3, 4, 4, 1, 2][index]!
+			}))
+		);
+		expect(next.map((beat) => beat.durationSeconds)).toEqual([3, 9, 2]);
+	});
+
 	it('redistributes measured chunk time proportionally and keeps exact cumulative timing', () => {
 		const source = beats(3, 2);
 		const chunks = planVoiceChunks(source, 25);
